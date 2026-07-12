@@ -11,7 +11,9 @@ if config.config_file_name is not None:
 
 # Migrations run as the SERVICE role (BYPASSRLS) so they can create RLS
 # policies and grant privileges. Application requests use the app role.
-db_url = os.getenv("DATABASE_URL") or os.getenv("SERVICE_DATABASE_URL")
+# Prefer SERVICE_DATABASE_URL so migrations always run as the service role even
+# when DATABASE_URL (the app role) is set in the environment.
+db_url = os.getenv("SERVICE_DATABASE_URL") or os.getenv("DATABASE_URL")
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 
