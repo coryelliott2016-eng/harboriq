@@ -18,6 +18,7 @@ import uuid
 from collections.abc import Iterator
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -30,7 +31,8 @@ SERVICE_URL = settings.service_database_url
 _TENANT_TABLES = [
     "audit_log", "outbox_events", "public_tokens", "payments", "invoices",
     "estimate_line_items", "estimates", "jobs", "inventory_items", "vessels",
-    "customers", "stripe_processed_events", "subscriptions", "users",
+    "customers", "stripe_processed_events", "subscriptions",
+    "password_reset_tokens", "user_sessions", "users",
     "subscription_plans", "companies",
 ]
 
@@ -74,6 +76,44 @@ def service_db(service_engine) -> Iterator[Session]:
     db = maker()
     yield db
     db.close()
+
+
+@pytest.fixture
+def client() -> Iterator[TestClient]:
+    """HTTP client for the real ASGI app (no dependency overrides)."""
+    from app.main import app
+
+    with TestClient(app) as c:
+        yield c
+
+
+# Long enough to satisfy PASSWORD_MIN_LENGTH.
+DEFAULT_PASSWORD = "correct-horse-battery-staple"
+
+
+def unique_email(prefix: str = "owner") -> str:
+    return f"{prefix}-{uuid.uuid4().hex[:8]}@example.com"
+
+
+def signup(client: TestClient, company_name: str = "Acme Marine",
+           email: str | None = None, password: str = DEFAULT_PASSWORD,
+           **extra) -> dict:
+    """Create a tenant with its first owner; returns the AuthResponse body."""
+    body = {
+        "company_name": company_name,
+        "email": email or unique_email(),
+        "password": password,
+        **extra,
+    }
+    resp = client.post("/api/v1/auth/signup", json=body)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def auth_headers(auth: dict) -> dict[str, str]:
+    """Bearer header from an AuthResponse body (or a bare TokenPair)."""
+    tokens = auth.get("tokens", auth)
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
 
 
 def _create_company(db: Session, slug: str) -> uuid.UUID:

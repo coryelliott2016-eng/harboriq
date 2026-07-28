@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from decimal import DECIMAL, Decimal  # noqa: F401  (type hint convenience)
+from decimal import Decimal
+from enum import StrEnum
 from typing import Optional
 
 from sqlalchemy import (
@@ -19,11 +20,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import CIDTYPE, INET, JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import CITEXT, INET, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
@@ -35,6 +38,25 @@ InvoiceStatus = str
 JobStatus = str
 PaymentStatus = str
 TokenPurpose = str
+
+
+class UserRole(StrEnum):
+    """Mirrors the `user_role` PostgreSQL enum (migration 0002).
+
+    owner      — billing + full control; can create other owners
+    admin      — full operational control; can invite non-owner users
+    office     — front desk: customers, estimates, invoices
+    technician — job execution: jobs, inventory usage
+    """
+
+    OWNER = "owner"
+    ADMIN = "admin"
+    OFFICE = "office"
+    TECHNICIAN = "technician"
+
+
+#: Roles allowed to invite/create other users.
+USER_MANAGEMENT_ROLES = frozenset({UserRole.OWNER, UserRole.ADMIN})
 
 
 class Company(UUIDPKMixin, TimestampMixin, Base):
@@ -55,16 +77,72 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     company_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
     )
-    email: Mapped[str] = mapped_column(CIDTYPE, nullable=False)
+    email: Mapped[str] = mapped_column(CITEXT, nullable=False)
     password_hash: Mapped[Optional[str]] = mapped_column(Text)
     full_name: Mapped[Optional[str]] = mapped_column(Text)
-    role: Mapped[str] = mapped_column(Text, default="technician", server_default="technician")
-    mfa_secret_enc: Mapped[Optional[bytes]] = mapped_column()
+    role: Mapped[str] = mapped_column(
+        Enum(UserRole, name="user_role", values_callable=lambda e: [m.value for m in e]),
+        default=UserRole.TECHNICIAN,
+        server_default=UserRole.TECHNICIAN.value,
+    )
+    mfa_secret_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (Index("uq_users_company_email", "company_id", "email", unique=True),)
+    __table_args__ = (
+        Index("uq_users_company_email", "company_id", "email", unique=True),
+        # Login resolves by email before any tenant is known, so email must be
+        # unique platform-wide (migration 0002).
+        Index("uq_users_email_global", "email", unique=True),
+    )
+
+
+class UserSession(UUIDPKMixin, Base):
+    """An issued refresh token. Rotation inserts a new row in the same family."""
+
+    __tablename__ = "user_sessions"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    family_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    refresh_token_hash: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    rotated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    revoked_reason: Mapped[Optional[str]] = mapped_column(Text)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text)
+    ip: Mapped[Optional[str]] = mapped_column(INET)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_user_sessions_family", "family_id"),
+        Index("idx_user_sessions_user", "company_id", "user_id"),
+    )
+
+
+class PasswordResetToken(UUIDPKMixin, Base):
+    __tablename__ = "password_reset_tokens"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    requested_ip: Mapped[Optional[str]] = mapped_column(INET)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (Index("idx_password_reset_user", "company_id", "user_id"),)
 
 
 class SubscriptionPlan(UUIDPKMixin, Base):
@@ -148,7 +226,7 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
     )
     first_name: Mapped[Optional[str]] = mapped_column(Text)
     last_name: Mapped[Optional[str]] = mapped_column(Text)
-    email: Mapped[Optional[str]] = mapped_column(CIDTYPE)
+    email: Mapped[Optional[str]] = mapped_column(CITEXT)
     phone: Mapped[Optional[str]] = mapped_column(Text)
     sms_consent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     sms_opted_out: Mapped[bool] = mapped_column(
@@ -259,7 +337,7 @@ class Estimate(UUIDPKMixin, TimestampMixin, Base):
     approved_ip: Mapped[Optional[str]] = mapped_column(INET)
     approved_user_agent: Mapped[Optional[str]] = mapped_column(Text)
     estimate_pdf_version: Mapped[Optional[str]] = mapped_column(Text)
-    line_items: Mapped[list["EstimateLineItem"]] = relationship(back_populates="estimate")
+    line_items: Mapped[list[EstimateLineItem]] = relationship(back_populates="estimate")
 
 
 class EstimateLineItem(UUIDPKMixin, Base):
@@ -275,7 +353,7 @@ class EstimateLineItem(UUIDPKMixin, Base):
     unit_price: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), CheckConstraint("unit_price >= 0"), default=0, server_default="0"
     )
-    estimate: Mapped["Estimate"] = relationship(back_populates="line_items")
+    estimate: Mapped[Estimate] = relationship(back_populates="line_items")
     # line_total is GENERATED ALWAYS AS (quantity * unit_price) STORED in the DB.
 
 

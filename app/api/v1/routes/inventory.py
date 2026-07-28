@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import current_company_id, get_db
+from app.api.deps import get_current_company_id, get_db
 from app.schemas.inventory import UsePartRequest, UsePartResponse
 from app.services.inventory import InsufficientStock, use_inventory_part_atomic
 
@@ -14,9 +14,9 @@ router = APIRouter()
 def use_part(
     body: UsePartRequest,
     db: Session = Depends(get_db),
-    company_id: uuid.UUID = Depends(current_company_id),
+    company_id: uuid.UUID = Depends(get_current_company_id),
 ):
-    """Atomic, concurrency-safe stock deduction."""
+    """Atomic, concurrency-safe stock deduction. Tenant comes from the access token."""
     try:
         remaining = use_inventory_part_atomic(db, company_id, uuid.UUID(body.item_id), body.quantity)
     except InsufficientStock:

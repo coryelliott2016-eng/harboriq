@@ -1,5 +1,11 @@
 """Application configuration (pydantic-settings)."""
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Obvious placeholder so a real deployment cannot accidentally ship with it.
+# >=32 bytes because HS256 keys shorter than the digest weaken the MAC (RFC 7518 §3.2).
+DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-before-deploying"
+MIN_JWT_SECRET_BYTES = 32
 
 
 class Settings(BaseSettings):
@@ -19,6 +25,34 @@ class Settings(BaseSettings):
 
     stripe_api_key: str = ""
     stripe_webhook_secret: str = ""
+
+    # --- Auth ---
+    # HS256 shared secret for signing access tokens. Refresh tokens are opaque
+    # random strings stored hashed in user_sessions, so they do not use this.
+    jwt_secret: str = DEV_JWT_SECRET
+    jwt_algorithm: str = "HS256"
+    jwt_issuer: str = "harboriq"
+    # Short access-token TTL bounds the window in which a revoked session's
+    # access token still works (see README, "Auth").
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 30
+    password_reset_ttl_minutes: int = 60
+    password_min_length: int = 12
+
+    @model_validator(mode="after")
+    def _require_strong_jwt_secret_outside_development(self) -> "Settings":
+        if self.app_env == "development":
+            return self
+        if self.jwt_secret in ("", DEV_JWT_SECRET):
+            raise ValueError(
+                "JWT_SECRET must be set to a strong random value when "
+                f"APP_ENV={self.app_env!r} (try: openssl rand -hex 32)"
+            )
+        if len(self.jwt_secret.encode()) < MIN_JWT_SECRET_BYTES:
+            raise ValueError(
+                f"JWT_SECRET must be at least {MIN_JWT_SECRET_BYTES} bytes"
+            )
+        return self
 
 
 settings = Settings()
