@@ -35,9 +35,39 @@ from app.db.base import Base, TimestampMixin, UUIDPKMixin
 SubscriptionStatus = str  # values validated by the DB enum
 EstimateStatus = str
 InvoiceStatus = str
-JobStatus = str
 PaymentStatus = str
 TokenPurpose = str
+
+
+class JobStatus(StrEnum):
+    """Mirrors the `job_status` PostgreSQL enum (migration 0001).
+
+    Legal transitions live in `app.services.state_machines.JobSM` — never
+    write this column without going through it.
+    """
+
+    SCHEDULED = "scheduled"
+    IN_PROGRESS = "in_progress"
+    ON_HOLD = "on_hold"
+    COMPLETED = "completed"
+    CANCELED = "canceled"
+
+
+class JobPriority(StrEnum):
+    """Mirrors the `job_priority` PostgreSQL enum (migration 0003)."""
+
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class JobLineItemKind(StrEnum):
+    """Mirrors the `job_line_item_kind` PostgreSQL enum (migration 0003)."""
+
+    LABOR = "labor"
+    PART = "part"
+    FEE = "fee"
 
 
 class UserRole(StrEnum):
@@ -57,6 +87,15 @@ class UserRole(StrEnum):
 
 #: Roles allowed to invite/create other users.
 USER_MANAGEMENT_ROLES = frozenset({UserRole.OWNER, UserRole.ADMIN})
+
+#: Roles allowed to create customers/vessels and to create, edit, schedule and
+#: assign work orders. `office` is the front desk, which is exactly this job.
+OPERATIONS_ROLES = frozenset({UserRole.OWNER, UserRole.ADMIN, UserRole.OFFICE})
+
+#: Roles that may be assigned as a job's technician. Owners and admins are
+#: included because in a small yard they do fieldwork themselves; `office` is
+#: not, because front-desk staff are not who a work order is dispatched to.
+JOB_ASSIGNABLE_ROLES = frozenset({UserRole.TECHNICIAN, UserRole.ADMIN, UserRole.OWNER})
 
 
 class Company(UUIDPKMixin, TimestampMixin, Base):
@@ -226,6 +265,8 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
     )
     first_name: Mapped[Optional[str]] = mapped_column(Text)
     last_name: Mapped[Optional[str]] = mapped_column(Text)
+    #: Set for a business customer; a private owner has only first/last name.
+    company_name: Mapped[Optional[str]] = mapped_column(Text)
     email: Mapped[Optional[str]] = mapped_column(CITEXT)
     phone: Mapped[Optional[str]] = mapped_column(Text)
     sms_consent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -237,6 +278,26 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
     city: Mapped[Optional[str]] = mapped_column(Text)
     state: Mapped[Optional[str]] = mapped_column(Text)
     postal_code: Mapped[Optional[str]] = mapped_column(Text)
+    country: Mapped[Optional[str]] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "COALESCE(NULLIF(BTRIM(first_name), ''), NULLIF(BTRIM(last_name), ''), "
+            "NULLIF(BTRIM(company_name), '')) IS NOT NULL",
+            name="ck_customers_has_a_name",
+        ),
+        Index("idx_customers_company_name", "company_id", "last_name", "first_name"),
+        Index(
+            "idx_customers_company_email",
+            "company_id",
+            "email",
+            postgresql_where="email IS NOT NULL",
+        ),
+    )
 
 
 class Vessel(UUIDPKMixin, TimestampMixin, Base):
@@ -244,17 +305,51 @@ class Vessel(UUIDPKMixin, TimestampMixin, Base):
     company_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
     )
-    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("customers.id")
+    # The real constraint is the composite FK (company_id, customer_id) ->
+    # customers(company_id, id) from migration 0003, which makes a cross-tenant
+    # reference unrepresentable. Declared here for ORM relationship resolution.
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False
     )
     name: Mapped[Optional[str]] = mapped_column(Text)
     make: Mapped[Optional[str]] = mapped_column(Text)
     model: Mapped[Optional[str]] = mapped_column(Text)
     year: Mapped[Optional[int]] = mapped_column(Integer)
+    #: Hull Identification Number — unique per hull, so unique per tenant.
     hull_id: Mapped[Optional[str]] = mapped_column(Text)
     registration: Mapped[Optional[str]] = mapped_column(Text)
     length_ft: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2))
+    beam_ft: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2))
+    draft_ft: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2))
+    engine_make: Mapped[Optional[str]] = mapped_column(Text)
+    engine_model: Mapped[Optional[str]] = mapped_column(Text)
     engine_hours: Mapped[Optional[int]] = mapped_column(Integer)
+    engine_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    storage_location: Mapped[Optional[str]] = mapped_column(Text)
+    slip_number: Mapped[Optional[str]] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("year IS NULL OR year BETWEEN 1850 AND 2200", name="ck_vessels_year"),
+        CheckConstraint("length_ft IS NULL OR length_ft > 0", name="ck_vessels_length"),
+        CheckConstraint("beam_ft IS NULL OR beam_ft > 0", name="ck_vessels_beam"),
+        CheckConstraint("draft_ft IS NULL OR draft_ft > 0", name="ck_vessels_draft"),
+        CheckConstraint(
+            "engine_hours IS NULL OR engine_hours >= 0", name="ck_vessels_engine_hours"
+        ),
+        CheckConstraint("engine_count >= 0", name="ck_vessels_engine_count"),
+        Index("idx_vessels_company_customer", "company_id", "customer_id"),
+        Index(
+            "uq_vessels_company_hull_id",
+            "company_id",
+            "hull_id",
+            unique=True,
+            postgresql_where="hull_id IS NOT NULL",
+        ),
+    )
 
 
 class InventoryItem(UUIDPKMixin, TimestampMixin, Base):
@@ -288,23 +383,147 @@ class InventoryItem(UUIDPKMixin, TimestampMixin, Base):
 
 
 class Job(UUIDPKMixin, TimestampMixin, Base):
+    """A work order.
+
+    `status` is driven exclusively by `app.services.state_machines.JobSM`; the
+    service layer loads the current value under `FOR UPDATE` before asserting a
+    transition, so two concurrent updates cannot both pass the same check.
+    """
+
     __tablename__ = "jobs"
     company_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
     )
-    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("customers.id")
+    # As with Vessel, the enforced constraints are the composite (company_id, *)
+    # FKs added in migration 0003.
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False
     )
     vessel_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("vessels.id")
     )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(
-        Enum("scheduled", "in_progress", "on_hold", "completed", "canceled", name="job_status"),
-        default="scheduled", server_default="scheduled",
+        Enum(
+            JobStatus, name="job_status", values_callable=lambda e: [m.value for m in e]
+        ),
+        default=JobStatus.SCHEDULED, server_default=JobStatus.SCHEDULED.value,
+    )
+    priority: Mapped[str] = mapped_column(
+        Enum(
+            JobPriority,
+            name="job_priority",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=JobPriority.NORMAL, server_default=JobPriority.NORMAL.value,
     )
     scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    scheduled_end_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     technician_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    hold_reason: Mapped[Optional[str]] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    line_items: Mapped[list[JobLineItem]] = relationship(back_populates="job")
+
+    __table_args__ = (
+        CheckConstraint("BTRIM(title) <> ''", name="ck_jobs_title_not_blank"),
+        CheckConstraint(
+            "scheduled_end_at IS NULL OR scheduled_at IS NULL "
+            "OR scheduled_end_at >= scheduled_at",
+            name="ck_jobs_schedule_window",
+        ),
+        Index(
+            "idx_jobs_company_technician_scheduled",
+            "company_id", "technician_id", "scheduled_at",
+        ),
+        Index(
+            "idx_jobs_company_status_scheduled", "company_id", "status", "scheduled_at"
+        ),
+        Index("idx_jobs_company_customer", "company_id", "customer_id"),
+        Index(
+            "idx_jobs_company_vessel",
+            "company_id",
+            "vessel_id",
+            postgresql_where="vessel_id IS NOT NULL",
+        ),
+    )
+
+
+class JobLineItem(UUIDPKMixin, TimestampMixin, Base):
+    """Billable labor/part/fee on a work order — the invoicing phase's input.
+
+    `quantity` is NUMERIC rather than estimate_line_items' INTEGER because labor
+    is billed in fractional hours. `invoice_id`/`invoiced_at` are reserved for
+    invoicing and are not written yet.
+    """
+
+    __tablename__ = "job_line_items"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(
+        Enum(
+            JobLineItemKind,
+            name="job_line_item_kind",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+    )
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    inventory_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("inventory_items.id")
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=0, server_default="0"
+    )
+    taxable: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    #: True once stock was actually deducted via POST /api/v1/inventory/use.
+    inventory_committed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    invoice_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True))
+    invoiced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    job: Mapped[Job] = relationship(back_populates="line_items")
+    # line_total is GENERATED ALWAYS AS (quantity * unit_price) STORED in the DB.
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_job_line_items_quantity"),
+        CheckConstraint("unit_price >= 0", name="ck_job_line_items_unit_price"),
+        CheckConstraint("BTRIM(description) <> ''", name="ck_job_line_items_description"),
+        CheckConstraint(
+            "inventory_item_id IS NULL OR kind = 'part'",
+            name="ck_job_line_items_stock_is_a_part",
+        ),
+        CheckConstraint(
+            "inventory_committed = false OR inventory_item_id IS NOT NULL",
+            name="ck_job_line_items_committed_has_stock",
+        ),
+        CheckConstraint(
+            "(invoice_id IS NULL) = (invoiced_at IS NULL)",
+            name="ck_job_line_items_invoiced_together",
+        ),
+        Index("idx_job_line_items_job", "company_id", "job_id"),
+        Index(
+            "idx_job_line_items_uninvoiced",
+            "company_id",
+            "job_id",
+            postgresql_where="invoice_id IS NULL",
+        ),
     )
 
 

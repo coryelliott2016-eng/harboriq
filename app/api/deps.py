@@ -21,7 +21,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.security import InvalidToken, decode_access_token
-from app.db.models import USER_MANAGEMENT_ROLES, UserRole
+from app.db.models import OPERATIONS_ROLES, USER_MANAGEMENT_ROLES, UserRole
 from app.db.session import get_db, get_service_db
 from app.db.tenant import set_tenant
 from app.services.auth import AuthenticatedUser, load_user
@@ -101,14 +101,52 @@ def require_roles(*roles: UserRole) -> Callable[..., AuthenticatedUser]:
 #: Only owners and admins may provision other users.
 require_user_manager = require_roles(*USER_MANAGEMENT_ROLES)
 
+#: Front-of-house work — the customer book, the fleet, and dispatching jobs.
+#: Technicians are excluded here and are granted narrower access per-endpoint.
+require_operations = require_roles(*OPERATIONS_ROLES)
+
+#: Role values that may act on any job in the tenant. Compared against
+#: `AuthenticatedUser.role`, which is a plain string.
+OPERATIONS_ROLE_VALUES = frozenset(role.value for role in OPERATIONS_ROLES)
+
+
+def authorize_job_action(
+    db: Session, user: AuthenticatedUser, job_id: uuid.UUID
+) -> None:
+    """Allow the action if the caller runs the shop or owns this work order.
+
+    Owner/admin/office short-circuit without a query. For anyone else the job is
+    loaded under RLS first, so a technician probing another tenant's id gets the
+    same 404 as for an id that does not exist, rather than a 403 that would
+    confirm the job is real.
+    """
+    if user.role in OPERATIONS_ROLE_VALUES:
+        return
+
+    # Imported here: the jobs service pulls in the state machines and schemas,
+    # and deps is imported by every route module.
+    from app.api.errors import http_errors
+    from app.services import jobs as jobs_service
+
+    with http_errors():
+        job = jobs_service.get(db, user.company_id, job_id)
+    if job.technician_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="only the assigned technician or an office user may act on this job",
+        )
+
 
 __all__ = [
+    "OPERATIONS_ROLE_VALUES",
     "Principal",
+    "authorize_job_action",
     "get_current_company_id",
     "get_current_principal",
     "get_current_user",
     "get_db",
     "get_service_db",
+    "require_operations",
     "require_roles",
     "require_user_manager",
 ]

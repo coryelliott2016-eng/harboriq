@@ -30,9 +30,9 @@ SERVICE_URL = settings.service_database_url
 # Tables truncated between tests (order-independent with CASCADE).
 _TENANT_TABLES = [
     "audit_log", "outbox_events", "public_tokens", "payments", "invoices",
-    "estimate_line_items", "estimates", "jobs", "inventory_items", "vessels",
-    "customers", "stripe_processed_events", "subscriptions",
-    "password_reset_tokens", "user_sessions", "users",
+    "estimate_line_items", "estimates", "job_line_items", "jobs",
+    "inventory_items", "vessels", "customers", "stripe_processed_events",
+    "subscriptions", "password_reset_tokens", "user_sessions", "users",
     "subscription_plans", "companies",
 ]
 
@@ -114,6 +114,32 @@ def auth_headers(auth: dict) -> dict[str, str]:
     """Bearer header from an AuthResponse body (or a bare TokenPair)."""
     tokens = auth.get("tokens", auth)
     return {"Authorization": f"Bearer {tokens['access_token']}"}
+
+
+def login(client: TestClient, email: str, password: str = DEFAULT_PASSWORD) -> dict:
+    resp = client.post(
+        "/api/v1/auth/login", json={"email": email, "password": password}
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def invite(client: TestClient, actor: dict, role: str,
+           email: str | None = None) -> dict:
+    """Provision a user in the actor's tenant and log them in.
+
+    Returns the new user's AuthResponse, with their own id under
+    `["user"]["id"]` — which is what the job endpoints want for
+    `technician_id`.
+    """
+    address = email or unique_email(role)
+    resp = client.post(
+        "/api/v1/auth/users",
+        json={"email": address, "password": DEFAULT_PASSWORD, "role": role},
+        headers=auth_headers(actor),
+    )
+    assert resp.status_code == 201, resp.text
+    return login(client, address)
 
 
 def _create_company(db: Session, slug: str) -> uuid.UUID:
