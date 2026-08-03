@@ -5,6 +5,7 @@ from app.api.v1.routes import (
     customers,
     health,
     inventory,
+    invoices,
     jobs,
     public,
     stripe_webhooks,
@@ -18,5 +19,6 @@ api_router.include_router(customers.router)
 api_router.include_router(vessels.router)
 api_router.include_router(jobs.router)
 api_router.include_router(inventory.router, tags=["inventory"])
+api_router.include_router(invoices.router)
 api_router.include_router(public.router, tags=["public"])
 api_router.include_router(stripe_webhooks.router, tags=["webhooks"])

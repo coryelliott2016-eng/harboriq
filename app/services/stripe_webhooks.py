@@ -18,7 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.tenant import tenant_context
-from app.services import outbox
+from app.services import invoices, outbox
 
 ALREADY_PROCESSED = "duplicate"
 
@@ -89,33 +89,61 @@ def handle_stripe_webhook(db: Session, event_id: str, event_type: str, payload: 
 
 
 def _apply_side_effect(db: Session, event_type: str, payload: dict, company_id: uuid.UUID) -> None:
-    """Apply the DB state change; queue non-DB side effects via the outbox."""
+    """Apply the DB state change; queue non-DB side effects via the outbox.
+
+    IMPORTANT — two unrelated "invoice" concepts collide in Stripe's event
+    names here and must not be conflated:
+      * Stripe Billing subscription invoices (`invoice.payment_succeeded`) —
+        HarborIQ's OWN SaaS subscription charge to the shop. Handled by
+        `_on_subscription_payment_succeeded`, still a TODO stub; nothing in
+        Phase 3 implements platform subscription billing.
+      * `checkout.session.completed` with `metadata.kind == "invoice_payment"`
+        — a marine-shop CUSTOMER paying one of the shop's `invoices` rows via
+        the Phase 3 pay link. Handled by `_on_invoice_payment_completed`.
+    A `checkout.session.completed` event with no such metadata (or a
+    `subscription` field) is the pre-existing subscription-checkout flow and
+    still routes to `_on_subscription_checkout_completed`.
+    """
     obj = payload.get("data", {}).get("object", {})
 
     if event_type == "invoice.payment_succeeded":
-        _on_payment_succeeded(db, company_id, obj)
+        _on_subscription_payment_succeeded(db, company_id, obj)
     elif event_type == "checkout.session.completed":
-        _on_checkout_completed(db, company_id, obj)
+        meta = obj.get("metadata", {}) or {}
+        if meta.get("kind") == "invoice_payment":
+            _on_invoice_payment_completed(db, company_id, obj)
+        else:
+            _on_subscription_checkout_completed(db, company_id, obj)
+    elif event_type == "payment_intent.succeeded":
+        # Fallback path: some integrations (or a customer paying via a saved
+        # payment method outside Checkout) surface the payment as a bare
+        # PaymentIntent rather than a completed Checkout Session. Only handle
+        # it here if it is tagged as ours; otherwise there is nothing to do.
+        meta = obj.get("metadata", {}) or {}
+        if meta.get("kind") == "invoice_payment":
+            _on_invoice_payment_completed(db, company_id, obj)
     # ... other event types as needed
 
 
-def _on_payment_succeeded(db: Session, company_id: uuid.UUID, obj: dict) -> None:
-    """Illustrative payment handler.
+def _on_subscription_payment_succeeded(db: Session, company_id: uuid.UUID, obj: dict) -> None:
+    """Stripe Billing subscription invoice paid — HarborIQ's OWN SaaS charge
+    to the shop for using the platform. Distinct from a shop's customer
+    invoices (`app.services.invoices`), which is what Phase 3 implements.
 
-    In a real build you would store the Stripe invoice/checkout id on the local
-    invoice row at creation time and look it up here. This scaffold marks the
-    lookup as a TODO so the shape is clear without a broken WHERE clause.
+    Still a TODO stub: platform subscription billing (plans, seats, usage
+    metering) is not implemented yet. Renamed from `_on_payment_succeeded` in
+    Phase 3 purely to stop the name colliding, in a reader's head, with the
+    unrelated marine-shop invoice payments this phase adds.
     """
     amount_paid_cents = obj.get("amount_paid") or obj.get("amount")
     payment_intent = obj.get("payment_intent")
 
-    # TODO: resolve the local invoice by a stored Stripe id, e.g.:
+    # TODO: resolve the local subscription by a stored Stripe id, e.g.:
     #   inv = db.execute(text("""
-    #       UPDATE invoices SET status='paid', amount_paid=:amt, balance_due=0
-    #        WHERE stripe_payment_intent_id = :pi
+    #       UPDATE subscriptions SET status='active'
+    #        WHERE stripe_subscription_id = :sid
     #          AND company_id::text = current_setting('app.current_company_id')
-    #        RETURNING id, total"""), {"pi": payment_intent, "amt": ...}).first()
-    # then InvoiceSM.assert_transition(real_status, 'paid') under FOR UPDATE.
+    #        RETURNING id"""), {"sid": ...}).first()
 
     # Non-DB side effect: queue a receipt — dispatched after commit by the
     # outbox worker (same transaction as the dedup INSERT above).
@@ -127,7 +155,9 @@ def _on_payment_succeeded(db: Session, company_id: uuid.UUID, obj: dict) -> None
     )
 
 
-def _on_checkout_completed(db: Session, company_id: uuid.UUID, obj: dict) -> None:
+def _on_subscription_checkout_completed(db: Session, company_id: uuid.UUID, obj: dict) -> None:
+    """Platform subscription checkout completed (the shop subscribing to
+    HarborIQ itself) — unrelated to a shop's customer paying an invoice."""
     sub_id = obj.get("subscription")
     if sub_id:
         db.execute(
@@ -142,3 +172,28 @@ def _on_checkout_completed(db: Session, company_id: uuid.UUID, obj: dict) -> Non
             ),
             {"sid": sub_id},
         )
+
+
+def _on_invoice_payment_completed(db: Session, company_id: uuid.UUID, obj: dict) -> None:
+    """A marine-shop customer finished paying one of the shop's `invoices`
+    rows via the Phase 3 Stripe Checkout pay link.
+
+    Delegates the actual row-locked state transition to
+    `app.services.invoices.mark_paid_from_webhook`, which is also directly
+    unit-tested — this function only adapts the raw Stripe payload shape.
+    """
+    amount_total_cents = obj.get("amount_total") or obj.get("amount") or 0
+    invoices.mark_paid_from_webhook(
+        db,
+        company_id,
+        stripe_checkout_session_id=obj.get("id") if obj.get("object") == "checkout.session" else None,
+        stripe_payment_intent_id=obj.get("payment_intent") or (obj.get("id") if obj.get("object") == "payment_intent" else None),
+        amount_paid_cents=amount_total_cents,
+    )
+
+    outbox.enqueue(
+        db,
+        company_id,
+        "invoice.paid",
+        {"invoice_metadata": (obj.get("metadata") or {}).get("invoice_id")},
+    )

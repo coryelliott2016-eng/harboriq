@@ -173,6 +173,46 @@ def approve_estimate_with_token(
     return {"company_id": str(company_id), "estimate_id": str(estimate_id)}
 
 
+def resolve_read_only_token(
+    db: Session, raw_token: str, purpose: str, resource_type: str
+) -> dict:
+    """Resolve a token WITHOUT consuming a use.
+
+    For actions that only ever read state (e.g. loading an invoice pay page)
+    rather than performing a one-shot mutation. A customer may reload that
+    page many times before completing Stripe checkout, and the actual state
+    change happens via webhook — not via this lookup — so `uses` must stay
+    untouched here. Still validates expiry/revocation/use-limit/scope exactly
+    like `approve_estimate_with_token`; it just never issues the `UPDATE
+    public_tokens SET uses = uses + 1` that a consuming action would.
+    """
+    token_hash = _hash(raw_token)
+
+    token_row = db.execute(
+        text(
+            """
+            SELECT id, company_id, resource_type, resource_id, purpose,
+                   expires_at, max_uses, uses, revoked_at
+              FROM public_tokens
+             WHERE token_hash = :th
+               AND revoked_at IS NULL
+               AND expires_at > now()
+               AND uses < max_uses
+            """
+        ),
+        {"th": token_hash},
+    ).first()
+
+    if token_row is None:
+        raise InvalidToken("token not found, expired, revoked, or exhausted")
+    if token_row.purpose != purpose:
+        raise InvalidToken("token scope mismatch")
+    if token_row.resource_type != resource_type:
+        raise InvalidToken("token resource type mismatch")
+
+    return {"company_id": token_row.company_id, "resource_id": token_row.resource_id}
+
+
 def revoke_public_token(db: Session, token_hash: str) -> None:
     """Admin revocation."""
     db.execute(

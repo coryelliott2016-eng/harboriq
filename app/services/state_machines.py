@@ -41,7 +41,12 @@ class EstimateSM(StateMachine):
 
 class InvoiceSM(StateMachine):
     transitions = {
-        "draft": {"sent"},
+        # A draft that is never sent still needs a way to be cancelled — e.g.
+        # the shop mis-scoped the job and wants to redo the line items rather
+        # than mail a bill first and void it after. Phase 3 adds this edge
+        # (previously `draft` had no exit besides `sent`) rather than forcing
+        # a pointless send->void round-trip for work that never left the shop.
+        "draft": {"sent", "void"},
         "sent": {"partial", "paid", "void", "uncollectible"},
         "partial": {"paid", "void"},
         "paid": {"refunded", "partially_refunded"},

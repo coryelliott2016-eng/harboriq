@@ -3,12 +3,14 @@
 Marine service operating system. Corrected implementation of the HarborIQ
 build plan: every issue from the technical critique is fixed at the code level.
 
-> **Status:** scaffold, real authentication, and the CRM/operations core
-> (customers, vessels, work orders). Models, migrations, services, routes, and
-> tests for the **critical fixes**, for **auth + tenant onboarding**, and for
-> **customers/vessels/jobs** are real and runnable. Invoicing and payments are
-> the next phase; the complete UI and the AI layer are intentionally out of
-> scope — see `../HarborIQ_v2_Corrected_Build_Spec.md` for the roadmap.
+> **Status:** scaffold, real authentication, the CRM/operations core
+> (customers, vessels, work orders), and **invoicing + Stripe payment
+> collection** are real and runnable. Models, migrations, services, routes,
+> and tests for the **critical fixes**, for **auth + tenant onboarding**, for
+> **customers/vessels/jobs**, and for **invoices/payments** all exist and pass.
+> The complete React UI, Stripe Connect onboarding, and the AI layer are
+> intentionally out of scope — see `../HarborIQ_v2_Corrected_Build_Spec.md`
+> for the roadmap.
 
 ## Stack
 
@@ -83,6 +85,11 @@ tests/test_crm_job_status.py            # JobSM transitions, timestamps, who may
 tests/test_crm_job_dispatch.py          # assignment rules + the scheduling board feed
 tests/test_crm_job_line_items.py        # labor/parts lines, invoiced freeze, inventory link
 tests/test_crm_rls.py                   # cross-tenant isolation + tenant-safe foreign keys
+tests/test_invoicing_create.py          # subtotal/tax/total math, line freezing, re-invoicing rules
+tests/test_invoicing_lifecycle.py       # draft -> sent -> paid, draft/sent -> void, illegal transitions
+tests/test_invoicing_rls.py             # cross-tenant isolation + composite FKs on invoices/payments
+tests/test_public_invoice_pay.py        # token resolves invoice; read never burns a use; checkout URL
+tests/test_stripe_invoice_webhook.py    # checkout.session.completed pays/partials an invoice, idempotently
 ```
 
 ## API surface
@@ -123,8 +130,14 @@ tests/test_crm_rls.py                   # cross-tenant isolation + tenant-safe f
 | PATCH | `/api/v1/jobs/{id}/line-items/{line_id}` | bearer, office or the assigned tech | correct a line; 409 once invoiced |
 | DELETE | `/api/v1/jobs/{id}/line-items/{line_id}` | bearer, office or the assigned tech | remove a line; 409 once invoiced |
 | POST | `/api/v1/inventory/use` | bearer | atomic stock deduction; with `job_id`, bills the part to that work order |
+| POST | `/api/v1/invoices` | bearer, owner/admin/office | invoice every currently-uninvoiced line on a job |
+| GET | `/api/v1/invoices` | bearer, owner/admin/office | list invoices; filter by status, customer, job |
+| GET | `/api/v1/invoices/{id}` | bearer, owner/admin/office | one invoice with its frozen line items |
+| POST | `/api/v1/invoices/{id}/send` | bearer, owner/admin/office | draft -> sent; mints a Stripe Checkout Session (best-effort) and a public pay token |
+| POST | `/api/v1/invoices/{id}/void` | bearer, owner/admin/office | draft/sent -> void; 409 if any payment has already landed; frees line items for re-invoicing |
+| GET | `/api/v1/public/invoice/{token}` | public token | read-only pay page: invoice, line items, live checkout URL |
 | POST | `/api/v1/public/estimate/{token}/approve` | public token | public estimate approval (e-sign) |
-| POST | `/api/v1/webhooks/stripe` | Stripe signature | idempotent Stripe webhook |
+| POST | `/api/v1/webhooks/stripe` | Stripe signature | idempotent Stripe webhook (subscription billing *and* invoice payment) |
 
 ## Auth
 
@@ -241,13 +254,125 @@ the labor and parts they used. Probing another tenant's job id returns 404, not
 active users holding a role in `JOB_ASSIGNABLE_ROLES` (technician, admin,
 owner) — office staff take the call, they do not turn the wrenches.
 
+## Invoicing & payments
+
+**A job's uninvoiced line items are the only input.** `POST /api/v1/invoices`
+locks every `job_line_items` row on the job with `invoiced_at IS NULL` under
+`FOR UPDATE`, sums `subtotal` from real `Decimal` math (not float), applies
+`tax_rate` only to lines with `taxable = true` to get `tax_total`, inserts the
+invoice with `total = subtotal + tax_total` and `balance_due = total`, then
+attaches every locked line to it (`invoice_id`, `invoiced_at`) in the same
+transaction. A job with nothing left to invoice — never billed anything, or
+already fully invoiced — is a 409, not an empty invoice. `job_line_items`
+already went immutable once invoiced back in the CRM phase; invoicing is the
+first thing that actually sets that flag.
+
+**Status moves through `InvoiceSM`, the same pattern as `JobSM`.** `send_invoice`
+and `void_invoice` both re-read the invoice with `SELECT ... FOR UPDATE` before
+calling `InvoiceSM.assert_transition`, so two racing requests serialise instead
+of double-sending or double-voiding. `InvoiceSM.transitions["draft"]` now
+includes `"void"` in addition to `"sent"` — a draft that should never be billed
+(bad job, duplicate, customer walked away) can be cancelled directly instead of
+forcing a pointless send-then-void round trip that would also mint a live
+Stripe Checkout Session for nothing. Voiding is rejected with 409 once
+`amount_paid > 0`: money that has already moved cannot be waved away by a
+status change, only by a refund (deferred, see below). Voiding a still-unpaid
+invoice frees its line items (`invoice_id`/`invoiced_at` cleared) so they can
+be corrected and re-invoiced.
+
+**Sending an invoice is best-effort against Stripe, never blocking on it.**
+`send_invoice` tries to create a Stripe Checkout Session for the invoice total,
+but a Stripe outage or missing API key must not stop the shop from sending the
+invoice — `stripe_billing.create_checkout_session` swallows any exception and
+returns `None`, and the invoice still moves to `sent` either way. What it does
+not skip is the public pay token: every sent invoice gets an `invoice_pay`
+token (`app/services/public_tokens.py`, 720-hour TTL, 50 uses) so the customer
+always has a durable link even if the first Stripe session attempt failed —
+the pay page itself lazily creates a session on read if one is still missing.
+
+**The public pay page is read-only by design.** `GET
+/api/v1/public/invoice/{token}` resolves the token with the new
+`resolve_read_only_token()` and deliberately does **not** call the
+uses-incrementing path that `estimate_approve` tokens use — a customer opening
+the emailed link five times while deciding whether to pay must not burn
+through a 50-use budget or trip an expiry race against their own browser
+reloads. The only state-changing operation for a customer invoice is the
+Stripe webhook; this endpoint only ever reads and, when the invoice is still
+payable, lazily persists a fresh Stripe Checkout Session URL (never caches the
+URL itself, only the session id, so the link always reflects current Stripe
+state).
+
+**The Stripe webhook now disambiguates two unrelated event families.** Phase 2
+already handled Stripe *Billing* subscription invoices
+(`invoice.payment_succeeded`, HarborIQ's own SaaS subscription revenue) —
+that handler is renamed `_on_subscription_payment_succeeded` (still the
+original TODO stub; `tests/test_stripe_webhook_idempotency.py` passes against
+it unmodified) to make room for the *new*, unrelated concept this phase adds:
+a marine shop's own customer paying their invoice through a Checkout Session
+carrying `metadata.kind == "invoice_payment"`. `checkout.session.completed`
+(and `payment_intent.succeeded` as a fallback) now branches on that metadata
+key before falling through to the pre-existing subscription-checkout path, so
+a shop's customer invoice and HarborIQ's own subscription billing can never be
+confused for one another even though they arrive on the same webhook
+endpoint. The new branch, `_on_invoice_payment_completed`, resolves the
+invoice by whichever Stripe id is present, row-locks it, computes
+`amount_paid` (clamped to `total`), lands on `paid` or `partial` via
+`InvoiceSM.assert_transition`, and inserts a `payments` row — all guarded by
+the existing `stripe_processed_events` idempotency table, so a duplicate
+delivery of the same `event.id` is a no-op rather than a double payment.
+
+**Tenant-safe foreign keys close the same hole CRM closed in migration 0003.**
+`estimates` didn't yet have `UNIQUE (company_id, id)` (invoices already did,
+reserved in 0003 for this phase); migration 0004 adds it, then rewrites
+`estimates.job_id`/`customer_id`, `invoices.estimate_id`/`customer_id`, and
+`payments.invoice_id` as composite `(company_id, <id>)` foreign keys.
+`job_line_items.invoice_id` already got its composite FK in 0003 — this phase
+is simply the first one that writes to it, and 0004 only adds the supporting
+index. `tests/test_invoicing_rls.py` proves both halves of the guarantee:
+RLS blocks the read, and even a query that bypasses RLS (an FK check) cannot
+represent a cross-tenant reference in the first place.
+
+**Deferred, on purpose:**
+- Stripe Connect (per-tenant merchant-of-record) onboarding — still the single
+  platform Stripe account; see "Payment architecture" below.
+- Refunds and partial refunds (`refunded`/`partially_refunded` are modeled in
+  `invoice_status`/`payment_status` but nothing writes them yet).
+- PDF invoice generation and email delivery of the pay link — the outbox
+  already queues an `invoice.send` event; nothing consumes it into an actual
+  email yet, matching the pre-existing password-reset email gap.
+- Automated overdue/dunning reminders against `due_date`.
+- The React customer-facing pay page — the API is ready, there's no frontend
+  yet in this repo.
+
 ## Payment architecture
 
-Stripe Connect is the recommended default: each tenant connects their own
-Stripe account; HarborIQ charges a platform fee. **The final merchant-of-record
-model depends on the Connect configuration and requires legal/payment-provider
-review** — do not treat this scaffold as legal advice. See the corrected build
-spec, §8.
+Two Stripe surfaces exist in this codebase and must not be conflated:
+
+1. **HarborIQ's own SaaS subscription billing** (a marine shop paying
+   HarborIQ) — `subscriptions`/`subscription_plans`, driven by Stripe Billing
+   `invoice.payment_succeeded` / `invoice.payment_failed`. Handling here is
+   still a stub (`_on_subscription_payment_succeeded`) pending Phase 4.
+2. **A marine shop's customer paying their invoice** (this phase) — a Stripe
+   Checkout Session created against the platform's own Stripe account,
+   identified by `metadata.kind == "invoice_payment"` on
+   `checkout.session.completed`. `app/services/stripe_billing.py` is
+   intentionally thin: it degrades to `None` on any Stripe error or missing
+   API key rather than ever raising, so a Stripe outage cannot block sending
+   an invoice or take down the pay page.
+
+**Stripe Connect is still the recommended end state** for (2): each tenant
+connects their own Stripe account so shop revenue settles directly to the
+shop and HarborIQ takes a platform fee, rather than HarborIQ being the
+merchant of record for every marine shop's customer payments. This phase
+deliberately ships on the single platform Stripe account instead, because
+Connect onboarding (Standard vs. Express vs. Custom, KYC, payout scheduling)
+is a substantial project of its own and gates on legal/payment-provider
+review — building the invoicing lifecycle, webhook disambiguation, and
+tenant-safe data model first means the Connect migration later is "point
+`stripe_billing.create_checkout_session` at the tenant's connected account,"
+not a rewrite. **The final merchant-of-record model still requires
+legal/payment-provider review** — do not treat this scaffold as legal advice.
+See the corrected build spec, §8.
 
 ## Project layout
 
@@ -256,18 +381,20 @@ harboriq/
   alembic/sql/0001_initial.sql        # corrected DDL + RLS + roles + outbox
   alembic/sql/0002_auth.sql           # user roles, sessions, reset tokens, companies RLS
   alembic/sql/0003_crm_operations.sql # customers/vessels/jobs/line items, composite FKs, RLS
+  alembic/sql/0004_invoicing.sql      # invoice lifecycle columns, composite FKs, updated_at trigger
   alembic/versions/0001_initial_schema.py
   alembic/versions/0002_auth.py
   alembic/versions/0003_crm_operations.py
+  alembic/versions/0004_invoicing.py
   app/
     core/      config, logging, security (argon2 + JWT)
     db/        base, session, tenant, models
     api/       deps (auth + job authorization), errors (domain -> HTTP status)
-    api/v1/    routes: auth, customers, vessels, jobs, health, inventory, public,
-               stripe_webhooks
-    services/  auth, crud, customers, vessels, jobs, state_machines, inventory,
-               public_tokens, outbox, stripe_webhooks
-    schemas/   pydantic models
+    api/v1/    routes: auth, customers, vessels, jobs, invoices, health, inventory,
+               public, stripe_webhooks
+    services/  auth, crud, customers, vessels, jobs, invoices, stripe_billing,
+               state_machines, inventory, public_tokens, outbox, stripe_webhooks
+    schemas/   pydantic models (incl. invoices.py)
   tests/       Postgres-backed integration tests
   docker-entrypoint-initdb.d/00_roles.sql
   docker-compose.yml  Dockerfile  alembic.ini  pyproject.toml
@@ -278,7 +405,9 @@ harboriq/
 
 Per the MVP reset in the build spec: the React frontend, white-labeling/custom
 domains, the AI engine, the marketplace, and the full observability stack.
-Build the 5-shop pilot first.
+Build the 5-shop pilot first. Invoicing-specific deferrals (Stripe Connect,
+refunds, PDF/email delivery, dunning) are listed at the end of
+"Invoicing & payments" above.
 
 Known gaps in the auth layer specifically:
 

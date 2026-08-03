@@ -493,7 +493,12 @@ class JobLineItem(UUIDPKMixin, TimestampMixin, Base):
     inventory_committed: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
-    invoice_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True))
+    # The real constraint is the composite FK (company_id, invoice_id) ->
+    # invoices(company_id, id) from migration 0003/0004, which makes a
+    # cross-tenant reference unrepresentable. Declared here for ORM parity.
+    invoice_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("invoices.id")
+    )
     invoiced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -602,9 +607,22 @@ class Invoice(UUIDPKMixin, TimestampMixin, Base):
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
     amount_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
     balance_due: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    #: Applied to taxable line subtotal only; 0..1 (e.g. 0.07 == 7%).
+    tax_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4), nullable=False, default=0, server_default="0"
+    )
+    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    voided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(Text)
+    stripe_checkout_session_id: Mapped[Optional[str]] = mapped_column(Text)
 
-    __table_args__ = (Index("idx_invoices_company_created", "company_id", "created_at"),)
+    __table_args__ = (
+        Index("idx_invoices_company_created", "company_id", "created_at"),
+        CheckConstraint("tax_rate >= 0 AND tax_rate <= 1", name="ck_invoices_tax_rate"),
+        CheckConstraint("amount_paid <= total", name="ck_invoices_amount_paid_lte_total"),
+    )
 
 
 class Payment(UUIDPKMixin, TimestampMixin, Base):
