@@ -304,6 +304,28 @@ export interface VoidInvoiceResponse {
   invoice: Invoice;
 }
 
+// --- Refunds (Phase 8) ---
+
+export interface RefundInput {
+  /** Omit for a full refund of whatever remains refundable. */
+  amount?: string;
+  reason?: string;
+}
+
+export interface Refund {
+  id: string;
+  invoice_id: string;
+  amount: string;
+  reason: string | null;
+  stripe_refund_id: string | null;
+  created_at: string;
+}
+
+export interface RefundResponse {
+  invoice: Invoice;
+  refund: Refund;
+}
+
 // --- Public pay page ---
 
 export interface PublicInvoice {
@@ -318,6 +340,52 @@ export interface PublicInvoice {
   due_date: string | null;
   line_items: InvoiceLineItem[];
   checkout_url: string | null;
+}
+
+// --- Stripe Connect + dunning (Phase 8) ---
+// Mirrors app/schemas/billing.py exactly.
+
+export interface ConnectOnboardingResponse {
+  account_id: string;
+  onboarding_url: string;
+}
+
+export interface ConnectStatusResponse {
+  connected: boolean;
+  account_id: string | null;
+  charges_enabled: boolean;
+  details_submitted: boolean;
+}
+
+export interface DunningRunResponse {
+  reminded_invoice_ids: string[];
+  count: number;
+}
+
+// --- AR aging report (Phase 8) ---
+// Mirrors app/schemas/reports.py exactly.
+
+export interface AgingBuckets {
+  current: string;
+  days_1_30: string;
+  days_31_60: string;
+  days_61_90: string;
+  days_90_plus: string;
+}
+
+export interface CustomerAging {
+  customer_id: string | null;
+  customer_name: string;
+  buckets: AgingBuckets;
+  total: string;
+  invoice_count: number;
+}
+
+export interface ArAgingReport {
+  as_of: string;
+  customers: CustomerAging[];
+  bucket_totals: AgingBuckets;
+  grand_total: string;
 }
 
 // --- API error shape (see app/api/errors.py) ---

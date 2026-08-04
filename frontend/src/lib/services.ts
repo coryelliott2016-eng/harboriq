@@ -1,11 +1,15 @@
 import { api, apiRequest } from "./api";
 import type {
   AcceptInviteInput,
+  ArAgingReport,
   AuthResponse,
+  ConnectOnboardingResponse,
+  ConnectStatusResponse,
   CreateInviteInput,
   Customer,
   CustomerInput,
   DispatchCandidate,
+  DunningRunResponse,
   Invoice,
   InvoiceDetail,
   InvoiceSendResponse,
@@ -19,6 +23,8 @@ import type {
   JobLineItemInput,
   JobStatus,
   PublicInvoice,
+  RefundInput,
+  RefundResponse,
   User,
   UserRole,
   Vessel,
@@ -132,6 +138,23 @@ export const invoicesApi = {
     api.post<InvoiceDetail>("/invoices", { job_id: jobId, tax_rate: taxRate ?? "0" }),
   send: (id: string) => api.post<InvoiceSendResponse>(`/invoices/${id}/send`),
   void: (id: string) => api.post<VoidInvoiceResponse>(`/invoices/${id}/void`),
+  refund: (id: string, body: RefundInput = {}) =>
+    api.post<RefundResponse>(`/invoices/${id}/refund`, body),
+};
+
+// --- billing admin (Stripe Connect + dunning; owner/admin only) ---
+
+export const billingApi = {
+  connectOnboardingLink: () =>
+    api.post<ConnectOnboardingResponse>("/billing/connect/onboarding-link", {}),
+  connectStatus: () => api.get<ConnectStatusResponse>("/billing/connect/status"),
+  runDunning: () => api.post<DunningRunResponse>("/billing/dunning/run", {}),
+};
+
+// --- reports (owner/admin/office) ---
+
+export const reportsApi = {
+  arAging: () => api.get<ArAgingReport>("/reports/ar-aging"),
 };
 
 // --- public (unauthenticated) ---

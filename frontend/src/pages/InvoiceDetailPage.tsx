@@ -4,12 +4,13 @@ import { Link, useParams } from "react-router-dom";
 import { invoicesApi } from "../lib/services";
 import { ApiError } from "../lib/api";
 import { Badge, Button, Card, ErrorBanner, Spinner, money } from "../components/ui";
-import { INVOICE_STATUS_LABELS, canSend, canVoid } from "../lib/invoiceStateMachine";
+import { INVOICE_STATUS_LABELS, canRefund, canSend, canVoid } from "../lib/invoiceStateMachine";
 
 function statusTone(status: string) {
   if (status === "paid") return "green" as const;
   if (status === "void" || status === "uncollectible") return "red" as const;
-  if (status === "partial") return "amber" as const;
+  if (status === "partial" || status === "partially_refunded") return "amber" as const;
+  if (status === "refunded") return "blue" as const;
   return "slate" as const;
 }
 
@@ -19,6 +20,10 @@ export function InvoiceDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [payUrl, setPayUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refundNotice, setRefundNotice] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ["invoices", id],
@@ -52,12 +57,42 @@ export function InvoiceDetailPage() {
     onError: (err) => setActionError(err instanceof ApiError ? err.message : "Failed to void invoice."),
   });
 
+  const refundMutation = useMutation({
+    mutationFn: () =>
+      invoicesApi.refund(id!, {
+        amount: refundAmount.trim() ? refundAmount.trim() : undefined,
+        reason: refundReason.trim() ? refundReason.trim() : undefined,
+      }),
+    onSuccess: (resp) => {
+      setActionError(null);
+      setRefundOpen(false);
+      setRefundAmount("");
+      setRefundReason("");
+      setRefundNotice(`Refunded ${money(resp.refund.amount)}.`);
+      queryClient.invalidateQueries({ queryKey: ["invoices", id] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+    onError: (err) => setActionError(err instanceof ApiError ? err.message : "Failed to refund invoice."),
+  });
+
   if (!id) return <ErrorBanner message="Missing invoice id." />;
   if (query.isLoading) return <Spinner label="Loading invoice…" />;
   if (query.isError)
     return <ErrorBanner message={query.error instanceof Error ? query.error.message : "Failed to load invoice."} />;
 
   const invoice = query.data!;
+
+  function openRefundForm() {
+    setActionError(null);
+    setRefundNotice(null);
+    // Default to the full remaining paid amount; the backend computes the
+    // real refundable ceiling (amount_paid minus any refunds already
+    // issued) and rejects anything over it, so this is only a starting
+    // suggestion for the operator, not the source of truth.
+    setRefundAmount(invoice.amount_paid);
+    setRefundReason("");
+    setRefundOpen(true);
+  }
 
   async function copyPayUrl() {
     if (!payUrl) return;
@@ -79,6 +114,11 @@ export function InvoiceDetailPage() {
       </div>
 
       {actionError && <ErrorBanner message={actionError} />}
+      {refundNotice && !actionError && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {refundNotice}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {canSend(invoice.status) && (
@@ -91,7 +131,56 @@ export function InvoiceDetailPage() {
             {voidMutation.isPending ? "Voiding…" : "Void invoice"}
           </Button>
         )}
+        {canRefund(invoice.status) && !refundOpen && (
+          <Button variant="secondary" onClick={openRefundForm}>
+            Refund
+          </Button>
+        )}
       </div>
+
+      {refundOpen && (
+        <Card className="max-w-md p-5">
+          <h2 className="text-sm font-semibold text-slate-900">Issue a refund</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Leave the amount blank for a full refund of whatever remains refundable.
+          </p>
+          <form
+            className="mt-4 flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              refundMutation.mutate();
+            }}
+          >
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Amount (USD)</span>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                value={refundAmount}
+                onChange={(e) => setRefundAmount(e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Reason (optional)</span>
+              <input
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+              />
+            </label>
+            <div className="flex gap-2">
+              <Button type="submit" variant="danger" disabled={refundMutation.isPending}>
+                {refundMutation.isPending ? "Refunding…" : "Confirm refund"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setRefundOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
 
       {payUrl && (
         <Card className="flex items-center justify-between gap-4 px-4 py-3">

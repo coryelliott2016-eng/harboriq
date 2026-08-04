@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { canManageUsers, useAuth } from "./context/AuthContext";
+import { canManageOperations, canManageUsers, useAuth } from "./context/AuthContext";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
+import { ArAgingPage } from "./pages/ArAgingPage";
+import { BillingSettingsPage } from "./pages/BillingSettingsPage";
 import { CustomerDetailPage } from "./pages/CustomerDetailPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -28,6 +30,32 @@ function TeamRoute() {
   return <TeamPage />;
 }
 
+function BillingSettingsRoute() {
+  const { user } = useAuth();
+  if (!canManageUsers(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. Billing settings are limited to
+        owners and admins.
+      </div>
+    );
+  }
+  return <BillingSettingsPage />;
+}
+
+function ArAgingRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. The AR aging report is limited to
+        owners, admins, and office staff.
+      </div>
+    );
+  }
+  return <ArAgingPage />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -47,6 +75,8 @@ export default function App() {
           <Route path="/jobs/:id" element={<JobDetailPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
+          <Route path="/reports/ar-aging" element={<ArAgingRoute />} />
+          <Route path="/settings/billing" element={<BillingSettingsRoute />} />
           <Route path="/team" element={<TeamRoute />} />
         </Route>
       </Route>

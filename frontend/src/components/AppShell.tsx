@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { useAuth, canManageUsers } from "../context/AuthContext";
+import { useAuth, canManageOperations, canManageUsers } from "../context/AuthContext";
 
 const navItems = [
   { to: "/", label: "Dashboard", end: true },
@@ -34,6 +34,34 @@ export function AppShell() {
               {item.label}
             </NavLink>
           ))}
+          {canManageOperations(user?.role) && (
+            <NavLink
+              to="/reports/ar-aging"
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 text-sm font-medium ${
+                  isActive
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`
+              }
+            >
+              AR aging
+            </NavLink>
+          )}
+          {canManageUsers(user?.role) && (
+            <NavLink
+              to="/settings/billing"
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 text-sm font-medium ${
+                  isActive
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`
+              }
+            >
+              Billing settings
+            </NavLink>
+          )}
           {canManageUsers(user?.role) && (
             <NavLink
               to="/team"

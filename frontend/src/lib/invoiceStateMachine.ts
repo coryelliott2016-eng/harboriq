@@ -6,12 +6,16 @@ import type { InvoiceStatus } from "../types/api";
 export const INVOICE_STATUS_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
   draft: ["sent", "void"],
   sent: ["partial", "paid", "void", "uncollectible"],
-  partial: ["paid", "void"],
+  // Phase 8: a deposit ("partial") can be refunded before the balance is
+  // ever paid in full -- see app/services/state_machines.py::InvoiceSM.
+  partial: ["paid", "void", "partially_refunded"],
   paid: ["refunded", "partially_refunded"],
   void: [],
   uncollectible: [],
   refunded: [],
-  partially_refunded: [],
+  // A partial refund can be topped up by another partial refund, or
+  // completed by refunding the remainder ("refunded").
+  partially_refunded: ["refunded", "partially_refunded"],
 };
 
 export function canVoid(status: InvoiceStatus): boolean {
@@ -20,6 +24,13 @@ export function canVoid(status: InvoiceStatus): boolean {
 
 export function canSend(status: InvoiceStatus): boolean {
   return status === "draft";
+}
+
+// Mirrors the backend's refundable statuses (anything with money collected
+// that hasn't already been fully refunded): `partial`, `paid`, and
+// `partially_refunded` (a partial refund can be topped up further).
+export function canRefund(status: InvoiceStatus): boolean {
+  return status === "partial" || status === "paid" || status === "partially_refunded";
 }
 
 export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
