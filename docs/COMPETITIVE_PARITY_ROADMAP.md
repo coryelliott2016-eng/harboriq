@@ -5,12 +5,15 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 9: auth, multi-tenant CRM, invoicing + Stripe Checkout
+Status as of Phase 10: auth, multi-tenant CRM, invoicing + Stripe Checkout
 (single-account and per-tenant Stripe Connect direct charges), refunds,
 PDF/email invoice delivery, dunning, AR aging, a durable magic-link customer
-self-service portal with customer<->staff messaging, React frontend, a
-rule-based explainable AI dispatch engine, and production
-deployment/observability hooks. 390 backend tests, 49 frontend tests, CI
+self-service portal with customer<->staff messaging, self-service + admin
+team profile editing with a team roster page, real OpenStreetMap Nominatim
+geocoding for user and customer addresses (with a documented Google
+Maps/Mapbox swap point) feeding the AI dispatch engine's distance factor,
+React frontend, a rule-based explainable AI dispatch engine, and production
+deployment/observability hooks. 429 backend tests, 52 frontend tests, CI
 green.
 
 This document sequences everything still missing for parity, in priority
@@ -50,13 +53,35 @@ this is organized from).
       see the README's "Customer self-service portal" and "Customer portal
       / messaging" sections.
 
-## Phase 10 — Team, Skills & Geocoding
-- `PATCH /users` (self-service profile edits) — today a technician's
-  `skills`/home coordinates can only be set by hand in the database.
-- Team roster / list-users screen in the frontend.
-- Geocoding integration for customer/company/technician addresses so the
-  dispatch engine's distance factor has real data instead of degrading to
-  neutral.
+## Phase 10 — Team, Skills & Geocoding — **COMPLETE**
+- [x] `PATCH /users/{id}` (self-service profile edits) plus `GET /users`
+      (team roster listing) — a technician (or an admin/owner on anyone's
+      behalf, tenant-scoped) can now update `full_name`/`skills`/
+      `address_text` without hand-editing the database; admins/owners can
+      additionally change `role`/`is_active`, with self-edits always
+      excluded from those two restricted fields to prevent accidental
+      self-demotion.
+- [x] Team roster / list-users screen in the frontend (`/team`, gated on
+      `canManageOperations`) — table of teammates with role, skills,
+      geocoded-address status, and an edit modal (self-edit vs.
+      admin-editing-a-teammate render different field sets); the existing
+      invite flow was preserved and folded into the same page.
+- [x] Real geocoding integration (OpenStreetMap Nominatim — free, no API
+      key, rate-limited to 1 req/sec, documented `SWAP POINT` for a future
+      Google Maps/Mapbox provider in `app/services/geocoding.py`) wired
+      into **user home addresses** and **customer addresses**: geocoding
+      is attempted synchronously on save and failures never block the
+      save (`latitude`/`longitude` stay `NULL` on no-match/timeout/blank
+      address) so the dispatch engine's distance factor now has real data
+      to score against instead of degrading to neutral for every match.
+      A `POST /admin/geocode-backfill` route (+ CLI entry point) geocodes
+      any pre-existing un-geocoded seed/legacy rows, is idempotent, and is
+      re-runnable safely. **Company address geocoding is explicitly
+      deferred** — no address field/route exists yet for `Company` — see
+      the README's "Team, skills & geocoding" section for the full
+      deferred list (company geocoding, a normalized `User` address field,
+      the Google Maps/Mapbox swap itself, and a background/scheduled
+      geocoding queue).
 
 ## Phase 11 — Live Dispatch Board + Map View
 - Visual drag-and-drop dispatch board (calendar + map hybrid), replacing

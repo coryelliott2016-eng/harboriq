@@ -117,6 +117,9 @@ tests/test_portal_access.py             # portal token issue/resolve, non-consum
 tests/test_portal_data.py               # /me, /jobs, /invoices, /estimates scoping; estimate-approve reuses public flow
 tests/test_portal_messages.py           # customer/staff send + list, outbox notifications, job-threaded messages, isolation
 tests/test_portal_invite.py             # invite issues/renews a token + queues an email, role gating, cross-tenant 404
+tests/test_user_profile.py              # self-edit vs admin-edit, restricted-field enforcement, tenant isolation, roster RBAC
+tests/test_geocoding.py                 # mocked Nominatim: happy path, failure/timeout degrades gracefully, rate limiting, dispatch-distance integration
+tests/test_geocode_backfill.py          # backfill only touches null-coordinate rows, tenant isolation, idempotency, admin-only route
 ```
 
 ## API surface
@@ -197,6 +200,9 @@ its server-side logs (see `app/api/middleware.py`, and
 | POST | `/api/v1/messages` | bearer, owner/admin/office | staff reply/send to a customer's thread |
 | POST | `/api/v1/messages/{id}/read` | bearer, owner/admin/office | mark a message read |
 | GET | `/api/v1/messages/by-job/{job_id}` | bearer, owner/admin/office | every message tied to one job, oldest first |
+| GET | `/api/v1/users` | bearer, owner/admin/office | team roster: every user in the caller's company, incl. skills, address, geocoded home coordinates |
+| PATCH | `/api/v1/users/{id}` | bearer (self) or owner/admin (anyone in-company) | edit `full_name`/`skills`/`address_text` (self or admin); `role`/`is_active` restricted to owner/admin editing someone else |
+| POST | `/api/v1/admin/geocode-backfill` | bearer, owner/admin | geocode every customer/user in the caller's company that has an address but no coordinates yet; `?force=true` re-geocodes everything |
 
 † `/metrics` is unauthenticated on purpose (standard practice for Prometheus
 scraping), but should be firewalled to the scraper's network at the reverse
@@ -770,6 +776,118 @@ machinery as everything else in this repo — no new transport.
   not currently mark staff replies read on the customer's behalf, and
   there is no per-message read receipt visible to the customer.
 
+## Team, skills & geocoding (Phase 10)
+
+Two gaps existed going into this phase: nobody but an admin editing the
+database directly could update their own name/skills/home address, and no
+address on any customer/user record ever turned into a real `latitude`/
+`longitude` — the Phase 7 dispatch engine's distance factor (see "AI
+dispatch engine" above) always degraded to neutral as a result. Both are
+closed now.
+
+**Self-service + admin profile editing — `PATCH /api/v1/users/{id}` and
+`GET /api/v1/users`.** Any authenticated user may edit their own
+`full_name`, `skills`, and `address_text` via `PATCH /users/{id}` where
+`{id}` is their own id. An owner/admin may edit **any** user in their own
+company the same way, plus `role` and `is_active` — fields a non-admin is
+explicitly forbidden from setting even on their own row (`app/services/
+users.py::update_profile` raises `FieldNotPermitted`, mapped to a `403` in
+the route). `password_hash`/`mfa_secret_enc` are deliberately untouchable
+here — they keep their own dedicated flows (login, password reset).
+Tenant isolation is enforced the same way as everywhere else in this
+codebase: a user id outside the caller's company resolves to `404`, not
+`403`, so existence cannot be inferred cross-tenant. `GET /users` (any
+authenticated `require_operations` role — owner/admin/office) returns the
+full roster: name, email, role, active status, skills, address text, and
+whether home coordinates are geocoded — the data source for the new
+frontend team page below.
+
+**Geocoding — OpenStreetMap Nominatim.** `app/services/geocoding.py`
+exposes one function, `geocode(address: str) -> tuple[Decimal, Decimal] |
+None`, backed by `https://nominatim.openstreetmap.org/search`: free, no
+API key, but rate-limited to 1 request/second and required by Nominatim's
+usage policy to send a descriptive `User-Agent`. A minimal in-process
+rate limiter (`time.monotonic` + `time.sleep`, no Redis needed at this
+call volume — geocoding only happens on an admin/user save or the
+backfill job, not on high-volume traffic) enforces the 1 req/s floor.
+**Swap point, documented in code:** `geocode()` is the single seam every
+caller goes through; replacing Nominatim with Google Maps/Mapbox later is
+a rewrite of this one file's internals only (parse a different JSON
+shape, add an API key header/param) — no caller in `app/services/
+users.py`, `app/services/customers.py`, or `app/jobs/geocode_backfill.py`
+changes. Look for the `# SWAP POINT` comment in `app/services/
+geocoding.py` for exactly where that would happen.
+
+**Graceful degradation everywhere geocoding is wired in — the
+non-negotiable rule for this phase.** A geocoding failure (no match,
+timeout, non-200, malformed response, or any unexpected exception) never
+blocks the save it's attached to: the address text still saves, and
+`latitude`/`longitude` are simply left `null`, consistent with how the
+dispatch engine's distance factor already treated missing coordinates
+before this phase existed. This is wired into:
+- `PATCH /users/{id}` — editing/setting `address_text` (self or admin)
+  geocodes it into `home_latitude`/`home_longitude`.
+- `POST /customers` and `PATCH /customers/{id}` — creating a customer with
+  an address, or changing any of `address_line1`/`city`/`state`/
+  `postal_code`/`country` on an existing one, re-geocodes from the merged
+  address fields (`app/services/customers.py::_geocode_address`).
+- Company address geocoding is **explicitly out of scope this phase** —
+  see "Deferred, on purpose" below; there is no address-text field or
+  settings route for `Company` anywhere in the codebase today for
+  geocoding to hang off of.
+
+**Backfill — `POST /api/v1/admin/geocode-backfill` and
+`python -m app.jobs.geocode_backfill`.** Phases 6-9 created seed/test data
+with addresses and no coordinates (geocoding was explicitly deferred until
+now — see the old "AI dispatch engine" deferred-list entry, now removed).
+`app/jobs/geocode_backfill.py` provides `backfill_customers`,
+`backfill_users`, and `backfill_company` (both, scoped to one company) —
+all idempotent by default: only rows with an address **and** null
+coordinates are touched, so running it twice does not re-geocode
+already-set rows unless `force=True`/`--force` is passed. The route is
+`require_admin`-scoped to the caller's own company; the module's
+`run(force=False)` entry point (and its `if __name__ == "__main__":` CLI,
+run as `python -m app.jobs.geocode_backfill [--force]`) iterates every
+company in the database, for an operator who wants a one-shot sweep
+across all tenants rather than per-company via the API.
+
+**Team roster page — `/team` (frontend).** Viewing the roster is
+`require_operations`-equivalent (owner/admin/office), matching `GET
+/users`'s gate; editing someone **else's** profile is admin-only,
+matching `PATCH /users/{id}`'s server-side rule — both enforced again in
+the React route guard and nav link (`canManageOperations`/
+`canManageUsers` in `AuthContext.tsx`), not just trusted client-side.
+Every row shows name, email, role, skills, address text, a
+located/not-located badge, and active status; an "Edit" action opens a
+modal that is either a self-edit (name/skills/address only) or, for an
+admin editing a teammate, the same fields plus role/active-status. The
+prior invite-only flow (`POST /auth/invites`) is preserved on the same
+page — it remains the only way to add a new teammate; Phase 10 adds
+editing, not provisioning.
+
+**Deferred, on purpose (this phase):**
+- **Company address/geocoding.** No `address_text` field or settings
+  route exists for `Company` anywhere in this codebase — adding one was
+  out of scope for this phase, which focused on the two records that
+  already had a natural home for a free-text address (`User`, `Customer`).
+  The backfill job's `run()` only reads `companies` to enumerate
+  `company_id`s to iterate customers/users by; it never geocodes a
+  company's own address.
+- **A normalized address (street/city/state/zip) field on `User`** —
+  `address_text` is a single free-text column (MVP-sufficient for
+  Nominatim, which accepts a single query string), not structured like
+  `Customer`'s `address_line1`/`city`/`state`/`postal_code`/`country`.
+- **Google Maps/Mapbox geocoding** — Nominatim was chosen because no
+  Google Maps/Mapbox connector is currently connected for this workspace
+  and it needs no API key; the swap point is documented above and in
+  `app/services/geocoding.py` for whenever better accuracy/higher rate
+  limits are worth a paid provider.
+- **A background/scheduled geocoding queue** — geocoding happens
+  synchronously, inline with the triggering `PATCH`/`POST` request (and
+  the 1 req/s rate limiter means a save with a new address adds up to ~1s
+  of latency). Fine at this request volume; a queue (Celery/RQ) would be
+  the upgrade if geocoding ever needs to happen off the request path.
+
 ## Project layout
 
 ```
@@ -781,6 +899,8 @@ harboriq/
   alembic/sql/0005_auth_hardening.sql # lockout columns + user_invite token_purpose enum value
   alembic/sql/0006_dispatch_engine.sql # skills/coords/required_skills + dispatch score cache columns
   alembic/sql/0007_stripe_connect.sql  # stripe_connect_account_id, refunds table, last_reminder_sent_at
+  alembic/sql/0008_customer_portal.sql # public_tokens 'portal' purpose, messages table + RLS
+  alembic/sql/0009_geocoding.sql       # users.address_text/home_latitude/home_longitude
   alembic/versions/0001_initial_schema.py
   alembic/versions/0002_auth.py
   alembic/versions/0003_crm_operations.py
@@ -788,23 +908,30 @@ harboriq/
   alembic/versions/0005_auth_hardening.py
   alembic/versions/0006_dispatch_engine.py
   alembic/versions/0007_stripe_connect.py
+  alembic/versions/0008_customer_portal.py
+  alembic/versions/0009_geocoding.py
   app/
     core/      config, logging (env-aware JSON/console), observability (Sentry),
                security (argon2 + JWT), rate_limit (login/reset limiter)
     db/        base, session, tenant, models
     api/       deps (auth + job authorization), errors (domain -> HTTP status),
                middleware (request-id correlation + Prometheus metrics)
-    api/v1/    routes: auth, customers, vessels, jobs, invoices, health, inventory,
-               public, stripe_webhooks, dispatch, billing, reports
-    services/  auth, crud, customers, vessels, jobs, invoices, stripe_billing,
+    api/v1/    routes: auth, users, customers, vessels, jobs, invoices, health,
+               inventory, public, stripe_webhooks, dispatch, billing, reports,
+               portal, messages, geocode_admin
+    services/  auth, users, crud, customers, vessels, jobs, invoices, stripe_billing,
                state_machines, inventory, public_tokens, outbox, outbox_dispatch,
                email, stripe_webhooks, dispatch, billing (Connect + dunning),
-               invoice_pdf, invoice_render
-    schemas/   pydantic models (incl. invoices.py, invite schemas in auth.py,
-               dispatch.py, billing.py, reports.py)
+               invoice_pdf, invoice_render, portal, messages, geocoding
+    schemas/   pydantic models (incl. invoices.py, invite + TeamMember/UserUpdate
+               schemas in auth.py, dispatch.py, billing.py, reports.py, portal.py,
+               messages.py, geocoding.py)
     jobs/      dunning_sweep.py — standalone script, loopable over every company
                (no Celery/cron runner in this repo; see "What's intentionally
                NOT here yet")
+               geocode_backfill.py — geocode any un-geocoded customer/user address;
+               callable via POST /admin/geocode-backfill or `python -m app.jobs.
+               geocode_backfill [--force]`
   tests/       Postgres-backed integration tests
   frontend/    Vite + React + TS SPA (see "Frontend" below)
   scripts/backup_db.sh                # pg_dump wrapper for a host cron job
@@ -970,10 +1097,6 @@ the reply flow posting to the right customer, and the empty state) — see
   Phase 5 delivery notes.)
 - **httpOnly-cookie refresh storage.** Noted above — the refresh token is in
   `localStorage` for now.
-- **A real "list teammates" screen.** The backend still has no `GET`-all-users
-  endpoint (only invite-based provisioning and `GET /auth/me` for self), so
-  the Team page remains invite-only and says so on-screen. This is a backend
-  gap, not a frontend shortcut — see "What's intentionally NOT here yet" below.
 - Optimistic UI updates, offline support, and any kind of design system
   beyond the shared Tailwind components in `src/components/ui.tsx`.
 - **Real-time messaging on the frontend.** `PortalMessages` and
@@ -1085,7 +1208,6 @@ just the *what*, consolidated so nothing is scattered or repeated.
   sandbox's OS image, an environment limitation rather than a scope
   decision.
 - httpOnly-cookie refresh-token storage (currently `localStorage`).
-- A real "list teammates" screen — no `GET`-all-users backend endpoint yet.
 - Optimistic UI updates, offline support, a design system beyond the
   shared Tailwind components.
 - Real-time messaging (`PortalMessages`/`MessagesPage` rely on `react-query`
@@ -1119,10 +1241,6 @@ for the full rationale):**
 
 **AI dispatch engine (see "AI dispatch engine" above for the full
 rationale):**
-- Geocoding integration for customer (and technician/company) addresses —
-  `latitude`/`longitude` columns exist on `users`, `companies`, and
-  `customers`, but nothing populates them yet; the distance factor degrades
-  gracefully to neutral until they are set.
 - A normalized skills/proficiency table instead of `TEXT[]` columns on
   `users`/`jobs` — fine for an exact-match Jaccard overlap today, but a real
   taxonomy (with proficiency levels, certifications, synonyms) would need a
@@ -1134,9 +1252,10 @@ rationale):**
   roughly 500+ real, labeled repair outcomes to train on — see "AI dispatch
   engine" above. Explicitly not attempted now; faking one against no data
   would be worse than the honest rule-based scorer this phase shipped.
-- No user-management/update endpoints (`PATCH` on a user) — technician
-  `skills` and home coordinates are set directly in the database today,
-  same underlying gap as the "real 'list teammates' screen" item below.
+- Geocoding integration for customer and technician addresses shipped in
+  Phase 10 (see "Team, skills & geocoding" above) — **company** address
+  geocoding remains deferred (no address field/route exists for `Company`
+  yet); see that section's own "Deferred, on purpose" list.
 
 **Product surface (per the MVP reset in the build spec):** white-labeling /
 custom domains, a trained ML dispatch model (see above — the rule-based
@@ -1162,4 +1281,14 @@ pay/approve flows) and customer<->staff messaging — plus the corresponding
 frontend (`src/portal/*` pages and the staff Messages panel). None of that
 is listed as deferred anymore — see each section's own text for exactly
 what changed and why, and "Customer portal / messaging" above for what is
-still deliberately deferred within this phase's scope.
+still deliberately deferred within this phase's scope. Phase 10 added
+everything under "Team, skills & geocoding" above — self-service +
+admin profile editing (`PATCH /users/{id}`, `GET /users`), a real
+OpenStreetMap Nominatim geocoding integration wired into user home
+addresses and customer addresses with a documented Google Maps/Mapbox
+swap point, a backfill job/route for pre-existing un-geocoded seed data,
+and the frontend team roster page — plus removed the "real 'list
+teammates' screen"/"no user-management endpoints"/"geocoding integration"
+items that used to be listed as deferred above. Company address
+geocoding remains deferred within Phase 10's own scope — see that
+section's text.
