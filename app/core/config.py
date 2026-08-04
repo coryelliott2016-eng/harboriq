@@ -1,6 +1,8 @@
 """Application configuration (pydantic-settings)."""
-from pydantic import model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Annotated
+
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Obvious placeholder so a real deployment cannot accidentally ship with it.
 # >=32 bytes because HS256 keys shorter than the digest weaken the MAC (RFC 7518 §3.2).
@@ -38,6 +40,29 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 30
     password_reset_ttl_minutes: int = 60
     password_min_length: int = 12
+
+    # --- CORS ---
+    # Comma-separated in the env var (CORS_ALLOW_ORIGINS); defaults to the
+    # Vite dev server so `npm run dev` works against a local API out of the
+    # box. Production deployments must set this explicitly.
+    # NoDecode tells pydantic-settings not to JSON-decode this env var before
+    # validation runs — without it, a plain comma-separated string like
+    # "http://a,http://b" fails as invalid JSON before our splitter ever sees
+    # it. The before-validator below does the actual comma-splitting.
+    cors_allow_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173"]
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _split_cors_allow_origins(cls, data):
+        if isinstance(data, dict):
+            raw = data.get("cors_allow_origins")
+            if isinstance(raw, str):
+                data["cors_allow_origins"] = [
+                    origin.strip() for origin in raw.split(",") if origin.strip()
+                ]
+        return data
 
     @model_validator(mode="after")
     def _require_strong_jwt_secret_outside_development(self) -> "Settings":

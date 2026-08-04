@@ -26,11 +26,34 @@ services:
       SERVICE_DATABASE_URL: postgresql+psycopg://harboriq_service:harboriq_service_pass@db:5432/harboriq
       STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
       STRIPE_API_KEY: "${STRIPE_API_KEY:-}"
+      # The frontend container below is a separate origin (port 5173), so the
+      # browser enforces CORS on every API call it makes.
+      CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:5173}"
     ports:
       - "8000:8000"
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the JS bundle at build time — must be reachable from the
+        # *browser*, not just from inside the compose network, hence
+        # localhost:8000 (the app service's published port) rather than
+        # `http://app:8000`.
+        VITE_API_URL: "${VITE_API_URL:-http://localhost:8000}"
+    depends_on:
+      - app
+    environment:
+      VITE_API_URL: "${VITE_API_URL:-http://localhost:8000}"
+    ports:
+      # Prod-representative: the Dockerfile's nginx stage serves the built
+      # `dist/` on port 80 inside the container. For dev-parity with
+      # `npm run dev` (port 5173), run the frontend outside compose instead
+      # (see frontend/README section in the root README).
+      - "5173:80"
 
 volumes:
   pgdata:

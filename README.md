@@ -396,18 +396,98 @@ harboriq/
                state_machines, inventory, public_tokens, outbox, stripe_webhooks
     schemas/   pydantic models (incl. invoices.py)
   tests/       Postgres-backed integration tests
+  frontend/    Vite + React + TS SPA (see "Frontend" below)
   docker-entrypoint-initdb.d/00_roles.sql
   docker-compose.yml  Dockerfile  alembic.ini  pyproject.toml
   .github/workflows/ci.yml
 ```
 
+## Frontend
+
+`frontend/` is a Vite + React 18 + TypeScript single-page app that talks to
+the API above over plain `fetch`/JSON. No server-side rendering, no Next.js —
+this is deliberately a thin client so the FastAPI backend stays the single
+source of business logic.
+
+**Stack:** Vite, React 18, TypeScript, React Router v6, Tailwind CSS,
+`@tanstack/react-query` for server-state caching. No Redux (react-query's
+cache already covers the app's state needs), no CSS-in-JS.
+
+**Run it:**
+
+```bash
+cd frontend
+cp .env.example .env      # set VITE_API_URL if the API isn't on localhost:8000
+npm install
+npm run dev                # http://localhost:5173
+```
+
+**Env vars** (`frontend/.env.example`):
+
+- `VITE_API_URL` — base URL of the API, no trailing slash, no `/api/v1`
+  suffix (default `http://localhost:8000`). Vite inlines this at *build*
+  time, so a container built for one environment cannot be pointed at
+  another without rebuilding (see `frontend/Dockerfile`'s `ARG VITE_API_URL`).
+
+**Auth model:** the access token lives in memory only (a React context); the
+refresh token is persisted to `localStorage`. On any `401`, the API client
+(`src/lib/api.ts`) attempts exactly one silent refresh-and-retry before
+forcing a logout and redirecting to `/login` — it never loops. Storing the
+refresh token in `localStorage` (vs. an httpOnly cookie) is an explicit MVP
+trade-off called out in `src/lib/tokenStore.ts`; it is readable by any script
+on the page, which is acceptable for a pilot but should move to an httpOnly
+cookie before wider exposure.
+
+**Screens covered:** login/signup, an authenticated app shell (sidebar +
+topbar with role-aware nav), a dashboard of job/invoice status counts,
+customers (list/search/create + detail with vessels), jobs (list/filter,
+create, detail with line items and status transitions gated by the exact
+same `JobSM` transition map the backend enforces), invoices (list/filter,
+detail with line items/totals, send with a copyable pay link, void gated by
+`InvoiceSM`), a team page, and the public, unauthenticated `/pay/:token`
+invoice page.
+
+**Covered by tests:** the API client's 401-refresh-and-retry logic, the job
+status-transition gating logic, and the invoice send/void visibility logic
+(`src/lib/*.test.ts`) — see "Frontend tests" below.
+
+**Deferred:**
+
+- **End-to-end browser tests (Playwright).** Only unit/logic-level Vitest
+  tests exist today; nothing drives a real browser through the app yet.
+- **httpOnly-cookie refresh storage.** Noted above — the refresh token is in
+  `localStorage` for now.
+- **A real "list teammates" screen.** The backend has no `GET`-all-users
+  endpoint (only `POST /auth/users` to invite, and `GET /auth/me` for self),
+  so the Team page is invite-only and says so on-screen. This is a backend
+  gap, not a frontend shortcut — see the gaps list below.
+- Optimistic UI updates, offline support, and any kind of design system
+  beyond the shared Tailwind components in `src/components/ui.tsx`.
+
+## Frontend tests
+
+```bash
+cd frontend
+npm run test        # vitest run (one-shot)
+npm run test:watch  # vitest (watch mode)
+```
+
+The suite is intentionally small and logic-focused rather than broad: it
+exists to lock in the three pieces of frontend behavior that would silently
+break the app if regressed — token refresh, job status gating, and invoice
+void/send gating — not to chase coverage numbers. Component rendering and
+user flows are exercised manually and via the backend-facing smoke test
+described in the Phase 4 delivery notes; full Playwright E2E is deferred (see
+above).
+
 ## What's intentionally NOT here yet
 
-Per the MVP reset in the build spec: the React frontend, white-labeling/custom
-domains, the AI engine, the marketplace, and the full observability stack.
-Build the 5-shop pilot first. Invoicing-specific deferrals (Stripe Connect,
-refunds, PDF/email delivery, dunning) are listed at the end of
-"Invoicing & payments" above.
+Per the MVP reset in the build spec: white-labeling/custom domains, the AI
+engine, the marketplace, and the full observability stack. Build the 5-shop
+pilot first. Invoicing-specific deferrals (Stripe Connect, refunds, PDF/email
+delivery, dunning) are listed at the end of "Invoicing & payments" above.
+Frontend-specific deferrals (E2E tests, httpOnly refresh storage, a real
+team-roster screen) are listed at the end of "Frontend" above.
 
 Known gaps in the auth layer specifically:
 
