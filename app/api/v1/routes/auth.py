@@ -119,7 +119,7 @@ def signup(
             user_agent=user_agent,
         )
     except WeakPassword as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except (auth_service.EmailAlreadyRegistered, auth_service.CompanySlugTaken) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     return _auth_response(user, tokens)
@@ -233,7 +233,7 @@ def create_user(
             ip=_client_ip(request),
         )
     except WeakPassword as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except auth_service.RoleNotPermitted as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
     except auth_service.EmailAlreadyRegistered as exc:
@@ -277,7 +277,7 @@ def password_reset_confirm(
             db, service_db, raw_token=body.token, new_password=body.new_password
         )
     except WeakPassword as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except auth_service.InvalidResetToken as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -364,7 +364,7 @@ def accept_invite(
             user_agent=user_agent,
         )
     except WeakPassword as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except auth_service.InviteNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except auth_service.EmailAlreadyRegistered as exc:

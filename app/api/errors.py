@@ -26,8 +26,8 @@ from app.services.state_machines import IllegalTransition
 #: attempts or account existence.
 _HTTP_STATUS: tuple[tuple[type[Exception], int], ...] = (
     (NotFound, status.HTTP_404_NOT_FOUND),
-    (ValidationFailed, status.HTTP_422_UNPROCESSABLE_ENTITY),
-    (InvalidTechnician, status.HTTP_422_UNPROCESSABLE_ENTITY),
+    (ValidationFailed, status.HTTP_422_UNPROCESSABLE_CONTENT),
+    (InvalidTechnician, status.HTTP_422_UNPROCESSABLE_CONTENT),
     (IllegalTransition, status.HTTP_409_CONFLICT),
     (Conflict, status.HTTP_409_CONFLICT),
     (AccountLocked, status.HTTP_423_LOCKED),
