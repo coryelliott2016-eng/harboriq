@@ -50,10 +50,11 @@ services:
       VITE_API_URL: "${VITE_API_URL:-http://localhost:8000}"
     ports:
       # Prod-representative: the Dockerfile's nginx stage serves the built
-      # `dist/` on port 80 inside the container. For dev-parity with
+      # `dist/` on port 8080 inside the container (non-root nginx binds an
+      # unprivileged port — see frontend/Dockerfile). For dev-parity with
       # `npm run dev` (port 5173), run the frontend outside compose instead
       # (see frontend/README section in the root README).
-      - "5173:80"
+      - "5173:8080"
 
 volumes:
   pgdata:

@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     # The API itself never renders these pages.
     app_base_url: str = "http://localhost:5173"
 
+    # --- Observability ---
+    # Empty (the default) means "Sentry is off": app/core/observability.py
+    # never calls sentry_sdk.init(), mirroring the exact graceful-degrade
+    # pattern stripe_billing.py and email.py already use for their own
+    # optional external dependency (no API key/SMTP host configured -> the
+    # feature is simply skipped, never an error). Setting SENTRY_DSN turns
+    # on error/performance reporting with zero other code changes.
+    sentry_dsn: str = ""
+
     # --- CORS ---
     # Comma-separated in the env var (CORS_ALLOW_ORIGINS); defaults to the
     # Vite dev server so `npm run dev` works against a local API out of the

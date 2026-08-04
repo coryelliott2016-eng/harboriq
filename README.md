@@ -4,13 +4,16 @@ Marine service operating system. Corrected implementation of the HarborIQ
 build plan: every issue from the technical critique is fixed at the code level.
 
 > **Status:** scaffold, real authentication, the CRM/operations core
-> (customers, vessels, work orders), and **invoicing + Stripe payment
-> collection** are real and runnable. Models, migrations, services, routes,
-> and tests for the **critical fixes**, for **auth + tenant onboarding**, for
-> **customers/vessels/jobs**, and for **invoices/payments** all exist and pass.
-> The complete React UI, Stripe Connect onboarding, and the AI layer are
-> intentionally out of scope — see `../HarborIQ_v2_Corrected_Build_Spec.md`
-> for the roadmap.
+> (customers, vessels, work orders), **invoicing + Stripe payment
+> collection**, the **React frontend**, and **deployment/observability
+> hardening** (structured logging, `/metrics`, optional Sentry, hardened
+> Docker images, CI, and backups — see `docs/DEPLOYMENT.md`) are all real
+> and runnable. Models, migrations, services, routes, and tests for the
+> **critical fixes**, for **auth + tenant onboarding**, for
+> **customers/vessels/jobs**, and for **invoices/payments** all exist and
+> pass. Stripe Connect onboarding and the AI layer are intentionally out of
+> scope — see `../HarborIQ_v2_Corrected_Build_Spec.md` for the roadmap and
+> "What's intentionally NOT here yet" below for the full deferred list.
 
 ## Stack
 
@@ -97,10 +100,19 @@ tests/test_auth_invites.py              # invite create/preview/accept, role-esc
 
 ## API surface
 
+Every response (success or error, any endpoint below) carries an
+`X-Request-ID` response header — either echoed back from the same header on
+the inbound request (for when a reverse proxy already assigns one) or
+freshly generated. Every log line emitted while handling that request
+carries the same id, so a specific response can be correlated straight to
+its server-side logs (see `app/api/middleware.py`, and
+`docs/DEPLOYMENT.md` → "Logging").
+
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | GET | `/api/v1/healthz` | none | liveness |
 | GET | `/api/v1/readyz` | none | readiness (DB check) |
+| GET | `/metrics` | none† | Prometheus text-format request count + latency |
 | POST | `/api/v1/auth/signup` | none | create a company (tenant) + its first owner, and log in |
 | POST | `/api/v1/auth/login` | none, rate-limited + lockout | exchange email/password for an access + refresh token pair |
 | POST | `/api/v1/auth/refresh` | refresh token | rotate the pair; the presented token is invalidated |
@@ -144,6 +156,10 @@ tests/test_auth_invites.py              # invite create/preview/accept, role-esc
 | GET | `/api/v1/public/invoice/{token}` | public token | read-only pay page: invoice, line items, live checkout URL |
 | POST | `/api/v1/public/estimate/{token}/approve` | public token | public estimate approval (e-sign) |
 | POST | `/api/v1/webhooks/stripe` | Stripe signature | idempotent Stripe webhook (subscription billing *and* invoice payment) |
+
+† `/metrics` is unauthenticated on purpose (standard practice for Prometheus
+scraping), but should be firewalled to the scraper's network at the reverse
+proxy in any real deployment — see `docs/DEPLOYMENT.md` → "Metrics".
 
 ## Auth
 
@@ -294,8 +310,9 @@ precheck (with an explicit `commit()` immediately after, so it never idles in
 a transaction) to learn the tenant, and the actual lock+consume+insert all
 happen together on the app-role session.
 
-**Explicitly out of scope for this phase** (see "Known gaps" below for the
-full list): MFA/TOTP enrollment, and stateful access-token revocation (a
+**Explicitly out of scope for this phase** (see "What's intentionally NOT
+here yet" below for the full, consolidated list): MFA/TOTP enrollment, and
+stateful access-token revocation (a
 revoked session's *access* token — as opposed to its refresh token, which
 *is* revoked immediately — still works until it expires, unchanged from
 before this phase).
@@ -496,9 +513,11 @@ harboriq/
   alembic/versions/0004_invoicing.py
   alembic/versions/0005_auth_hardening.py
   app/
-    core/      config, logging, security (argon2 + JWT), rate_limit (login/reset limiter)
+    core/      config, logging (env-aware JSON/console), observability (Sentry),
+               security (argon2 + JWT), rate_limit (login/reset limiter)
     db/        base, session, tenant, models
-    api/       deps (auth + job authorization), errors (domain -> HTTP status)
+    api/       deps (auth + job authorization), errors (domain -> HTTP status),
+               middleware (request-id correlation + Prometheus metrics)
     api/v1/    routes: auth, customers, vessels, jobs, invoices, health, inventory,
                public, stripe_webhooks
     services/  auth, crud, customers, vessels, jobs, invoices, stripe_billing,
@@ -507,8 +526,10 @@ harboriq/
     schemas/   pydantic models (incl. invoices.py, invite schemas in auth.py)
   tests/       Postgres-backed integration tests
   frontend/    Vite + React + TS SPA (see "Frontend" below)
+  scripts/backup_db.sh                # pg_dump wrapper for a host cron job
+  docs/DEPLOYMENT.md                  # env vars, compose, reverse proxy, runbook
   docker-entrypoint-initdb.d/00_roles.sql
-  docker-compose.yml  Dockerfile  alembic.ini  pyproject.toml
+  docker-compose.yml  docker-compose.prod.yml  Dockerfile  alembic.ini  pyproject.toml
   .github/workflows/ci.yml
 ```
 
@@ -593,7 +614,7 @@ below.
 - **A real "list teammates" screen.** The backend still has no `GET`-all-users
   endpoint (only invite-based provisioning and `GET /auth/me` for self), so
   the Team page remains invite-only and says so on-screen. This is a backend
-  gap, not a frontend shortcut — see the gaps list below.
+  gap, not a frontend shortcut — see "What's intentionally NOT here yet" below.
 - Optimistic UI updates, offline support, and any kind of design system
   beyond the shared Tailwind components in `src/components/ui.tsx`.
 
@@ -619,37 +640,89 @@ the delivery notes for each phase; full Playwright E2E remains deferred (see
 above — also not installable in this sandbox's OS image, an environment
 limitation rather than a scope decision).
 
+## Deployment & observability
+
+Phase 6 added the operational layer this scaffold needed before running
+anywhere other than a laptop: structured JSON logging outside development,
+request-id correlation end to end, a Prometheus `/metrics` endpoint,
+optional graceful Sentry integration, production-hardened multi-stage
+Dockerfiles (non-root, healthchecked), a `docker-compose.prod.yml` overlay,
+a `pg_dump`-based backup script, and CI hardening (a frontend job, a
+Docker-build job, and advisory dependency audits). Full details — the
+real environment-variable reference pulled from `Settings`, how to run the
+compose overlay, what a reverse proxy in front of this needs to do, and a
+first-incident runbook stub — are in **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**,
+not duplicated here.
+
+Stated plainly, because it matters: the **code-level instrumentation hooks**
+(JSON logs, request-id correlation, `/metrics`) are real and
+test-covered. Standing up the **actual Prometheus/Grafana/Loki stack** that
+would scrape/visualize/aggregate them is a deferred infrastructure decision
+for whoever hosts this — there is nowhere in this repo to deploy that stack
+to. See the consolidated deferred list below.
+
 ## What's intentionally NOT here yet
 
-Per the MVP reset in the build spec: white-labeling/custom domains, the AI
-engine, the marketplace, and the full observability stack. Build the 5-shop
-pilot first. Invoicing-specific deferrals (Stripe Connect, refunds, PDF/email
-delivery, dunning) are listed at the end of "Invoicing & payments" above.
-Frontend-specific deferrals (E2E tests, httpOnly refresh storage, a real
-team-roster screen) are listed at the end of "Frontend" above.
+This is the single, deduplicated list of everything still deferred across
+every phase so far — sections above go into the *why* for each; this is
+just the *what*, consolidated so nothing is scattered or repeated.
 
-Known gaps in the auth layer specifically:
+**Platform / infrastructure:**
+- A real Prometheus/Grafana/Loki (or equivalent) deployment that actually
+  scrapes `/metrics` and aggregates logs — the code-level hooks exist (see
+  "Deployment & observability" above); the infrastructure to consume them
+  does not, and deploying it is out of this repo's scope.
+- Managed/off-host backup automation (S3 lifecycle rules, point-in-time
+  recovery via WAL archiving, cross-region replication). `scripts/backup_db.sh`
+  produces a correct local dump on a schedule; getting copies off the host
+  is the operator's responsibility.
+- A CDN and a WAF in front of the frontend/API.
+- Redis and Celery — every place that would normally use them today
+  degrades to an honest, smaller-scale substitute instead: the login/reset
+  rate limiter is in-process and per-instance (not Redis-backed), and
+  outbox email dispatch runs via FastAPI `BackgroundTasks` right after a
+  commit rather than a Celery worker on a schedule (see "Auth hardening"
+  above for both).
+- Multi-instance/horizontal scaling generally — the rate limiter and
+  `BackgroundTasks` dispatch above are the two places this would matter
+  first if `app` ever runs as more than one replica.
+- A container registry / tagged-image release process — `docs/DEPLOYMENT.md`'s
+  rollback runbook currently assumes redeploying a previous git commit, not
+  pulling a previously-pushed image tag.
 
-- **Fixed in Phase 5:** login rate limiting (per-IP, in-process) and account
-  lockout (5 failures / 15 min) now exist — see "Auth hardening" above. The
-  remaining gap is that the rate limiter is in-process, not shared across
-  multiple backend instances (see that section for the Redis upgrade path).
-- **Fixed in Phase 5:** `dispatch_pending` in `services/outbox.py` now sends
-  real email via SMTP when configured, console-logs it otherwise, and is
-  triggered by `BackgroundTasks` right after each triggering commit. The
-  remaining gap is that `BackgroundTasks` jobs do not survive a process
-  crash/restart and there is no scheduled retry sweep independent of new
-  requests arriving — a Celery/Redis or APScheduler periodic dispatcher is
-  the natural next step (see "Auth hardening" above).
-- **Fixed in Phase 5:** provisioning a new teammate no longer requires an
-  admin to choose the initial password — `POST /auth/invites` +
-  `AcceptInvitePage.tsx` let the invitee set their own password via a
-  one-time link. `POST /auth/users` (admin sets the password directly) still
-  exists and is unchanged, for scripts/seeding.
+**Payments:**
+- Stripe Connect (per-tenant merchant-of-record) onboarding — still the
+  single platform Stripe account (see "Payment architecture" above).
+- Refunds and partial refunds.
+- PDF invoice generation and email delivery of the pay link (the outbox
+  queues the event; nothing renders/sends it yet).
+- Automated overdue/dunning reminders.
+
+**Frontend:**
+- End-to-end browser tests (Playwright) — only unit/logic-level Vitest +
+  React Testing Library tests exist. Also not installable in this
+  sandbox's OS image, an environment limitation rather than a scope
+  decision.
+- httpOnly-cookie refresh-token storage (currently `localStorage`).
+- A real "list teammates" screen — no `GET`-all-users backend endpoint yet.
+- Optimistic UI updates, offline support, a design system beyond the
+  shared Tailwind components.
+
+**Auth:**
 - No MFA yet, though `users.mfa_secret_enc` is reserved for it.
 - A revoked session's access token stays valid until it expires
   (`ACCESS_TOKEN_TTL_MINUTES`, default 15). Stateful access-token revocation
-  (e.g. a denylist checked per-request) was explicitly out of scope for
-  Phase 5.
-- No `GET`-all-users endpoint yet, so the frontend Team page cannot show a
-  real roster — tracked in "Frontend" → "Deferred" above.
+  (e.g. a denylist checked per-request) remains out of scope.
+
+**Product surface (per the MVP reset in the build spec):** white-labeling /
+custom domains, the AI engine, and the marketplace. Build the 5-shop pilot
+first.
+
+Historical note on gaps *fixed* in earlier phases (kept briefly for
+context, not because they're still open): Phase 5 added login rate
+limiting + account lockout ("Auth hardening" above), rewrote outbox email
+dispatch to actually send via SMTP/console fallback, and replaced
+admin-set-password user provisioning with invite links. Phase 6 (this one)
+added everything under "Deployment & observability" above. None of that is
+listed as deferred anymore — see each section's own text for exactly what
+changed and why.

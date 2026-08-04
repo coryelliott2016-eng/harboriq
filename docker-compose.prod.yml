@@ -1,0 +1,70 @@
+# Production overlay — NOT a replacement for docker-compose.yml. Apply it on
+# top of the base file so `db`'s healthcheck, volume, and build contexts are
+# still inherited:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# What this overlay changes vs. the dev-friendly base file, and why:
+#   - `restart: unless-stopped` on every service, so a host reboot or an
+#     app crash comes back automatically without an operator intervening.
+#   - Postgres's 5432 is NOT published to the host at all here — only the
+#     `app` service can reach `db`, over the compose-internal network. The
+#     base file publishes 5432 for local `psql`/GUI-client convenience,
+#     which is a real attack surface on a real host.
+#   - Every secret/environment value is sourced from a `.env` file next to
+#     this compose file (see docs/DEPLOYMENT.md for the full reference of
+#     what belongs in it) instead of being hard-coded or left to shell
+#     defaults, so a deployment can be redeployed/rotated without editing
+#     any tracked file.
+#   - Conservative resource limits, so one runaway process cannot starve
+#     the whole host. These are starting points, not a substitute for real
+#     capacity planning once actual traffic is observed.
+#
+# What this overlay deliberately does NOT do: put a reverse proxy / TLS in
+# front of `app`/`frontend`. That is out of scope for this repo — see
+# docs/DEPLOYMENT.md for exactly what a Caddy/nginx layer in front of this
+# stack needs to do (terminate TLS, route `/` and `/api`, forward
+# `X-Request-ID`).
+
+services:
+  db:
+    restart: unless-stopped
+    # Do NOT publish Postgres to the host in production — only `app` needs
+    # to reach it, and it does so over the compose-internal network using
+    # the service name `db` as the hostname (already how DATABASE_URL /
+    # SERVICE_DATABASE_URL below are constructed). Overriding `ports: []`
+    # removes the base file's `"5432:5432"` mapping entirely.
+    ports: []
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+
+  app:
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Values that are structural to this compose topology (the DB is
+      # always reachable at the `db` service name on the internal network)
+      # stay hard-coded here rather than duplicated into `.env`; secrets and
+      # anything deployment-specific come from `.env` via `env_file` above.
+      DATABASE_URL: "postgresql+psycopg://harboriq_app:${POSTGRES_APP_PASSWORD:-harboriq_app_pass}@db:5432/harboriq"
+      SERVICE_DATABASE_URL: "postgresql+psycopg://harboriq_service:${POSTGRES_SERVICE_PASSWORD:-harboriq_service_pass}@db:5432/harboriq"
+      APP_ENV: production
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
+
+  frontend:
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
