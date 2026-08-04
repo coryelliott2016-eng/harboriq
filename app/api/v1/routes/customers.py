@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_db, require_operations
 from app.api.errors import http_errors
 from app.schemas.customers import CustomerCreate, CustomerOut, CustomerUpdate
+from app.schemas.portal import PortalInviteOut
 from app.schemas.vessels import VesselOut
 from app.services import customers as service
+from app.services import portal as portal_service
 from app.services import vessels as vessels_service
+from app.services.outbox_dispatch import dispatch_outbox_soon
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -91,6 +94,26 @@ def update_customer(
         return service.update(
             db, company_id, customer_id, body.model_dump(exclude_unset=True)
         )
+
+
+@router.post(
+    "/{customer_id}/portal-invite",
+    response_model=PortalInviteOut,
+    dependencies=[Depends(require_operations)],
+)
+def send_portal_invite(
+    customer_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    company_id: uuid.UUID = Depends(get_current_company_id),
+):
+    """Issue (or renew) the customer's durable portal magic link and email it
+    to them, mirroring `POST /invoices/{id}/send`'s issue-token + outbox
+    pattern. Safe to call again later to renew an expiring/expired link."""
+    with http_errors():
+        event_id = portal_service.send_portal_invite(db, company_id, customer_id)
+    dispatch_outbox_soon(background_tasks)
+    return PortalInviteOut(customer_id=customer_id, outbox_event_id=event_id)
 
 
 @router.delete(

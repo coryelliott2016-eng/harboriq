@@ -134,6 +134,52 @@ def _build_email(
             [],
         )
 
+    if event_type == "customer.portal_invite":
+        # Phase 9: the customer's durable magic link into their portal.
+        # `portal_url` is a frontend route (`/portal/{token}`), unlike the
+        # `invoice.send`/`invoice_pay` link above which is an API path --
+        # the portal is a real page, not a redirect-to-Stripe endpoint.
+        link = payload["portal_url"]
+        return (
+            payload.get("customer_email") or "",
+            "Your HarborIQ customer portal link",
+            "You can now view your vessels, service history, invoices, and "
+            f"estimates, and message us any time here: {link}\n\n"
+            "This link is just for you -- please don't share it. It stays "
+            "valid for 90 days; if it expires, just ask us and we'll send a "
+            "fresh one.",
+            [],
+        )
+
+    if event_type == "message.new_from_customer":
+        # Phase 9: pings office staff (owner/admin/office) that a customer
+        # left a new portal message. `to` is a single staff email per
+        # enqueued row -- `messages.send_from_customer` enqueues one row per
+        # recipient rather than this builder fanning out, so each row here
+        # maps to exactly one email.
+        label = payload.get("customer_label") or "A customer"
+        return (
+            payload.get("to") or "",
+            f"New portal message from {label}",
+            f"{label} sent a new message through the customer portal:\n\n"
+            f"{payload.get('body') or ''}",
+            [],
+        )
+
+    if event_type == "message.new_from_staff":
+        # Phase 9: notifies the customer their portal thread has a reply.
+        # Deliberately does not quote the reply body in the email (unlike
+        # the staff-facing notification above) -- keeps a support reply from
+        # being fully readable in an inbox preview pane if the customer's
+        # email account is shared, nudging them back to the portal itself.
+        return (
+            payload.get("to") or "",
+            "You have a new reply from the shop",
+            "The shop replied to your message. Log back into your customer "
+            "portal to read and reply.",
+            [],
+        )
+
     return None
 
 

@@ -53,6 +53,13 @@ class JobStatus(StrEnum):
     CANCELED = "canceled"
 
 
+class MessageSenderType(StrEnum):
+    """Mirrors the `message_sender_type` PostgreSQL enum (migration 0008)."""
+
+    CUSTOMER = "customer"
+    STAFF = "staff"
+
+
 class JobPriority(StrEnum):
     """Mirrors the `job_priority` PostgreSQL enum (migration 0003)."""
 
@@ -755,6 +762,13 @@ class PublicToken(UUIDPKMixin, Base):
             "intake_form",
             "document_upload",
             "user_invite",
+            #: Phase 9 — a durable, revocable customer-portal magic link.
+            #: `resource_type="customer"`, long TTL (see
+            #: `app.services.portal.PORTAL_TOKEN_TTL_HOURS`), effectively-
+            #: unlimited `max_uses` within that window; renewed by issuing a
+            #: fresh one (`POST /customers/{id}/portal-invite`) rather than
+            #: mutating the existing row.
+            "portal",
             name="token_purpose",
         ),
         nullable=False,
@@ -766,6 +780,62 @@ class PublicToken(UUIDPKMixin, Base):
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Message(UUIDPKMixin, Base):
+    """A customer<->staff message (migration 0008).
+
+    `job_id` is nullable: a message can be a general portal message or tied
+    to a specific job. `sender_user_id` is only set for `sender_type=staff`
+    (see `ck_messages_staff_has_sender`) -- a customer sends through their
+    magic-link portal session, not a `users` row.
+    """
+
+    __tablename__ = "messages"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    # The real constraint is the composite FK (company_id, customer_id) ->
+    # customers(company_id, id) from migration 0008, matching every other
+    # customer-referencing table since 0003.
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False
+    )
+    job_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("jobs.id")
+    )
+    sender_type: Mapped[str] = mapped_column(
+        Enum(
+            MessageSenderType,
+            name="message_sender_type",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+    )
+    sender_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("BTRIM(body) <> ''", name="ck_messages_body_not_blank"),
+        CheckConstraint(
+            "sender_type != 'staff' OR sender_user_id IS NOT NULL",
+            name="ck_messages_staff_has_sender",
+        ),
+        Index("idx_messages_company_customer", "company_id", "customer_id", "created_at"),
+        Index(
+            "idx_messages_company_job",
+            "company_id",
+            "job_id",
+            "created_at",
+            postgresql_where="job_id IS NOT NULL",
+        ),
     )
 
 
