@@ -103,6 +103,13 @@ class Company(UUIDPKMixin, TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     stripe_account_id: Mapped[Optional[str]] = mapped_column(Text)
+    #: Stripe Connect Standard account id (migration 0007), set once the
+    #: tenant completes onboarding via `POST /billing/connect/onboarding-link`.
+    #: NULL means "not connected yet" -> checkout/refund flows fall back to
+    #: today's single-platform-account behavior (see `stripe_billing.py`).
+    #: Distinct from `stripe_account_id` above, which predates this phase and
+    #: is unused by any code path.
+    stripe_connect_account_id: Mapped[Optional[str]] = mapped_column(Text)
     default_currency: Mapped[str] = mapped_column(
         Enum("USD", name="money_currency"), default="USD", server_default="USD"
     )
@@ -674,6 +681,10 @@ class Invoice(UUIDPKMixin, TimestampMixin, Base):
     voided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(Text)
     stripe_checkout_session_id: Mapped[Optional[str]] = mapped_column(Text)
+    #: Dunning cadence (migration 0007) — NULL means "never reminded yet".
+    #: Set by `app/jobs/dunning_sweep.py` each time it queues a reminder, so
+    #: the sweep can skip invoices reminded within the cadence window.
+    last_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         Index("idx_invoices_company_created", "company_id", "created_at"),
@@ -700,6 +711,34 @@ class Payment(UUIDPKMixin, TimestampMixin, Base):
     )
     stripe_charge_id: Mapped[Optional[str]] = mapped_column(Text)
     stripe_fee: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2))
+
+
+class Refund(UUIDPKMixin, Base):
+    """A Stripe refund (full or partial) applied to an invoice (migration
+    0007). Distinct from `Payment`: `payments` records money coming IN,
+    `refunds` records money going back OUT, keyed by `stripe_refund_id` for
+    idempotency/audit rather than reusing a `payments` row with a negative
+    amount."""
+
+    __tablename__ = "refunds"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    invoice_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), CheckConstraint("amount > 0"))
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    stripe_refund_id: Mapped[Optional[str]] = mapped_column(Text)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_refunds_company_invoice", "company_id", "invoice_id"),
+        Index("idx_refunds_company_created", "company_id", "created_at"),
+    )
 
 
 class PublicToken(UUIDPKMixin, Base):

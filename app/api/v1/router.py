@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.routes import (
     auth,
+    billing,
     customers,
     dispatch,
     health,
@@ -9,6 +10,7 @@ from app.api.v1.routes import (
     invoices,
     jobs,
     public,
+    reports,
     stripe_webhooks,
     vessels,
 )
@@ -22,5 +24,7 @@ api_router.include_router(jobs.router)
 api_router.include_router(dispatch.router)
 api_router.include_router(inventory.router, tags=["inventory"])
 api_router.include_router(invoices.router)
+api_router.include_router(billing.router)
+api_router.include_router(reports.router)
 api_router.include_router(public.router, tags=["public"])
 api_router.include_router(stripe_webhooks.router, tags=["webhooks"])

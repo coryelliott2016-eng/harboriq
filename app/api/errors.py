@@ -14,7 +14,9 @@ from contextlib import contextmanager
 from fastapi import HTTPException, status
 
 from app.services.auth import AccountLocked
+from app.services.billing import ConnectUnavailable
 from app.services.crud import Conflict, NotFound, ValidationFailed
+from app.services.invoices import RefundFailed
 from app.services.jobs import InvalidTechnician
 from app.services.state_machines import IllegalTransition
 
@@ -31,6 +33,12 @@ _HTTP_STATUS: tuple[tuple[type[Exception], int], ...] = (
     (IllegalTransition, status.HTTP_409_CONFLICT),
     (Conflict, status.HTTP_409_CONFLICT),
     (AccountLocked, status.HTTP_423_LOCKED),
+    # Stripe rejected/could not process the refund -- an upstream failure,
+    # not a client input error, so 502 rather than 4xx.
+    (RefundFailed, status.HTTP_502_BAD_GATEWAY),
+    # Same reasoning for Connect onboarding: Stripe unconfigured/unreachable
+    # is an upstream failure, not a bad request.
+    (ConnectUnavailable, status.HTTP_502_BAD_GATEWAY),
 )
 
 

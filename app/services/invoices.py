@@ -141,6 +141,20 @@ def get(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> Row:
     return row
 
 
+def _connect_account_id(db: Session, company_id: uuid.UUID) -> str | None:
+    """The tenant's Stripe Connect Standard account id, if onboarded.
+
+    `None` (the common case for most tenants today) means "not connected
+    yet" -- every checkout-session call site treats that as "fall back to
+    HarborIQ's own platform account", exactly like the pre-Connect behavior.
+    """
+    row = db.execute(
+        text("SELECT stripe_connect_account_id FROM companies WHERE id = :id"),
+        {"id": company_id},
+    ).first()
+    return row.stripe_connect_account_id if row else None
+
+
 def get_or_create_checkout_url(
     db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID
 ) -> str | None:
@@ -184,6 +198,7 @@ def get_or_create_checkout_url(
         session = stripe_billing.create_checkout_session(
             company_id, invoice_id, row.total, currency=row.currency,
             customer_email=customer_email,
+            stripe_account=_connect_account_id(db, company_id),
         )
         if session is None:
             return None
@@ -297,7 +312,8 @@ def send_invoice(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> d
             customer_email = row.email if row else None
 
         session = stripe_billing.create_checkout_session(
-            company_id, invoice_id, current.total, customer_email=customer_email
+            company_id, invoice_id, current.total, customer_email=customer_email,
+            stripe_account=_connect_account_id(db, company_id),
         )
         checkout_session_id = session["id"] if session else None
 
@@ -333,6 +349,7 @@ def send_invoice(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> d
             "invoice.send",
             {
                 "invoice_id": str(invoice_id),
+                "company_id": str(company_id),
                 "pay_url": pay_url,
                 "customer_email": customer_email,
             },
@@ -362,8 +379,9 @@ def void_invoice(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> R
         if current.amount_paid and current.amount_paid > 0:
             db.rollback()
             raise Conflict(
-                "invoice has a payment recorded and cannot be voided; refunds are "
-                "out of scope for this phase"
+                "invoice has a payment recorded and cannot be voided; use "
+                "POST /invoices/{id}/refund to return money on a paid/partially "
+                "paid invoice instead"
             )
 
         try:
@@ -485,3 +503,138 @@ def mark_paid_from_webhook(
     ).first()
 
     return {"invoice": invoice, "payment": payment}
+
+
+# ---------------------------------------------------------------------------
+# refunds
+# ---------------------------------------------------------------------------
+class RefundFailed(Exception):
+    """Raised when Stripe rejects/cannot process a refund request."""
+
+
+def refund_invoice(
+    db: Session,
+    company_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+    *,
+    amount: Decimal | None = None,
+    reason: str | None = None,
+    created_by: uuid.UUID | None = None,
+) -> dict[str, Any]:
+    """Refund all or part of a paid/partially-paid invoice via Stripe.
+
+    Only legal from `paid` or `partial` (see `InvoiceSM`); `amount=None`
+    means "refund the full amount_paid". A partial amount transitions the
+    invoice to `partially_refunded`; refunding the full amount_paid
+    transitions it to `refunded`. Both are terminal in `InvoiceSM`, matching
+    the state machine that has allowed these transitions since Phase 3 (see
+    `InvoiceSM.transitions["paid"]`).
+
+    Row-locks the invoice before validating and calling Stripe, exactly like
+    every other lifecycle transition in this module, so two concurrent
+    refund requests against the same invoice serialize rather than race.
+    """
+    with tenant_context(db, company_id):
+        current = db.execute(
+            text(
+                """
+                SELECT status, amount_paid, total, stripe_payment_intent_id
+                  FROM invoices WHERE id = :id FOR UPDATE
+                """
+            ),
+            {"id": invoice_id},
+        ).first()
+        if current is None:
+            db.rollback()
+            raise NotFound(f"invoice {invoice_id} not found")
+
+        if current.amount_paid is None or current.amount_paid <= 0:
+            db.rollback()
+            raise Conflict("invoice has no payment recorded to refund")
+
+        already_refunded = db.execute(
+            text(
+                "SELECT COALESCE(SUM(amount), 0) AS total FROM refunds WHERE invoice_id = :id"
+            ),
+            {"id": invoice_id},
+        ).first().total
+        remaining_refundable = current.amount_paid - already_refunded
+
+        refund_amount = _quantize(amount) if amount is not None else remaining_refundable
+        if refund_amount <= 0 or refund_amount > remaining_refundable:
+            db.rollback()
+            raise Conflict(
+                f"refund amount must be between 0.01 and the remaining refundable "
+                f"amount ({remaining_refundable})"
+            )
+
+        # "refunded" means "the invoice was paid in full, and that full
+        # amount has now been returned" -- which requires BOTH that the
+        # invoice's `total` was fully collected (amount_paid == total; a
+        # "partial"/deposit invoice never satisfies this) AND that this
+        # refund exhausts everything collected so far (refund_amount ==
+        # remaining_refundable). Checking amount_paid vs. total, rather
+        # than the current status string, is what lets this stay correct
+        # across repeated partial refunds (status is already
+        # "partially_refunded" by the second call, but the invoice may
+        # still have been paid in full originally).
+        was_paid_in_full = current.amount_paid == current.total
+        target_status = (
+            "refunded"
+            if was_paid_in_full and refund_amount == remaining_refundable
+            else "partially_refunded"
+        )
+        try:
+            InvoiceSM.assert_transition(current.status, target_status)
+        except Exception:
+            db.rollback()
+            raise
+
+        result = stripe_billing.create_refund(
+            payment_intent_id=current.stripe_payment_intent_id,
+            charge_id=None,
+            amount=refund_amount,
+            reason=reason,
+            stripe_account=_connect_account_id(db, company_id),
+        )
+        if result is None:
+            db.rollback()
+            raise RefundFailed(
+                "Stripe refund could not be created (not configured, or the API call failed)"
+            )
+
+        invoice = db.execute(
+            text(
+                """
+                UPDATE invoices
+                   SET status = CAST(:status AS invoice_status)
+                 WHERE id = :id
+                RETURNING *
+                """
+            ),
+            {"status": target_status, "id": invoice_id},
+        ).first()
+
+        refund = db.execute(
+            text(
+                """
+                INSERT INTO refunds
+                    (company_id, invoice_id, amount, reason, stripe_refund_id, created_by)
+                VALUES
+                    (:cid, :invoice_id, :amount, :reason, :stripe_refund_id, :created_by)
+                RETURNING *
+                """
+            ),
+            {
+                "cid": company_id,
+                "invoice_id": invoice_id,
+                "amount": refund_amount,
+                "reason": reason,
+                "stripe_refund_id": result["id"],
+                "created_by": created_by,
+            },
+        ).first()
+
+        db.commit()
+
+    return {"invoice": invoice, "refund": refund}

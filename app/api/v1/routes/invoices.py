@@ -16,7 +16,7 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_db, require_operations
+from app.api.deps import get_current_company_id, get_current_user, get_db, require_operations
 from app.api.errors import http_errors
 from app.schemas.invoices import (
     InvoiceCreate,
@@ -24,9 +24,12 @@ from app.schemas.invoices import (
     InvoiceLineItemOut,
     InvoiceListItem,
     InvoiceSendResponse,
+    RefundRequest,
+    RefundResponse,
     VoidInvoiceResponse,
 )
 from app.services import invoices as service
+from app.services.auth import AuthenticatedUser
 from app.services.outbox_dispatch import dispatch_outbox_soon
 
 router = APIRouter(
@@ -114,7 +117,36 @@ def void_invoice(
     company_id: uuid.UUID = Depends(get_current_company_id),
 ):
     """Cancel a `draft`, `sent` or `partial` invoice with nothing collected
-    yet. 409 if any payment has landed — refunds are a later phase."""
+    yet. 409 if any payment has landed — use `POST /{invoice_id}/refund`
+    instead."""
     with http_errors():
         invoice = service.void_invoice(db, company_id, invoice_id)
     return VoidInvoiceResponse(invoice=invoice)
+
+
+@router.post("/{invoice_id}/refund", response_model=RefundResponse)
+def refund_invoice(
+    invoice_id: uuid.UUID,
+    body: RefundRequest = RefundRequest(),
+    db: Session = Depends(get_db),
+    company_id: uuid.UUID = Depends(get_current_company_id),
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Refund all or part of a `paid`/`partial` invoice via Stripe.
+
+    Omitting `amount` refunds the full amount collected and moves the
+    invoice to `refunded`; a smaller `amount` moves it to
+    `partially_refunded`. 409 on an illegal transition (e.g. nothing paid
+    yet, or already fully refunded); 502 if Stripe itself rejects/cannot
+    process the refund.
+    """
+    with http_errors():
+        result = service.refund_invoice(
+            db,
+            company_id,
+            invoice_id,
+            amount=body.amount,
+            reason=body.reason,
+            created_by=user.id,
+        )
+    return RefundResponse(invoice=result["invoice"], refund=result["refund"])

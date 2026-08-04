@@ -48,12 +48,23 @@ class InvoiceSM(StateMachine):
         # a pointless send->void round-trip for work that never left the shop.
         "draft": {"sent", "void"},
         "sent": {"partial", "paid", "void", "uncollectible"},
-        "partial": {"paid", "void"},
+        # Phase 8: a customer can have paid a deposit ("partial") and then
+        # want that deposit refunded before ever paying the rest -- e.g. the
+        # job gets cancelled after a deposit was taken. `partially_refunded`
+        # is the right landing state either way (some money was paid, some
+        # of what was paid has now been returned); `amount_paid` vs. the
+        # refunded total is what distinguishes "still owes a balance" from
+        # "fully settled the refunded portion", not the status enum alone.
+        "partial": {"paid", "void", "partially_refunded"},
         "paid": {"refunded", "partially_refunded"},
         "void": set(),
         "uncollectible": set(),
         "refunded": set(),
-        "partially_refunded": set(),
+        # A partial refund can be topped up by another partial refund (still
+        # `partially_refunded`) or completed by refunding the remainder
+        # (`refunded`) -- both computed by `refund_invoice` from amount_paid
+        # vs. the newly-refunded total, not a fixed transition target.
+        "partially_refunded": {"refunded", "partially_refunded"},
     }
 
 

@@ -81,5 +81,27 @@ class InvoiceSendResponse(BaseModel):
     pay_url: str
 
 
+class RefundRequest(BaseModel):
+    #: Omit for a full refund of `amount_paid`; a partial amount transitions
+    #: the invoice to `partially_refunded` instead of `refunded`.
+    amount: Decimal | None = Field(default=None, gt=0, decimal_places=2)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class RefundOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    invoice_id: uuid.UUID
+    amount: Decimal
+    reason: str | None
+    stripe_refund_id: str | None
+    created_at: datetime
+
+
+class RefundResponse(BaseModel):
+    invoice: InvoiceOut
+    refund: RefundOut
+
+
 class VoidInvoiceResponse(BaseModel):
     invoice: InvoiceOut

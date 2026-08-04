@@ -101,6 +101,15 @@ def require_roles(*roles: UserRole) -> Callable[..., AuthenticatedUser]:
 #: Only owners and admins may provision other users.
 require_user_manager = require_roles(*USER_MANAGEMENT_ROLES)
 
+#: Alias for owner/admin-gated billing-admin actions (Stripe Connect
+#: onboarding, running the dunning sweep on demand). Same role set as
+#: `require_user_manager` -- kept as a separate name because "who may manage
+#: teammates" and "who may manage billing/payments configuration" are
+#: different concerns that happen to share a role set today; a future phase
+#: could split them (e.g. a dedicated billing-admin role) without touching
+#: user-management call sites.
+require_admin = require_roles(*USER_MANAGEMENT_ROLES)
+
 #: Front-of-house work — the customer book, the fleet, and dispatching jobs.
 #: Technicians are excluded here and are granted narrower access per-endpoint.
 require_operations = require_roles(*OPERATIONS_ROLES)
@@ -146,6 +155,7 @@ __all__ = [
     "get_current_user",
     "get_db",
     "get_service_db",
+    "require_admin",
     "require_operations",
     "require_roles",
     "require_user_manager",

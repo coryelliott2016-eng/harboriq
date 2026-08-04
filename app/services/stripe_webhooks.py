@@ -24,7 +24,8 @@ ALREADY_PROCESSED = "duplicate"
 
 
 def resolve_company_from_event(db: Session, payload: dict[str, Any]) -> uuid.UUID:
-    """Look up the owning company from Stripe metadata or the subscription.
+    """Look up the owning company from Stripe metadata, Connect's `account`
+    context, or the subscription.
 
     Uses the SERVICE session (BYPASSRLS) so RLS does not block the lookup.
     Webhooks are unauthenticated platform endpoints — company_id is never
@@ -32,12 +33,29 @@ def resolve_company_from_event(db: Session, payload: dict[str, Any]) -> uuid.UUI
     """
     obj = payload.get("data", {}).get("object", {})
 
-    # Option A: metadata we stamped on the checkout session at creation.
+    # Option A: metadata we stamped on the checkout session at creation. Set
+    # regardless of whether the session was created directly on the platform
+    # account or (Phase 8+) directly on a tenant's connected account, so this
+    # remains the primary resolution path either way.
     meta = obj.get("metadata", {}) or {}
     if meta.get("company_id"):
         return uuid.UUID(meta["company_id"])
 
-    # Option B: resolve via stripe_subscription_id -> subscriptions.company_id.
+    # Option B (Phase 8 — Connect): events for a direct charge created on a
+    # connected account arrive with a top-level `account` field (the
+    # connected account id) rather than under `data.object`. Metadata should
+    # normally resolve first, but this covers events where it is absent
+    # (e.g. some account-level events Stripe sends without our metadata).
+    account_id = payload.get("account")
+    if account_id:
+        row = db.execute(
+            text("SELECT id FROM companies WHERE stripe_connect_account_id = :a"),
+            {"a": account_id},
+        ).first()
+        if row:
+            return uuid.UUID(str(row[0]))
+
+    # Option C: resolve via stripe_subscription_id -> subscriptions.company_id.
     sub_id = obj.get("subscription") or obj.get("id")
     if sub_id:
         row = db.execute(
