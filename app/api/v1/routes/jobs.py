@@ -73,26 +73,41 @@ def list_jobs(
     scheduled_from: datetime | None = None,
     scheduled_to: datetime | None = None,
     unassigned: bool = False,
+    sort: str = Query(
+        default="scheduled_at",
+        pattern="^(scheduled_at|priority_score)$",
+        description=(
+            "`scheduled_at` (default) or `priority_score` — the dispatch-"
+            "priority queue, ordered by the cached dispatch score descending."
+        ),
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     company_id: uuid.UUID = Depends(get_current_company_id),
 ):
-    """The work-order queue. `unassigned=true` is the intake list."""
-    return service.list_jobs(
-        db,
-        company_id,
-        status=job_status.value if job_status else None,
-        priority=priority.value if priority else None,
-        technician_id=technician_id,
-        customer_id=customer_id,
-        vessel_id=vessel_id,
-        scheduled_from=scheduled_from,
-        scheduled_to=scheduled_to,
-        unassigned=unassigned,
-        limit=limit,
-        offset=offset,
-    )
+    """The work-order queue. `unassigned=true` is the intake list.
+
+    `?sort=priority_score` returns the same filtered set ordered by the AI
+    dispatch engine's cached `dispatch_score` instead of schedule time — the
+    "what should get worked next" view (see `app.services.dispatch`).
+    """
+    with http_errors():
+        return service.list_jobs(
+            db,
+            company_id,
+            status=job_status.value if job_status else None,
+            priority=priority.value if priority else None,
+            technician_id=technician_id,
+            customer_id=customer_id,
+            vessel_id=vessel_id,
+            scheduled_from=scheduled_from,
+            scheduled_to=scheduled_to,
+            unassigned=unassigned,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
 
 
 # Declared before `/{job_id}` so "schedule" is not parsed as a job id.
@@ -113,7 +128,7 @@ def get_schedule(
     """
     if start is not None and end is not None and end < start:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "end must not be before start"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "end must not be before start"
         )
     return service.list_schedule(
         db,

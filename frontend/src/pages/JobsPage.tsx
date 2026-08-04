@@ -41,10 +41,14 @@ export function JobsPage() {
   const canWrite = canManageOperations(user?.role);
   const [statusFilter, setStatusFilter] = useState<JobStatus | "all">("all");
   const [showCreate, setShowCreate] = useState(false);
+  //: `priority_score` is the AI dispatch engine's queue ordering (see
+  //: app/services/dispatch.py); `scheduled_at` is the existing calendar view.
+  const [sort, setSort] = useState<"scheduled_at" | "priority_score">("scheduled_at");
 
   const query = useQuery({
-    queryKey: ["jobs", statusFilter],
-    queryFn: () => jobsApi.list(statusFilter === "all" ? undefined : { status: statusFilter }),
+    queryKey: ["jobs", statusFilter, sort],
+    queryFn: () =>
+      jobsApi.list({ ...(statusFilter === "all" ? {} : { status: statusFilter }), sort }),
   });
 
   return (
@@ -57,18 +61,31 @@ export function JobsPage() {
         {canWrite && <Button onClick={() => setShowCreate(true)}>New job</Button>}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {STATUS_FILTERS.map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              statusFilter === s ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                statusFilter === s ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {s === "all" ? "All" : JOB_STATUS_LABELS[s]}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-xs text-slate-500">
+          Sort by
+          <select
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as "scheduled_at" | "priority_score")}
           >
-            {s === "all" ? "All" : JOB_STATUS_LABELS[s]}
-          </button>
-        ))}
+            <option value="scheduled_at">Schedule</option>
+            <option value="priority_score">Dispatch priority</option>
+          </select>
+        </label>
       </div>
 
       {query.isLoading && <Spinner label="Loading jobs…" />}
@@ -89,7 +106,12 @@ export function JobsPage() {
                     {job.scheduled_at ? new Date(job.scheduled_at).toLocaleString() : "Unscheduled"}
                   </p>
                 </div>
-                <Badge tone={statusTone(job.status)}>{JOB_STATUS_LABELS[job.status]}</Badge>
+                <div className="flex items-center gap-2">
+                  {job.dispatch_score !== null && (
+                    <Badge tone="slate">Priority {Number(job.dispatch_score).toFixed(0)}</Badge>
+                  )}
+                  <Badge tone={statusTone(job.status)}>{JOB_STATUS_LABELS[job.status]}</Badge>
+                </div>
               </li>
             ))}
           </ul>

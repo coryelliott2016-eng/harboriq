@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.routes import (
     auth,
     customers,
+    dispatch,
     health,
     inventory,
     invoices,
@@ -18,6 +19,7 @@ api_router.include_router(auth.router)
 api_router.include_router(customers.router)
 api_router.include_router(vessels.router)
 api_router.include_router(jobs.router)
+api_router.include_router(dispatch.router)
 api_router.include_router(inventory.router, tags=["inventory"])
 api_router.include_router(invoices.router)
 api_router.include_router(public.router, tags=["public"])

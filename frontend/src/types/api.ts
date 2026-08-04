@@ -166,6 +166,10 @@ export interface Job {
   canceled_at: string | null;
   hold_reason: string | null;
   notes: string | null;
+  required_skills: string[];
+  dispatch_score: string | null;
+  dispatch_score_breakdown: Record<string, string> | null;
+  dispatch_scored_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -201,6 +205,27 @@ export interface JobInput {
   scheduled_end_at?: string | null;
   technician_id?: string | null;
   notes?: string | null;
+  required_skills?: string[];
+}
+
+// --- AI dispatch engine (Phase 7) ---
+
+export interface DispatchScore {
+  total: string;
+  breakdown: Record<string, string>;
+}
+
+export interface DispatchCandidate {
+  technician_id: string;
+  technician_name: string;
+  score: DispatchScore;
+}
+
+export interface JobDispatchScore {
+  job_id: string;
+  dispatch_score: string | null;
+  dispatch_score_breakdown: Record<string, string> | null;
+  dispatch_scored_at: string | null;
 }
 
 export interface JobLineItemInput {

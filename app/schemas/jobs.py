@@ -27,12 +27,18 @@ class JobBase(BaseModel):
     vessel_id: uuid.UUID | None = None
     technician_id: uuid.UUID | None = None
     notes: OptionalText = None
+    #: Free-text skill tags this job needs (see `app.services.dispatch`'s
+    #: technician-fit factor). `None` on an update means "leave unchanged";
+    #: `JobCreate` below defaults to an empty list, matching the column's
+    #: `NOT NULL DEFAULT '{}'`.
+    required_skills: list[str] | None = None
 
 
 class JobCreate(JobBase):
     customer_id: uuid.UUID
     title: RequiredText = Field(min_length=1, max_length=200)
     priority: JobPriority = JobPriority.NORMAL
+    required_skills: list[str] = []
 
 
 class JobUpdate(JobBase):
@@ -114,6 +120,10 @@ class JobOut(BaseModel):
     canceled_at: datetime | None
     hold_reason: str | None
     notes: str | None
+    required_skills: list[str] = []
+    dispatch_score: Decimal | None = None
+    dispatch_score_breakdown: dict[str, Decimal] | None = None
+    dispatch_scored_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -25,7 +25,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import CITEXT, INET, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, INET, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -106,8 +106,18 @@ class Company(UUIDPKMixin, TimestampMixin, Base):
     default_currency: Mapped[str] = mapped_column(
         Enum("USD", name="money_currency"), default="USD", server_default="USD"
     )
+    # Shop home-base coordinates (migration 0006) — a distance-scoring
+    # fallback for the dispatch engine when a customer has no coordinates yet.
+    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(latitude IS NULL) = (longitude IS NULL)", name="ck_companies_latlng_pair"
+        ),
     )
 
 
@@ -135,12 +145,30 @@ class User(UUIDPKMixin, TimestampMixin, Base):
         Integer, default=0, server_default="0"
     )
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Dispatch engine (migration 0006). Free-text skill tags, e.g.
+    # {"outboard","electrical","fiberglass"} — matched against a job's
+    # `required_skills` for the technician-fit scoring factor. A normalized
+    # skills table with per-skill proficiency levels is a natural upgrade once
+    # there's a real need to query "who's the best X"; a plain TEXT[] is all
+    # this MVP's set-overlap scoring needs.
+    skills: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    #: Where the technician's day starts (the shop, or their home port) —
+    #: nullable; the dispatch engine's distance factor degrades to neutral
+    #: when unset.
+    home_latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    home_longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
 
     __table_args__ = (
         Index("uq_users_company_email", "company_id", "email", unique=True),
         # Login resolves by email before any tenant is known, so email must be
         # unique platform-wide (migration 0002).
         Index("uq_users_email_global", "email", unique=True),
+        CheckConstraint(
+            "(home_latitude IS NULL) = (home_longitude IS NULL)",
+            name="ck_users_home_latlng_pair",
+        ),
     )
 
 
@@ -287,6 +315,13 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
     postal_code: Mapped[Optional[str]] = mapped_column(Text)
     country: Mapped[Optional[str]] = mapped_column(Text)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    # Dispatch engine (migration 0006). Geocoding address_line1/city/state/
+    # postal_code against a real geocoding API is explicitly out of scope for
+    # this phase; these are nullable and mostly NULL for now — the dispatch
+    # scorer's distance factor degrades to neutral rather than erroring when
+    # unset. A future phase can populate them.
+    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -303,6 +338,9 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
             "company_id",
             "email",
             postgresql_where="email IS NOT NULL",
+        ),
+        CheckConstraint(
+            "(latitude IS NULL) = (longitude IS NULL)", name="ck_customers_latlng_pair"
         ),
     )
 
@@ -435,6 +473,18 @@ class Job(UUIDPKMixin, TimestampMixin, Base):
     canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     hold_reason: Mapped[Optional[str]] = mapped_column(Text)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    # Dispatch engine (migration 0006). Free-text skill tags this job needs,
+    # matched against a candidate technician's `users.skills`.
+    required_skills: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
+    #: The scorer's last computed, technician-independent score (urgency +
+    #: revenue + customer value) and an explainable per-factor breakdown,
+    #: cached so the intake queue/schedule board does not recompute it on
+    #: every page load. See `app.services.dispatch.recompute_and_cache_score`.
+    dispatch_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2))
+    dispatch_score_breakdown: Mapped[Optional[dict]] = mapped_column(JSONB)
+    dispatch_scored_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

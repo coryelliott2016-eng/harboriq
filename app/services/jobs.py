@@ -27,6 +27,7 @@ UPDATABLE_COLUMNS = frozenset(
     {
         "customer_id", "vessel_id", "title", "description", "priority",
         "scheduled_at", "scheduled_end_at", "technician_id", "notes",
+        "required_skills",
     }
 )
 
@@ -163,6 +164,17 @@ def get(db: Session, company_id: uuid.UUID, job_id: uuid.UUID) -> Row:
     return row
 
 
+#: `sort=priority_score` (see B3 of the dispatch-engine spec) orders the
+#: queue by the cached `dispatch_score` instead of by schedule time — "what
+#: should get worked next" rather than "what's on the calendar". Jobs never
+#: scored yet (`dispatch_score IS NULL`) sort last, since an unscored job is
+#: not known to be low priority, just not yet evaluated.
+_ORDER_BY_CLAUSES: dict[str, str] = {
+    "scheduled_at": "ORDER BY scheduled_at NULLS LAST, created_at",
+    "priority_score": "ORDER BY dispatch_score DESC NULLS LAST, created_at",
+}
+
+
 def list_jobs(
     db: Session,
     company_id: uuid.UUID,
@@ -175,10 +187,19 @@ def list_jobs(
     scheduled_from: datetime | None = None,
     scheduled_to: datetime | None = None,
     unassigned: bool = False,
+    sort: str = "scheduled_at",
     limit: int = 50,
     offset: int = 0,
 ) -> list[Row]:
-    """Filtered job list. Every fragment below is a literal; values are bound."""
+    """Filtered job list. Every fragment below is a literal; values are bound.
+
+    `sort` is one of `scheduled_at` (default, the existing behaviour) or
+    `priority_score` (the dispatch-priority queue — "what should get worked
+    next", ordered by the cached `dispatch_score` descending).
+    """
+    if sort not in _ORDER_BY_CLAUSES:
+        raise ValidationFailed(f"sort must be one of {sorted(_ORDER_BY_CLAUSES)}")
+
     clauses = ""
     params: dict[str, Any] = {"cid": company_id, "limit": limit, "offset": offset}
 
@@ -202,6 +223,7 @@ def list_jobs(
         clauses += " AND scheduled_at < :scheduled_to"
         params["scheduled_to"] = scheduled_to
 
+    order_by = _ORDER_BY_CLAUSES[sort]
     with tenant_context(db, company_id):
         return list(
             db.execute(
@@ -209,7 +231,7 @@ def list_jobs(
                     f"""
                     SELECT * FROM jobs
                      WHERE company_id = :cid {clauses}
-                     ORDER BY scheduled_at NULLS LAST, created_at
+                     {order_by}
                      LIMIT :limit OFFSET :offset
                     """
                 ),

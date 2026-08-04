@@ -5,6 +5,7 @@ import type {
   CreateInviteInput,
   Customer,
   CustomerInput,
+  DispatchCandidate,
   Invoice,
   InvoiceDetail,
   InvoiceSendResponse,
@@ -12,6 +13,7 @@ import type {
   InvitePreview,
   Job,
   JobDetail,
+  JobDispatchScore,
   JobInput,
   JobLineItem,
   JobLineItemInput,
@@ -88,8 +90,12 @@ export const vesselsApi = {
 // --- jobs ---
 
 export const jobsApi = {
-  list: (params?: { status?: JobStatus; customer_id?: string; vessel_id?: string }) =>
-    api.get<Job[]>("/jobs", params),
+  list: (params?: {
+    status?: JobStatus;
+    customer_id?: string;
+    vessel_id?: string;
+    sort?: "scheduled_at" | "priority_score";
+  }) => api.get<Job[]>("/jobs", params),
   get: (id: string) => api.get<JobDetail>(`/jobs/${id}`),
   create: (body: JobInput) => api.post<Job>("/jobs", body),
   update: (id: string, body: Partial<JobInput>) => api.patch<Job>(`/jobs/${id}`, body),
@@ -105,6 +111,15 @@ export const jobsApi = {
     api.patch<JobLineItem>(`/jobs/${jobId}/line-items/${lineItemId}`, body),
   removeLineItem: (jobId: string, lineItemId: string) =>
     api.delete<void>(`/jobs/${jobId}/line-items/${lineItemId}`),
+};
+
+// --- AI dispatch engine (Phase 7) ---
+
+export const dispatchApi = {
+  candidates: (jobId: string) =>
+    api.get<DispatchCandidate[]>(`/jobs/${jobId}/dispatch/candidates`),
+  recompute: (jobId: string) =>
+    api.post<JobDispatchScore>(`/jobs/${jobId}/dispatch/recompute`, {}),
 };
 
 // --- invoices ---

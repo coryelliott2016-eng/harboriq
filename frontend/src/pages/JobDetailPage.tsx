@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { invoicesApi, jobsApi } from "../lib/services";
+import { dispatchApi, invoicesApi, jobsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
 import { useAuth, canManageOperations } from "../context/AuthContext";
 import {
@@ -17,6 +17,7 @@ import {
   money,
 } from "../components/ui";
 import { JOB_STATUS_LABELS, legalNextStatuses } from "../lib/jobStateMachine";
+import { DispatchBreakdown } from "../components/DispatchBreakdown";
 import type { JobLineItem, JobLineItemInput, JobLineItemKind, JobStatus } from "../types/api";
 
 export function JobDetailPage() {
@@ -187,6 +188,8 @@ export function JobDetailPage() {
           </table>
         )}
       </Card>
+
+      {canWrite && <DispatchSuggestions jobId={id} technicianId={job.technician_id} />}
 
       {invoiceError && <ErrorBanner message={invoiceError} />}
 
@@ -363,5 +366,92 @@ function AddLineItemModal({ jobId, onClose }: { jobId: string; onClose: () => vo
         </div>
       </form>
     </Modal>
+  );
+}
+
+/**
+ * The AI dispatch engine's ranked technician suggestions for this job (see
+ * app/services/dispatch.py::rank_technicians_for_job). Operations roles only
+ * (gated by the caller via `canWrite`/`require_operations` server-side).
+ * Fetched on demand rather than automatically, since ranking every
+ * technician is a heavier query than the rest of the page and is only
+ * useful once someone is actually deciding who to dispatch.
+ */
+function DispatchSuggestions({
+  jobId,
+  technicianId,
+}: {
+  jobId: string;
+  technicianId: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  const candidatesQuery = useQuery({
+    queryKey: ["jobs", jobId, "dispatch", "candidates"],
+    queryFn: () => dispatchApi.candidates(jobId),
+    enabled: expanded,
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (candidateId: string) => jobsApi.assign(jobId, candidateId),
+    onSuccess: () => {
+      setAssignError(null);
+      queryClient.invalidateQueries({ queryKey: ["jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["jobs", jobId, "dispatch", "candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (err) => setAssignError(err instanceof ApiError ? err.message : "Failed to assign."),
+  });
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-900">Dispatch suggestions</h2>
+        <Button variant="secondary" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "Hide" : "Show suggestions"}
+        </Button>
+      </div>
+      {expanded && (
+        <div className="mt-4 flex flex-col gap-3">
+          {assignError && <ErrorBanner message={assignError} />}
+          {candidatesQuery.isLoading && <Spinner label="Ranking technicians…" />}
+          {candidatesQuery.isError && (
+            <ErrorBanner
+              message={
+                candidatesQuery.error instanceof Error
+                  ? candidatesQuery.error.message
+                  : "Failed to load dispatch candidates."
+              }
+            />
+          )}
+          {candidatesQuery.data && candidatesQuery.data.length === 0 && (
+            <p className="text-sm text-slate-500">No active technicians available to dispatch.</p>
+          )}
+          {candidatesQuery.data?.map((candidate) => (
+            <div
+              key={candidate.technician_id}
+              className="flex items-center justify-between gap-4 rounded-md border border-slate-100 px-3 py-2"
+            >
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                  {candidate.technician_name}
+                  {candidate.technician_id === technicianId && <Badge tone="green">Assigned</Badge>}
+                </div>
+                <DispatchBreakdown score={candidate.score} />
+              </div>
+              <Button
+                variant="secondary"
+                disabled={candidate.technician_id === technicianId || assignMutation.isPending}
+                onClick={() => assignMutation.mutate(candidate.technician_id)}
+              >
+                Assign
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

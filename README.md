@@ -5,13 +5,15 @@ build plan: every issue from the technical critique is fixed at the code level.
 
 > **Status:** scaffold, real authentication, the CRM/operations core
 > (customers, vessels, work orders), **invoicing + Stripe payment
-> collection**, the **React frontend**, and **deployment/observability
+> collection**, the **React frontend**, **deployment/observability
 > hardening** (structured logging, `/metrics`, optional Sentry, hardened
-> Docker images, CI, and backups — see `docs/DEPLOYMENT.md`) are all real
-> and runnable. Models, migrations, services, routes, and tests for the
-> **critical fixes**, for **auth + tenant onboarding**, for
-> **customers/vessels/jobs**, and for **invoices/payments** all exist and
-> pass. Stripe Connect onboarding and the AI layer are intentionally out of
+> Docker images, CI, and backups — see `docs/DEPLOYMENT.md`), and a
+> **rule-based AI dispatch/prioritization engine** (see "AI dispatch
+> engine" below) are all real and runnable. Models, migrations, services,
+> routes, and tests for the **critical fixes**, for **auth + tenant
+> onboarding**, for **customers/vessels/jobs**, for **invoices/payments**,
+> and for **dispatch scoring** all exist and pass. Stripe Connect
+> onboarding and a trained ML dispatch model are intentionally out of
 > scope — see `../HarborIQ_v2_Corrected_Build_Spec.md` for the roadmap and
 > "What's intentionally NOT here yet" below for the full deferred list.
 
@@ -96,6 +98,9 @@ tests/test_stripe_invoice_webhook.py    # checkout.session.completed pays/partia
 tests/test_auth_rate_limit_lockout.py   # per-IP 429s, 5-failure lockout -> 423, expiry, generic messaging
 tests/test_email_and_outbox_dispatch.py # console-fallback + real SMTP transport, dispatch_pending rewrite
 tests/test_auth_invites.py              # invite create/preview/accept, role-escalation guard, tenant isolation
+tests/test_dispatch_scoring.py          # pure scoring-function unit tests: urgency, revenue, distance, skill fit, workload
+tests/test_dispatch_candidates.py       # ranked candidates endpoint, RBAC, tenant isolation, recompute persistence
+tests/test_dispatch_queue.py            # ?sort=priority_score ordering, unscored jobs sort last, invalid sort -> 422
 ```
 
 ## API surface
@@ -142,6 +147,9 @@ its server-side logs (see `app/api/middleware.py`, and
 | PATCH | `/api/v1/jobs/{id}` | bearer, owner/admin/office | edit descriptive + scheduling fields (never status) |
 | DELETE | `/api/v1/jobs/{id}` | bearer, owner/admin/office | delete the job and its lines |
 | POST | `/api/v1/jobs/{id}/assign` | bearer, owner/admin/office | dispatch to a technician (null unassigns) |
+| GET | `/api/v1/jobs?sort=priority_score` | bearer | the queue ordered by cached `dispatch_score` (unscored jobs sort last) |
+| GET | `/api/v1/jobs/{id}/dispatch/candidates` | bearer, owner/admin/office | rank active technicians for this job by explainable dispatch score |
+| POST | `/api/v1/jobs/{id}/dispatch/recompute` | bearer, owner/admin/office | recompute + cache the job's technician-independent priority score |
 | POST | `/api/v1/jobs/{id}/status` | bearer, office or the assigned tech | move through `JobSM`; 409 on an illegal transition |
 | POST | `/api/v1/jobs/{id}/line-items` | bearer, office or the assigned tech | record labor, a part or a fee |
 | GET | `/api/v1/jobs/{id}/line-items` | bearer | the job's billable lines |
@@ -378,6 +386,69 @@ the labor and parts they used. Probing another tenant's job id returns 404, not
 active users holding a role in `JOB_ASSIGNABLE_ROLES` (technician, admin,
 owner) — office staff take the call, they do not turn the wrenches.
 
+## AI dispatch engine
+
+**This is a rule-based, explainable priority scorer — not a trained model, and
+that is a deliberate architecture choice, not a shortcut.** "AI dispatching"
+at this stage of the platform's life honestly means transparent weighted
+scoring, because there is no real repair-outcome data yet to train anything
+meaningful on: a pre-revenue pilot with a handful of shops has no labeled
+history of "this dispatch decision led to a good outcome" to learn from, and
+faking a model against no data would be worse than admitting that and
+shipping something honest. The heuristic carried over from the earlier design
+discussion is to revisit this once the platform has accumulated **roughly
+500+ real, labeled repair outcomes** (job completed, on time or not, redo or
+not, customer satisfaction where captured) — enough rows that a model would
+actually be learning a pattern instead of memorizing noise. Until then, every
+score is a sum of named, capped factors that a shop owner can see and argue
+with, which also makes it debuggable in a way an opaque model would not be.
+
+**`app/services/dispatch.py::score_job` is a pure function: no DB access, so
+it is fully unit-testable against plain fixtures.** It returns a `DispatchScore`
+(a `total` plus a `breakdown` dict, one entry per factor) rather than a bare
+number, because a dispatcher deciding *between* two similarly-scored
+candidates needs to see *why* one edged out the other, not just that it did.
+Weights (all module-level named constants, easy to retune without touching the
+scoring logic itself):
+
+| Factor | Weight | Behavior |
+|---|---|---|
+| Urgency | 50 | Priority base (low 0.10 / normal 0.35 / high 0.65 / urgent 0.90) blended toward 1.0 as the job goes overdue, saturating at 6 days overdue. Dominant by design — a $50 urgent job outranks a $5,000 low-priority one. |
+| Technician skill fit | 15 | Jaccard overlap of the job's `required_skills` against the candidate's `skills`. Neutral (full weight) if the job has no required skills; a real zero if it has required skills the candidate shares none of. |
+| Revenue | 15 | `log1p` curve on the job's line-item revenue, saturating around $5,000 — diminishing returns so a single huge invoice cannot dwarf urgency. |
+| Distance | 12 | Haversine miles from technician to customer, exponential half-life falloff (half-life 15 miles). **Graceful degradation:** scores neutral (0.00) rather than penalizing when either side is missing coordinates, since most customers do not have geocoded addresses yet (see deferred list). |
+| Customer value | 8 | The customer's completed-job count, saturating at 12 — a mild loyalty signal, not a hard gate. |
+| Parts availability | 10 | Currently a documented permanent no-op (always neutral): there is no inventory-reservation-to-line-item linkage yet to know whether a job's parts are actually on the shelf (see deferred list). The weight is reserved so wiring in real inventory data later is a pure addition, not a rescoring of every other factor. |
+| Workload | −6 (penalty) | Subtracted, not added: a technician's current active-job count, saturating at 5 concurrent jobs, so the engine spreads load instead of piling everything onto whoever scores best on the other factors. |
+
+**Two scoring entry points, because "prioritize the queue" and "who should do
+this job" are different questions.** `recompute_and_cache_score` computes and
+persists the job-level score using only the technician-independent factors
+(urgency, revenue, customer value, parts availability) onto
+`jobs.dispatch_score`/`dispatch_score_breakdown`/`dispatch_scored_at`, powering
+`GET /api/v1/jobs?sort=priority_score` for the intake queue/schedule board
+regardless of who ends up assigned. `rank_technicians_for_job` computes a
+full per-candidate score — the same job-level factors *plus* distance, skill
+fit and workload for that specific technician — for
+`GET /api/v1/jobs/{id}/dispatch/candidates`, restricted to active users in
+`JOB_ASSIGNABLE_ROLES` (technician, admin, owner), the same set the assignment
+endpoint itself allows. Both routes are gated to owner/admin/office
+(`require_operations`) — a technician can see and work their own assigned job,
+but ranking every technician in the shop is an operations decision.
+
+**Schema (migration `0006_dispatch_engine`).** `users` gained `skills
+TEXT[]` and `home_latitude`/`home_longitude NUMERIC(9,6)` (paired by a CHECK
+constraint — either both set or both null); `companies` and `customers` each
+gained `latitude`/`longitude NUMERIC(9,6)` with the same pairing CHECK; `jobs`
+gained `required_skills TEXT[]` plus the cache columns `dispatch_score
+NUMERIC(6,2)`, `dispatch_score_breakdown JSONB`, and `dispatch_scored_at
+TIMESTAMPTZ`. There is deliberately no endpoint yet to set a technician's
+`skills` or home coordinates — this repo has no user-management/update
+endpoints at all yet (see deferred list), so today those columns are set
+directly in the database; the scoring engine and its graceful degradation for
+missing coordinates were built expecting that gap to close later, not around
+it staying open forever.
+
 ## Invoicing & payments
 
 **A job's uninvoiced line items are the only input.** `POST /api/v1/invoices`
@@ -507,11 +578,13 @@ harboriq/
   alembic/sql/0003_crm_operations.sql # customers/vessels/jobs/line items, composite FKs, RLS
   alembic/sql/0004_invoicing.sql      # invoice lifecycle columns, composite FKs, updated_at trigger
   alembic/sql/0005_auth_hardening.sql # lockout columns + user_invite token_purpose enum value
+  alembic/sql/0006_dispatch_engine.sql # skills/coords/required_skills + dispatch score cache columns
   alembic/versions/0001_initial_schema.py
   alembic/versions/0002_auth.py
   alembic/versions/0003_crm_operations.py
   alembic/versions/0004_invoicing.py
   alembic/versions/0005_auth_hardening.py
+  alembic/versions/0006_dispatch_engine.py
   app/
     core/      config, logging (env-aware JSON/console), observability (Sentry),
                security (argon2 + JWT), rate_limit (login/reset limiter)
@@ -519,11 +592,11 @@ harboriq/
     api/       deps (auth + job authorization), errors (domain -> HTTP status),
                middleware (request-id correlation + Prometheus metrics)
     api/v1/    routes: auth, customers, vessels, jobs, invoices, health, inventory,
-               public, stripe_webhooks
+               public, stripe_webhooks, dispatch
     services/  auth, crud, customers, vessels, jobs, invoices, stripe_billing,
                state_machines, inventory, public_tokens, outbox, outbox_dispatch,
-               email, stripe_webhooks
-    schemas/   pydantic models (incl. invoices.py, invite schemas in auth.py)
+               email, stripe_webhooks, dispatch
+    schemas/   pydantic models (incl. invoices.py, invite schemas in auth.py, dispatch.py)
   tests/       Postgres-backed integration tests
   frontend/    Vite + React + TS SPA (see "Frontend" below)
   scripts/backup_db.sh                # pg_dump wrapper for a host cron job
@@ -714,15 +787,40 @@ just the *what*, consolidated so nothing is scattered or repeated.
   (`ACCESS_TOKEN_TTL_MINUTES`, default 15). Stateful access-token revocation
   (e.g. a denylist checked per-request) remains out of scope.
 
+**AI dispatch engine (see "AI dispatch engine" above for the full
+rationale):**
+- Geocoding integration for customer (and technician/company) addresses —
+  `latitude`/`longitude` columns exist on `users`, `companies`, and
+  `customers`, but nothing populates them yet; the distance factor degrades
+  gracefully to neutral until they are set.
+- A normalized skills/proficiency table instead of `TEXT[]` columns on
+  `users`/`jobs` — fine for an exact-match Jaccard overlap today, but a real
+  taxonomy (with proficiency levels, certifications, synonyms) would need a
+  proper join table.
+- Real inventory-to-line-item parts-reservation linkage — the parts
+  availability factor is a permanent, documented no-op until there is an
+  actual signal for "are this job's parts on the shelf" to score against.
+- The eventual ML dispatch model itself, once the platform has accumulated
+  roughly 500+ real, labeled repair outcomes to train on — see "AI dispatch
+  engine" above. Explicitly not attempted now; faking one against no data
+  would be worse than the honest rule-based scorer this phase shipped.
+- No user-management/update endpoints (`PATCH` on a user) — technician
+  `skills` and home coordinates are set directly in the database today,
+  same underlying gap as the "real 'list teammates' screen" item below.
+
 **Product surface (per the MVP reset in the build spec):** white-labeling /
-custom domains, the AI engine, and the marketplace. Build the 5-shop pilot
-first.
+custom domains, a trained ML dispatch model (see above — the rule-based
+engine is real and shipped; the model is not), and the marketplace. Build
+the 5-shop pilot first.
 
 Historical note on gaps *fixed* in earlier phases (kept briefly for
 context, not because they're still open): Phase 5 added login rate
 limiting + account lockout ("Auth hardening" above), rewrote outbox email
 dispatch to actually send via SMTP/console fallback, and replaced
-admin-set-password user provisioning with invite links. Phase 6 (this one)
-added everything under "Deployment & observability" above. None of that is
-listed as deferred anymore — see each section's own text for exactly what
-changed and why.
+admin-set-password user provisioning with invite links. Phase 6 added
+everything under "Deployment & observability" above. Phase 7 (this one)
+fixed the `HTTP_422_UNPROCESSABLE_ENTITY` deprecation warning (renamed to
+`HTTP_422_UNPROCESSABLE_CONTENT`) and the `httpx`/TestClient deprecation
+warning (pinned `httpx2`), and added everything under "AI dispatch engine"
+above. None of that is listed as deferred anymore — see each section's own
+text for exactly what changed and why.
