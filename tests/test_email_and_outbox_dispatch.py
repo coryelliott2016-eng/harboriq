@@ -110,7 +110,7 @@ def test_dispatch_sends_password_reset_email_with_working_link(
     monkeypatch.setattr(settings, "smtp_host", "")  # console transport, deterministic
     sent = []
     monkeypatch.setattr(
-        email, "send_email", lambda to, subject, body, html_body=None: (
+        email, "send_email", lambda to, subject, body, html_body=None, attachments=None: (
             sent.append((to, subject, body)) or True
         )
     )
@@ -142,7 +142,7 @@ def test_dispatch_sends_invite_email_with_accept_link(
 ):
     sent = []
     monkeypatch.setattr(
-        email, "send_email", lambda to, subject, body, html_body=None: (
+        email, "send_email", lambda to, subject, body, html_body=None, attachments=None: (
             sent.append((to, subject, body)) or True
         )
     )
@@ -175,8 +175,8 @@ def test_dispatch_sends_invoice_email_using_the_provided_pay_url(
 ):
     sent = []
     monkeypatch.setattr(
-        email, "send_email", lambda to, subject, body, html_body=None: (
-            sent.append((to, subject, body)) or True
+        email, "send_email", lambda to, subject, body, html_body=None, attachments=None: (
+            sent.append((to, subject, body, attachments)) or True
         )
     )
 
@@ -185,6 +185,7 @@ def test_dispatch_sends_invoice_email_using_the_provided_pay_url(
         company_a,
         "invoice.send",
         {
+            "invoice_id": "11111111-1111-1111-1111-111111111111",
             "customer_email": "customer@example.com",
             "pay_url": "/api/v1/public/invoice/some-raw-token",
         },
@@ -192,9 +193,15 @@ def test_dispatch_sends_invoice_email_using_the_provided_pay_url(
 
     dispatched = outbox.dispatch_pending(service_db)
     assert dispatched == 1
-    to, subject, body = sent[0]
+    to, subject, body, attachments = sent[0]
     assert to == "customer@example.com"
     assert "/api/v1/public/invoice/some-raw-token" in body
+    # PDF generation is best-effort: an invoice id that does not resolve to a
+    # real row (as here, a bare fixture payload with no DB-backed invoice)
+    # must not fail the whole send -- it degrades to "no attachment" rather
+    # than dead-lettering the email. Real PDF-attached delivery is covered by
+    # tests/test_invoice_pdf_email.py against an actual invoice row.
+    assert attachments in (None, [])
 
 
 def test_dispatch_moves_permanently_failing_rows_to_dead_letter(

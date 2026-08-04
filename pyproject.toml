@@ -19,6 +19,15 @@ dependencies = [
     "python-multipart>=0.0.9",
     "structlog>=24.1",
     "stripe>=8.0",
+    # PDF invoice generation (Phase 8). Chose reportlab over weasyprint:
+    # weasyprint needs system-level pango/cairo/gdk-pixbuf shared libraries
+    # that are not guaranteed present in every deploy target (containers,
+    # serverless, CI images), while reportlab is pure-Python + pillow and
+    # installs the same everywhere `pip install` works. HarborIQ's invoice
+    # PDF is a simple, programmatically-laid-out business document (no HTML/
+    # CSS templates to reuse) -- reportlab's lower-level canvas/Platypus API
+    # is a fine fit and avoids weasyprint's heavier native dependency chain.
+    "reportlab>=5.0",
     "PyJWT>=2.8",
     "argon2-cffi>=23.1",
     "prometheus-client>=0.20",
@@ -41,6 +50,12 @@ dev = [
     # under the hood; this addition is test-infrastructure only.
     "httpx2>=2.0",
     "ruff>=0.4",
+    # Phase 8: tests/test_invoice_pdf_email.py verifies the generated invoice
+    # PDF actually contains the right text (invoice id, totals, line items)
+    # rather than just checking byte length -- pypdf is test-infrastructure
+    # only, the app itself never reads PDFs back, only writes them
+    # (app/services/invoice_pdf.py, via reportlab).
+    "pypdf>=5.0",
 ]
 
 [tool.setuptools.packages.find]

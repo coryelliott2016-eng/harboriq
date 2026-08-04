@@ -14,6 +14,9 @@ from email.message import EmailMessage
 
 from app.core.config import settings
 
+#: (filename, bytes, mime_subtype) e.g. ("invoice.pdf", b"...", "pdf").
+Attachment = tuple[str, bytes, str]
+
 logger = logging.getLogger("harboriq.email")
 
 #: How much of the body to show in the console-fallback / error log line.
@@ -25,6 +28,7 @@ def send_email(
     subject: str,
     text_body: str,
     html_body: str | None = None,
+    attachments: list[Attachment] | None = None,
 ) -> bool:
     """Send one email. Returns True on success (including console fallback).
 
@@ -36,13 +40,18 @@ def send_email(
       network failure is caught and logged, never raised — the caller
       (`outbox.dispatch_pending`) decides how to retry; email delivery must
       never raise into a request path that already committed its DB write.
+
+    `attachments` (Phase 8): optional list of `(filename, bytes, mime_subtype)`
+    tuples, e.g. `("invoice.pdf", pdf_bytes, "pdf")` for the invoice-send PDF.
+    Purely additive — omitted/`None` behaves exactly as before this phase.
     """
     if not settings.smtp_host:
         logger.info(
-            "console-transport email to=%s subject=%r body=%r",
+            "console-transport email to=%s subject=%r body=%r attachments=%s",
             to,
             subject,
             text_body[:_LOG_BODY_TRUNCATE],
+            [name for name, _, _ in (attachments or [])],
         )
         return True
 
@@ -53,6 +62,10 @@ def send_email(
     message.set_content(text_body)
     if html_body:
         message.add_alternative(html_body, subtype="html")
+    for filename, content, mime_subtype in attachments or []:
+        message.add_attachment(
+            content, maintype="application", subtype=mime_subtype, filename=filename
+        )
 
     try:
         if settings.smtp_port == 465:

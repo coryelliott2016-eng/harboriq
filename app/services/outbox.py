@@ -60,12 +60,17 @@ def enqueue(
     return int(row.id)
 
 
-def _build_email(event_type: str, payload: dict[str, Any]) -> tuple[str, str, str] | None:
-    """Return (to, subject, text_body) for a known event type, or None.
+def _build_email(
+    db: Session, event_type: str, payload: dict[str, Any]
+) -> tuple[str, str, str, list[email.Attachment]] | None:
+    """Return (to, subject, text_body, attachments) for a known event type,
+    or None.
 
     `None` means "not an email event" — dispatched immediately as a no-op
     success rather than retried forever (e.g. a future webhook/SMS event
-    type that reuses this same outbox table).
+    type that reuses this same outbox table). `db` is only used by the
+    `invoice.send` branch (Phase 8) to fetch the invoice/line items/company
+    needed to render the attached PDF; every other branch ignores it.
     """
     base_url = settings.app_base_url.rstrip("/")
 
@@ -77,6 +82,7 @@ def _build_email(event_type: str, payload: dict[str, Any]) -> tuple[str, str, st
             "We received a request to reset your HarborIQ password.\n\n"
             f"Reset it here: {link}\n\n"
             "If you did not request this, you can safely ignore this email.",
+            [],
         )
 
     if event_type == "user_invite.sent":
@@ -88,6 +94,7 @@ def _build_email(event_type: str, payload: dict[str, Any]) -> tuple[str, str, st
             f"{payload['company_name']} on HarborIQ as {payload['role']}.\n\n"
             f"Accept your invite here: {link}\n\n"
             f"This link expires in {payload.get('ttl_hours', 168)} hours.",
+            [],
         )
 
     if event_type == "invoice.send":
@@ -96,10 +103,25 @@ def _build_email(event_type: str, payload: dict[str, Any]) -> tuple[str, str, st
         # returns it so this does not change the public-payment contract;
         # just relay it verbatim in the email body.
         link = payload["pay_url"]
+        attachments = _build_invoice_pdf_attachment(db, payload)
         return (
             payload.get("customer_email") or "",
             "Your HarborIQ invoice is ready",
             f"Your invoice is ready to view and pay: {link}",
+            attachments,
+        )
+
+    if event_type == "invoice.dunning_reminder":
+        # Phase 8 dunning sweep: a lighter-weight nudge, no PDF re-attached
+        # (the customer already received one when the invoice was sent).
+        link = payload["pay_url"]
+        return (
+            payload.get("customer_email") or "",
+            "Reminder: your HarborIQ invoice is past due",
+            "This is a friendly reminder that the following invoice is past "
+            f"due: {link}\n\nPlease pay at your earliest convenience or reply "
+            "to this email if you have questions.",
+            [],
         )
 
     if event_type == "receipt.send":
@@ -109,28 +131,56 @@ def _build_email(event_type: str, payload: dict[str, Any]) -> tuple[str, str, st
             "Payment receipt",
             f"Thanks for your payment of ${amount_cents / 100:.2f}. "
             f"Payment reference: {payload.get('payment_intent') or 'n/a'}.",
+            [],
         )
 
     return None
 
 
+def _build_invoice_pdf_attachment(
+    db: Session, payload: dict[str, Any]
+) -> list[email.Attachment]:
+    """Best-effort PDF attachment for an `invoice.send` outbox row.
+
+    Anything going wrong here (missing/garbled `invoice_id`, invoice deleted
+    since being queued, a rendering bug) degrades to "send the email without
+    an attachment" rather than dead-lettering an otherwise-deliverable
+    email — the pay link in the body still works without the PDF.
+    """
+    invoice_id = payload.get("invoice_id")
+    if not invoice_id:
+        return []
+
+    try:
+        import uuid as _uuid
+
+        from app.services.invoice_render import build_invoice_pdf_bytes
+
+        pdf_bytes = build_invoice_pdf_bytes(db, _uuid.UUID(str(invoice_id)))
+        if pdf_bytes is None:
+            return []
+        return [("invoice.pdf", pdf_bytes, "pdf")]
+    except Exception:  # noqa: BLE001 — never let PDF rendering block delivery
+        return []
+
+
 def _dispatch_one(db: Session, row) -> bool:
     """Send one outbox row's email. Returns True on success."""
-    built = _build_email(row.event_type, row.payload)
+    built = _build_email(db, row.event_type, row.payload)
     if built is None:
         # Unknown/non-email event type: nothing to send, treat as a no-op
         # success so it does not spin forever waiting on a transport that
         # will never handle it.
         return True
 
-    to, subject, text_body = built
+    to, subject, text_body, attachments = built
     if not to:
         # No recipient resolvable from the payload — cannot be delivered by
         # retrying, so treat as a permanent failure (goes to dead_letter once
         # attempts are exhausted, same as any other send failure).
         return False
 
-    return email.send_email(to, subject, text_body)
+    return email.send_email(to, subject, text_body, attachments=attachments or None)
 
 
 def dispatch_pending(db: Session, limit: int = 100) -> int:
