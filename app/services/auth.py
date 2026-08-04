@@ -42,6 +42,7 @@ from app.core.security import (
 )
 from app.db.models import UserRole
 from app.db.tenant import tenant_context
+from app.services import outbox, public_tokens
 from app.services.outbox import enqueue
 
 MAX_SLUG_LENGTH = 50
@@ -54,6 +55,15 @@ class AuthError(Exception):
 
 class InvalidCredentials(AuthError):
     """Email/password rejected. Deliberately indistinguishable from unknown email."""
+
+
+class AccountLocked(AuthError):
+    """Too many consecutive failed logins. Maps to 423 (see app/api/errors.py).
+
+    The message deliberately says nothing about remaining attempts or
+    whether the account exists, so this cannot be used as a side channel to
+    enumerate accounts or time-guess the lockout threshold.
+    """
 
 
 class InvalidRefreshToken(AuthError):
@@ -268,7 +278,8 @@ def _resolve_user_by_email(service_db: Session, email: str):
     return service_db.execute(
         text(
             """
-            SELECT id, company_id, password_hash, role, is_active
+            SELECT id, company_id, password_hash, role, is_active,
+                   failed_login_attempts, locked_until
               FROM users
              WHERE email = :email
             """
@@ -384,6 +395,25 @@ def _map_integrity_error(exc: IntegrityError) -> AuthError | None:
 # ---------------------------------------------------------------------------
 # login / refresh / logout
 # ---------------------------------------------------------------------------
+def _lock_user_row_for_login(app_db: Session, company_id: uuid.UUID, user_id: uuid.UUID):
+    """Re-read the user row FOR UPDATE inside tenant_context, for the login
+    transaction's lockout bookkeeping. Must be called from inside an already-
+    open `tenant_context(app_db, company_id)` block.
+    """
+    return app_db.execute(
+        text(
+            """
+            SELECT id, password_hash, role, is_active,
+                   failed_login_attempts, locked_until
+              FROM users
+             WHERE id = :uid
+             FOR UPDATE
+            """
+        ),
+        {"uid": user_id},
+    ).first()
+
+
 def login(
     app_db: Session,
     service_db: Session,
@@ -396,7 +426,17 @@ def login(
     """Verify credentials and issue a token pair.
 
     Every failure path raises the same InvalidCredentials so callers cannot
-    distinguish unknown email / wrong password / deactivated account.
+    distinguish unknown email / wrong password / deactivated account, EXCEPT
+    the distinct `AccountLocked` raised once too many consecutive failures
+    have accumulated (see module docstring on `AccountLocked` for why that
+    one case is allowed to differ: it maps to 423 instead of 401, but its
+    message still reveals nothing about remaining attempts or account
+    existence).
+
+    Lockout bookkeeping (`failed_login_attempts` / `locked_until`) is mutated
+    under a `SELECT ... FOR UPDATE` on the user row taken inside THIS same
+    transaction — never a separate round-trip — so concurrent login attempts
+    against the same account serialize on that row lock instead of racing.
     """
     email = normalize_email(email)
     row = _resolve_user_by_email(service_db, email)
@@ -407,8 +447,42 @@ def login(
         verify_password(password, None)
         raise InvalidCredentials("invalid email or password")
 
-    if not verify_password(password, row.password_hash) or not row.is_active:
-        with tenant_context(app_db, row.company_id):
+    with tenant_context(app_db, row.company_id):
+        locked_row = _lock_user_row_for_login(app_db, row.company_id, row.id)
+
+        now = datetime.now(timezone.utc)
+        currently_locked = (
+            locked_row.locked_until is not None and locked_row.locked_until > now
+        )
+
+        if currently_locked:
+            # Rejected even with the correct password: the whole point of a
+            # lockout is that it does not matter whether this attempt's
+            # password was right. No attempt-count/enumeration side channel.
+            app_db.commit()
+            raise AccountLocked("too many attempts, try again later")
+
+        password_ok = verify_password(password, locked_row.password_hash)
+        if not password_ok or not locked_row.is_active:
+            new_attempts = locked_row.failed_login_attempts + 1
+            new_locked_until = None
+            if new_attempts >= settings.login_max_failed_attempts:
+                new_locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
+            app_db.execute(
+                text(
+                    """
+                    UPDATE users
+                       SET failed_login_attempts = :attempts,
+                           locked_until = :locked_until
+                     WHERE id = :uid
+                    """
+                ),
+                {
+                    "attempts": new_attempts,
+                    "locked_until": new_locked_until,
+                    "uid": row.id,
+                },
+            )
             _audit(
                 app_db,
                 row.company_id,
@@ -417,28 +491,40 @@ def login(
                 resource_type="user",
                 resource_id=row.id,
                 ip=ip,
-                metadata={"reason": "inactive" if row.is_active is False else "bad_password"},
+                metadata={
+                    "reason": "inactive" if locked_row.is_active is False else "bad_password",
+                    "failed_login_attempts": new_attempts,
+                    "locked": new_locked_until is not None,
+                },
             )
             app_db.commit()
-        raise InvalidCredentials("invalid email or password")
+            raise InvalidCredentials("invalid email or password")
 
-    with tenant_context(app_db, row.company_id):
+        # Success: clear lockout state, upgrade the hash if needed, log in.
+        app_db.execute(
+            text(
+                """
+                UPDATE users
+                   SET failed_login_attempts = 0,
+                       locked_until = NULL,
+                       last_login_at = now()
+                 WHERE id = :uid
+                """
+            ),
+            {"uid": row.id},
+        )
         # Transparently upgrade the hash if the Argon2 cost parameters changed.
-        if password_needs_rehash(row.password_hash):
+        if password_needs_rehash(locked_row.password_hash):
             app_db.execute(
                 text("UPDATE users SET password_hash = :hash WHERE id = :uid"),
                 {"hash": hash_password(password), "uid": row.id},
             )
-        app_db.execute(
-            text("UPDATE users SET last_login_at = now() WHERE id = :uid"),
-            {"uid": row.id},
-        )
         user = _to_authenticated_user(_load_user_row(app_db, row.id))
         tokens = _issue_session(
             app_db,
             company_id=row.company_id,
             user_id=row.id,
-            role=row.role,
+            role=locked_row.role,
             ip=ip,
             user_agent=user_agent,
         )
@@ -695,6 +781,334 @@ def create_user(
         role=role,
         is_active=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# invite-link user provisioning
+# ---------------------------------------------------------------------------
+#: An invite's raison d'etre is to create exactly one account; once accepted
+#: there is nothing left for the token to authorize, so it is single-use.
+INVITE_TOKEN_MAX_USES = 1
+
+
+class InviteNotFound(AuthError):
+    """Invite token unknown, expired, revoked, wrong purpose, or already used."""
+
+
+def create_invite(
+    app_db: Session,
+    service_db: Session,
+    *,
+    company_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    actor_role: str,
+    email: str,
+    role: str,
+    full_name: str | None = None,
+    ip: str | None = None,
+) -> dict[str, Any]:
+    """Issue an invite-link for a not-yet-existing user in the actor's company.
+
+    Mirrors `create_user`'s role-escalation guard exactly (an admin still
+    cannot invite an owner) and its email-uniqueness guard (checked globally,
+    same as signup/create_user, since email identifies exactly one account
+    platform-wide).
+
+    The invite reuses the existing `public_tokens` machinery (see migration
+    0005 / README) instead of a parallel table. `public_tokens.resource_id`
+    is `UUID NOT NULL`, and the invited user does not exist yet, so — exactly
+    like `signup` pre-generates `company_id` before the `companies` INSERT —
+    this pre-generates the future user's id and carries it in the token's
+    `resource_id`. `accept_invite` uses that same id as the new user's
+    primary key, so the token and the eventual row are linked from creation.
+    """
+    if role == UserRole.OWNER.value and actor_role != UserRole.OWNER.value:
+        raise RoleNotPermitted("only an owner can invite another owner")
+
+    email = normalize_email(email)
+
+    # Global uniqueness check, same rule signup/create_user rely on the
+    # UNIQUE index for; checked explicitly here too so a duplicate invite
+    # produces a clean 409 rather than deferring to a later accept-time
+    # IntegrityError once a password has already been collected from the
+    # invitee.
+    existing = _resolve_user_by_email(service_db, email)
+    service_db.commit()
+    if existing is not None:
+        raise EmailAlreadyRegistered("email is already registered")
+
+    with tenant_context(app_db, company_id):
+        company_row = app_db.execute(
+            text("SELECT name FROM companies WHERE id = :cid"), {"cid": company_id}
+        ).first()
+        inviter_row = app_db.execute(
+            text("SELECT full_name, email FROM users WHERE id = :uid"),
+            {"uid": actor_user_id},
+        ).first()
+
+    company_name = company_row.name if company_row else "HarborIQ"
+    inviter_name = (inviter_row.full_name or inviter_row.email) if inviter_row else None
+
+    invited_user_id = uuid.uuid4()
+    raw_token = public_tokens.issue_public_token(
+        app_db,
+        company_id,
+        "user_invite",
+        invited_user_id,
+        "user_invite",
+        ttl_hours=settings.invite_ttl_hours,
+        max_uses=INVITE_TOKEN_MAX_USES,
+    )
+    accept_url = f"{settings.app_base_url.rstrip('/')}/accept-invite/{raw_token}"
+
+    with tenant_context(app_db, company_id):
+        outbox.enqueue(
+            app_db,
+            company_id,
+            "user_invite.sent",
+            {
+                "email": email,
+                "role": role,
+                "full_name": full_name,
+                "company_name": company_name,
+                "inviter_name": inviter_name,
+                "invite_token": raw_token,
+                "ttl_hours": settings.invite_ttl_hours,
+            },
+        )
+        _audit(
+            app_db,
+            company_id,
+            "user.invited",
+            actor_user_id=actor_user_id,
+            resource_type="user_invite",
+            resource_id=invited_user_id,
+            ip=ip,
+            metadata={"email": email, "role": role},
+        )
+        app_db.commit()
+
+    return {
+        "email": email,
+        "role": role,
+        "full_name": full_name,
+        "company_name": company_name,
+        "expires_in_hours": settings.invite_ttl_hours,
+        "accept_url": accept_url,
+    }
+
+
+def _validate_invite_row(row) -> None:
+    """Shared purpose/expiry/revocation/use-limit checks for an invite row."""
+    if row is None:
+        raise InviteNotFound("invite not found")
+    if row.purpose != "user_invite" or row.resource_type != "user_invite":
+        raise InviteNotFound("invite not found")
+    if row.revoked_at is not None:
+        raise InviteNotFound("invite has been revoked")
+    if row.expires_at <= datetime.now(timezone.utc):
+        raise InviteNotFound("invite has expired")
+    if row.uses >= row.max_uses:
+        raise InviteNotFound("invite has already been used")
+
+
+def _resolve_invite_token(service_db: Session, raw_token: str):
+    """Service-role, non-locking lookup of a live `user_invite` public token.
+
+    Read-only: used to discover which tenant a token belongs to (needed
+    before a `tenant_context` can even be opened) and for the read-only
+    preview endpoint. `accept_invite` does NOT hold this lock across
+    sessions — it re-resolves and locks the row on `app_db`, inside the
+    tenant's own `tenant_context`, in the same transaction it consumes the
+    token in. Locking here on `service_db` and consuming on a different
+    session/connection would hold the row lock for the lifetime of the
+    request instead of just the consuming transaction, and would deadlock
+    against that second session trying to acquire the same lock.
+    """
+    token_hash = public_tokens._hash(raw_token)
+    row = service_db.execute(
+        text(
+            """
+            SELECT id, company_id, resource_type, resource_id, purpose,
+                   expires_at, max_uses, uses, revoked_at
+              FROM public_tokens
+             WHERE token_hash = :th
+            """
+        ),
+        {"th": token_hash},
+    ).first()
+    service_db.commit()  # read-only; releases immediately rather than idling
+    _validate_invite_row(row)
+    return row
+
+
+def get_invite(service_db: Session, raw_token: str) -> dict[str, Any]:
+    """Read-only preview for the accept-invite page: email/role/company name.
+
+    Does NOT consume a use — a candidate may load this page, reconsider,
+    reload it, etc. before ever submitting a password; only `accept_invite`
+    burns the token.
+    """
+    row = _resolve_invite_token(service_db, raw_token)
+    outbox_row = service_db.execute(
+        text(
+            """
+            SELECT payload FROM outbox_events
+             WHERE company_id = :cid AND event_type = 'user_invite.sent'
+               AND payload->>'invite_token' = :token
+             ORDER BY id DESC LIMIT 1
+            """
+        ),
+        {"cid": row.company_id, "token": raw_token},
+    ).first()
+    company_row = service_db.execute(
+        text("SELECT name FROM companies WHERE id = :cid"), {"cid": row.company_id}
+    ).first()
+    service_db.commit()
+
+    payload = outbox_row.payload if outbox_row else {}
+    return {
+        "email": payload.get("email", ""),
+        "role": payload.get("role", ""),
+        "full_name": payload.get("full_name"),
+        "company_name": (company_row.name if company_row else payload.get("company_name", "")),
+    }
+
+
+def accept_invite(
+    app_db: Session,
+    service_db: Session,
+    *,
+    raw_token: str,
+    password: str,
+    full_name: str | None = None,
+    ip: str | None = None,
+    user_agent: str | None = None,
+) -> tuple[AuthenticatedUser, IssuedTokens]:
+    """Consume an invite token, create the user, and log them straight in.
+
+    Reuses the exact password-strength + hashing path `create_user`/`signup`
+    already use (`hash_password`, which calls `validate_password_strength`)
+    rather than duplicating divergent logic.
+    """
+    # First pass: a non-locking lookup on the service role just to learn
+    # which tenant this token belongs to (needed before `tenant_context` can
+    # be opened at all) and to fail fast on an obviously-dead token.
+    precheck_row = _resolve_invite_token(service_db, raw_token)
+    company_id = precheck_row.company_id
+    token_hash = public_tokens._hash(raw_token)
+
+    outbox_row = service_db.execute(
+        text(
+            """
+            SELECT payload FROM outbox_events
+             WHERE company_id = :cid AND event_type = 'user_invite.sent'
+               AND payload->>'invite_token' = :token
+             ORDER BY id DESC LIMIT 1
+            """
+        ),
+        {"cid": company_id, "token": raw_token},
+    ).first()
+    service_db.commit()
+    if outbox_row is None:
+        raise InviteNotFound("invite not found")
+    payload = outbox_row.payload
+
+    email = normalize_email(payload["email"])
+    role = payload["role"]
+    invited_full_name = full_name or payload.get("full_name")
+    password_hash = hash_password(password)  # raises WeakPassword
+
+    try:
+        with tenant_context(app_db, company_id):
+            # Second pass, inside the SAME transaction that consumes the
+            # token and inserts the user: re-lock and re-validate on
+            # `app_db` so the lock and the mutation it protects are never
+            # split across two different DB sessions.
+            locked_row = app_db.execute(
+                text(
+                    """
+                    SELECT id, resource_id, resource_type, purpose,
+                           expires_at, max_uses, uses, revoked_at
+                      FROM public_tokens
+                     WHERE token_hash = :th
+                       FOR UPDATE
+                    """
+                ),
+                {"th": token_hash},
+            ).first()
+            _validate_invite_row(locked_row)
+            user_id = locked_row.resource_id
+
+            app_db.execute(
+                text(
+                    """
+                    INSERT INTO users
+                        (id, company_id, email, password_hash, full_name, role)
+                    VALUES (:uid, :cid, :email, :hash, :name, CAST(:role AS user_role))
+                    """
+                ),
+                {
+                    "uid": user_id,
+                    "cid": company_id,
+                    "email": email,
+                    "hash": password_hash,
+                    "name": invited_full_name,
+                    "role": role,
+                },
+            )
+
+            consumed = app_db.execute(
+                text(
+                    """
+                    UPDATE public_tokens
+                       SET uses = uses + 1
+                     WHERE id = :id AND uses < max_uses
+                    RETURNING id
+                    """
+                ),
+                {"id": locked_row.id},
+            ).first()
+            if consumed is None:
+                app_db.rollback()
+                raise InviteNotFound("invite has already been used")
+
+            _audit(
+                app_db,
+                company_id,
+                "user.invite_accepted",
+                actor_user_id=user_id,
+                resource_type="user",
+                resource_id=user_id,
+                ip=ip,
+                metadata={"email": email, "role": role},
+            )
+
+            tokens = _issue_session(
+                app_db,
+                company_id=company_id,
+                user_id=user_id,
+                role=role,
+                ip=ip,
+                user_agent=user_agent,
+            )
+            app_db.commit()
+    except IntegrityError as exc:
+        app_db.rollback()
+        mapped = _map_integrity_error(exc)
+        if mapped is None:
+            raise
+        raise mapped from exc
+
+    user = AuthenticatedUser(
+        id=user_id,
+        company_id=company_id,
+        email=email,
+        full_name=invited_full_name,
+        role=role,
+        is_active=True,
+    )
+    return user, tokens
 
 
 # ---------------------------------------------------------------------------

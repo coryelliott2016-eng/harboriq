@@ -1,11 +1,15 @@
 import { api, apiRequest } from "./api";
 import type {
+  AcceptInviteInput,
   AuthResponse,
+  CreateInviteInput,
   Customer,
   CustomerInput,
   Invoice,
   InvoiceDetail,
   InvoiceSendResponse,
+  InviteOut,
+  InvitePreview,
   Job,
   JobDetail,
   JobInput,
@@ -44,6 +48,18 @@ export const authApi = {
     role: UserRole;
     full_name?: string;
   }) => api.post<User>("/auth/users", body),
+
+  createInvite: (body: CreateInviteInput) => api.post<InviteOut>("/auth/invites", body),
+
+  getInvite: (token: string) =>
+    apiRequest<InvitePreview>(`/auth/invites/${token}`, { anonymous: true }),
+
+  acceptInvite: (token: string, body: AcceptInviteInput) =>
+    apiRequest<AuthResponse>(`/auth/invites/${token}/accept`, {
+      method: "POST",
+      body,
+      anonymous: true,
+    }),
 };
 
 // --- customers ---

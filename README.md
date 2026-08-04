@@ -90,6 +90,9 @@ tests/test_invoicing_lifecycle.py       # draft -> sent -> paid, draft/sent -> v
 tests/test_invoicing_rls.py             # cross-tenant isolation + composite FKs on invoices/payments
 tests/test_public_invoice_pay.py        # token resolves invoice; read never burns a use; checkout URL
 tests/test_stripe_invoice_webhook.py    # checkout.session.completed pays/partials an invoice, idempotently
+tests/test_auth_rate_limit_lockout.py   # per-IP 429s, 5-failure lockout -> 423, expiry, generic messaging
+tests/test_email_and_outbox_dispatch.py # console-fallback + real SMTP transport, dispatch_pending rewrite
+tests/test_auth_invites.py              # invite create/preview/accept, role-escalation guard, tenant isolation
 ```
 
 ## API surface
@@ -99,13 +102,16 @@ tests/test_stripe_invoice_webhook.py    # checkout.session.completed pays/partia
 | GET | `/api/v1/healthz` | none | liveness |
 | GET | `/api/v1/readyz` | none | readiness (DB check) |
 | POST | `/api/v1/auth/signup` | none | create a company (tenant) + its first owner, and log in |
-| POST | `/api/v1/auth/login` | none | exchange email/password for an access + refresh token pair |
+| POST | `/api/v1/auth/login` | none, rate-limited + lockout | exchange email/password for an access + refresh token pair |
 | POST | `/api/v1/auth/refresh` | refresh token | rotate the pair; the presented token is invalidated |
 | POST | `/api/v1/auth/logout` | bearer | revoke this device's session (or every device's) |
 | GET | `/api/v1/auth/me` | bearer | the authenticated user |
-| POST | `/api/v1/auth/users` | bearer, owner/admin | provision a user inside the caller's company |
-| POST | `/api/v1/auth/password-reset/request` | none | queue a reset email (always 202) |
+| POST | `/api/v1/auth/users` | bearer, owner/admin | provision a user inside the caller's company (admin sets the password) |
+| POST | `/api/v1/auth/password-reset/request` | none, rate-limited | queue a reset email (always 202) |
 | POST | `/api/v1/auth/password-reset/confirm` | reset token | set a new password and revoke every session |
+| POST | `/api/v1/auth/invites` | bearer, owner/admin | issue a one-time invite link for a new teammate (invitee sets their own password) |
+| GET | `/api/v1/auth/invites/{token}` | none | read-only preview (email/role/company) for the accept-invite page; does not consume |
+| POST | `/api/v1/auth/invites/{token}/accept` | none | consume the invite, create the account, and log the new user straight in |
 | POST | `/api/v1/customers` | bearer, owner/admin/office | create a customer |
 | GET | `/api/v1/customers` | bearer | list/search customers (name, email, phone) |
 | GET | `/api/v1/customers/{id}` | bearer | one customer |
@@ -192,6 +198,107 @@ tenant-selection step; that is deliberately deferred.
 
 Required configuration — see `.env.example`. `JWT_SECRET` ships as an obvious
 placeholder and is **rejected at startup** unless `APP_ENV=development`.
+
+## Auth hardening (rate limiting, lockout, invites)
+
+Three production-hardening pieces were added on top of the auth layer above,
+scoped to what a pilot needs before its first real customer, not a fully
+general security platform:
+
+**Rate limiting.** `app/core/rate_limit.py` implements a small in-process
+fixed-window counter (`_FixedWindowLimiter`), keyed by client IP, with
+independent windows per endpoint family (`login` and `password-reset` do not
+share a budget). Default is `rate_limit_requests_per_window=10` requests per
+`rate_limit_window_seconds=60`; exceeding it returns `429` with a `Retry-After`
+header. This is deliberately **not** Redis-backed — a single-process in-memory
+dict is the honest scope for one API instance behind a pilot's load, and the
+module's docstring flags upgrading to a shared store (Redis `INCR`+`EXPIRE`,
+or a token-bucket at the edge/CDN) as the change needed the moment there is
+more than one backend process, since separate processes would each keep their
+own counters and the effective limit would multiply per instance.
+
+**Account lockout.** `users.failed_login_attempts` and `users.locked_until`
+(added in migration `0005`) track failures per account, independent of the
+per-IP rate limiter above — this stops a distributed attacker credential-
+stuffing one account from many IPs, which the rate limiter alone would not
+catch. After `login_max_failed_attempts` (default 5) consecutive failures the
+account locks for `login_lockout_minutes` (default 15) and every attempt
+during that window — even with the correct password — returns `423 Locked`
+with a message that never echoes the email address or a countdown, matching
+the existing enumeration-avoidance stance of login/password-reset. A
+successful login resets the counter to zero. This is checked and incremented
+under a `SELECT ... FOR UPDATE` on the user row inside the same transaction as
+the password verification, so concurrent login attempts against the same
+account cannot race past the threshold.
+
+**Email transport.** `app/services/email.py::send_email` sends real SMTP
+(`smtplib.SMTP`/`SMTP_SSL`, STARTTLS via `smtp_use_tls`) when `smtp_host` is
+configured, and otherwise falls back to logging the full message at INFO —
+the same "console transport" pattern most frameworks ship for local dev, so a
+contributor never needs a real mailbox to exercise password-reset or invite
+flows. `app/services/outbox.py::dispatch_pending` was rewritten to actually
+call it (previously a skeleton that left rows queued forever): it claims rows
+with `FOR UPDATE SKIP LOCKED` (so concurrent dispatchers never double-send),
+builds the right email for each `event_type` (`auth.password_reset_requested`,
+`user_invite.sent`, `invoice.send`, `receipt.send`), and ages a row to
+`dead_letter` after `MAX_DISPATCH_ATTEMPTS` (5) consecutive failures rather
+than retrying forever. Dispatch is triggered via FastAPI `BackgroundTasks`
+scheduled in the route handler right after the triggering transaction
+commits (`app/services/outbox_dispatch.py::dispatch_outbox_soon`) — **not**
+Celery/Redis. That trade-off is deliberate for this phase: it needs zero new
+infrastructure and the delivery window is a couple of seconds after the
+request, which is fine for password resets and invites; the real limitation is
+that a `BackgroundTasks` job dies with the worker process, so anything queued
+at the moment of a crash/restart is only picked up on the *next* successful
+dispatch trigger, not retried on a schedule. A Celery/Redis (or APScheduler)
+periodic sweep of `outbox_events` is the natural upgrade once there is
+operational reason to guarantee delivery independent of new requests arriving.
+
+**Invite-link user provisioning.** `POST /auth/invites` (owner/admin only,
+same role-escalation rule as `POST /auth/users` — an admin cannot invite an
+owner) issues a single-use, 168-hour token reusing the existing
+`public_tokens` table with a new `user_invite` enum value on `token_purpose`
+(migration `0005`, `ALTER TYPE ... ADD VALUE`) rather than a bespoke invites
+table — the invite is structurally identical to every other token this
+codebase already issues (hashed at rest, `expires_at`, `max_uses`,
+`revoked_at`), so reusing the table means invite tokens get the same proven
+expiry/revocation/use-limit enforcement for free instead of a second
+implementation to keep in sync. `GET /auth/invites/{token}` is a read-only
+preview for the accept-invite page (email/role/company name) that never
+consumes a use, so a candidate can reload the page. `POST
+/auth/invites/{token}/accept` consumes the token, creates the user with a
+password the invitee chooses themselves (routed through the same
+`hash_password`/`validate_password_strength` path as signup — no divergent
+validation logic), and logs them straight in. All three 404 identically for
+an unknown, expired, revoked, or already-used token, the same
+enumeration-avoidance stance as the password-reset and invoice pay-link
+endpoints.
+
+One implementation detail worth documenting because it was a real bug caught
+by testing, not a hypothetical: `accept_invite` locks and consumes the
+`public_tokens` row (`SELECT ... FOR UPDATE` + the consuming `UPDATE`) on the
+**same** DB session/transaction as the user `INSERT`, inside one
+`tenant_context`. An earlier draft resolved+locked the token on the
+service-role session (needed first, to discover which tenant the token
+belongs to before a tenant context can even be opened) and then tried to
+consume it on the app-role session used for the tenant-scoped writes — two
+different sessions/connections. That split a row lock from the mutation it
+was protecting: the second session's `UPDATE` blocked forever waiting on the
+first session's still-open, uncommitted lock, which was never released until
+the request ended — a guaranteed hang on every accept-invite call under any
+concurrent load, caught by a hanging test run rather than by inspection. The
+fix — and the general rule now followed anywhere this pattern recurs — is
+that a row lock and the write it guards must never be split across two DB
+sessions; the service-role session here is used only for a non-locking
+precheck (with an explicit `commit()` immediately after, so it never idles in
+a transaction) to learn the tenant, and the actual lock+consume+insert all
+happen together on the app-role session.
+
+**Explicitly out of scope for this phase** (see "Known gaps" below for the
+full list): MFA/TOTP enrollment, and stateful access-token revocation (a
+revoked session's *access* token — as opposed to its refresh token, which
+*is* revoked immediately — still works until it expires, unchanged from
+before this phase).
 
 ## CRM and operations
 
@@ -382,19 +489,22 @@ harboriq/
   alembic/sql/0002_auth.sql           # user roles, sessions, reset tokens, companies RLS
   alembic/sql/0003_crm_operations.sql # customers/vessels/jobs/line items, composite FKs, RLS
   alembic/sql/0004_invoicing.sql      # invoice lifecycle columns, composite FKs, updated_at trigger
+  alembic/sql/0005_auth_hardening.sql # lockout columns + user_invite token_purpose enum value
   alembic/versions/0001_initial_schema.py
   alembic/versions/0002_auth.py
   alembic/versions/0003_crm_operations.py
   alembic/versions/0004_invoicing.py
+  alembic/versions/0005_auth_hardening.py
   app/
-    core/      config, logging, security (argon2 + JWT)
+    core/      config, logging, security (argon2 + JWT), rate_limit (login/reset limiter)
     db/        base, session, tenant, models
     api/       deps (auth + job authorization), errors (domain -> HTTP status)
     api/v1/    routes: auth, customers, vessels, jobs, invoices, health, inventory,
                public, stripe_webhooks
     services/  auth, crud, customers, vessels, jobs, invoices, stripe_billing,
-               state_machines, inventory, public_tokens, outbox, stripe_webhooks
-    schemas/   pydantic models (incl. invoices.py)
+               state_machines, inventory, public_tokens, outbox, outbox_dispatch,
+               email, stripe_webhooks
+    schemas/   pydantic models (incl. invoices.py, invite schemas in auth.py)
   tests/       Postgres-backed integration tests
   frontend/    Vite + React + TS SPA (see "Frontend" below)
   docker-entrypoint-initdb.d/00_roles.sql
@@ -444,22 +554,45 @@ customers (list/search/create + detail with vessels), jobs (list/filter,
 create, detail with line items and status transitions gated by the exact
 same `JobSM` transition map the backend enforces), invoices (list/filter,
 detail with line items/totals, send with a copyable pay link, void gated by
-`InvoiceSM`), a team page, and the public, unauthenticated `/pay/:token`
-invoice page.
+`InvoiceSM`), a team page (now invite-link based, see below), the public,
+unauthenticated `/pay/:token` invoice page, and the public, unauthenticated
+`/accept-invite/:token` page.
+
+**Invite flow (Phase 5).** The Team page's "Send invite" form calls
+`POST /auth/invites` (owner/admin only) instead of asking the admin to pick a
+temporary password for the invitee — the response's `accept_url` is shown
+inline with a copy-to-clipboard button, mirroring the existing invoice
+pay-link pattern in `InvoiceDetailPage.tsx`. `AcceptInvitePage.tsx` is a new
+standalone public route (outside `<ProtectedRoute>`/`<AppShell>`, structured
+like `PublicInvoicePage.tsx`): it calls `GET /auth/invites/{token}` to show
+who/what/where before the invitee commits to anything, then `POST
+/auth/invites/{token}/accept` on submit, and logs the new user straight in
+via `AuthContext.acceptInvite` (the same `applyAuthResponse` path `login`/
+`signup` use) before redirecting to `/`.
 
 **Covered by tests:** the API client's 401-refresh-and-retry logic, the job
-status-transition gating logic, and the invoice send/void visibility logic
-(`src/lib/*.test.ts`) — see "Frontend tests" below.
+status-transition gating logic, the invoice send/void visibility logic
+(`src/lib/*.test.ts`), and, new in Phase 5, component-level tests for the
+invite flow (`src/pages/TeamPage.test.tsx`, `src/pages/AcceptInvitePage.test.tsx`)
+covering invite submission + accept-link display, server-error surfacing
+(duplicate email, reused/expired token), the invite preview render, and the
+login-and-redirect path on successful acceptance — see "Frontend tests"
+below.
 
 **Deferred:**
 
-- **End-to-end browser tests (Playwright).** Only unit/logic-level Vitest
-  tests exist today; nothing drives a real browser through the app yet.
+- **End-to-end browser tests (Playwright).** Only unit/logic-level Vitest +
+  React Testing Library tests exist today; nothing drives a real browser
+  through the app yet. (Playwright itself could not be installed in this
+  sandbox's OS image for the Phase 5 manual smoke test either — verification
+  instead used `tsc -b`, `vite build`, `eslint`, the Vitest suite, and
+  curl-driven backend end-to-end checks against the dev server; see the
+  Phase 5 delivery notes.)
 - **httpOnly-cookie refresh storage.** Noted above — the refresh token is in
   `localStorage` for now.
-- **A real "list teammates" screen.** The backend has no `GET`-all-users
-  endpoint (only `POST /auth/users` to invite, and `GET /auth/me` for self),
-  so the Team page is invite-only and says so on-screen. This is a backend
+- **A real "list teammates" screen.** The backend still has no `GET`-all-users
+  endpoint (only invite-based provisioning and `GET /auth/me` for self), so
+  the Team page remains invite-only and says so on-screen. This is a backend
   gap, not a frontend shortcut — see the gaps list below.
 - Optimistic UI updates, offline support, and any kind of design system
   beyond the shared Tailwind components in `src/components/ui.tsx`.
@@ -472,13 +605,19 @@ npm run test        # vitest run (one-shot)
 npm run test:watch  # vitest (watch mode)
 ```
 
-The suite is intentionally small and logic-focused rather than broad: it
-exists to lock in the three pieces of frontend behavior that would silently
-break the app if regressed — token refresh, job status gating, and invoice
-void/send gating — not to chase coverage numbers. Component rendering and
-user flows are exercised manually and via the backend-facing smoke test
-described in the Phase 4 delivery notes; full Playwright E2E is deferred (see
-above).
+The suite started intentionally small and logic-focused rather than broad: it
+exists to lock in pieces of frontend behavior that would silently break the
+app if regressed — token refresh, job status gating, and invoice void/send
+gating — not to chase coverage numbers. Phase 5 added the first
+component-level tests (`@testing-library/react` + `@testing-library/user-event`,
+already-installed dependencies that were previously unused) for the new
+invite flow, since that flow has enough branching (preview loading/404,
+submit success/failure, redirect-on-success) that logic-only unit tests would
+not have caught the same class of mistake. Full user flows beyond that are
+still exercised manually and via the backend-facing smoke test described in
+the delivery notes for each phase; full Playwright E2E remains deferred (see
+above — also not installable in this sandbox's OS image, an environment
+limitation rather than a scope decision).
 
 ## What's intentionally NOT here yet
 
@@ -491,11 +630,26 @@ team-roster screen) are listed at the end of "Frontend" above.
 
 Known gaps in the auth layer specifically:
 
-- No login rate limiting or account lockout — add before public exposure.
-- No email transport: `dispatch_pending` in `services/outbox.py` is still a
-  skeleton, so password-reset tokens sit in `outbox_events`.
+- **Fixed in Phase 5:** login rate limiting (per-IP, in-process) and account
+  lockout (5 failures / 15 min) now exist — see "Auth hardening" above. The
+  remaining gap is that the rate limiter is in-process, not shared across
+  multiple backend instances (see that section for the Redis upgrade path).
+- **Fixed in Phase 5:** `dispatch_pending` in `services/outbox.py` now sends
+  real email via SMTP when configured, console-logs it otherwise, and is
+  triggered by `BackgroundTasks` right after each triggering commit. The
+  remaining gap is that `BackgroundTasks` jobs do not survive a process
+  crash/restart and there is no scheduled retry sweep independent of new
+  requests arriving — a Celery/Redis or APScheduler periodic dispatcher is
+  the natural next step (see "Auth hardening" above).
+- **Fixed in Phase 5:** provisioning a new teammate no longer requires an
+  admin to choose the initial password — `POST /auth/invites` +
+  `AcceptInvitePage.tsx` let the invitee set their own password via a
+  one-time link. `POST /auth/users` (admin sets the password directly) still
+  exists and is unchanged, for scripts/seeding.
 - No MFA yet, though `users.mfa_secret_enc` is reserved for it.
-- Provisioning a user requires the admin to choose an initial password; there
-  is no invite-link flow.
 - A revoked session's access token stays valid until it expires
-  (`ACCESS_TOKEN_TTL_MINUTES`, default 15).
+  (`ACCESS_TOKEN_TTL_MINUTES`, default 15). Stateful access-token revocation
+  (e.g. a denylist checked per-request) was explicitly out of scope for
+  Phase 5.
+- No `GET`-all-users endpoint yet, so the frontend Team page cannot show a
+  real roster — tracked in "Frontend" → "Deferred" above.

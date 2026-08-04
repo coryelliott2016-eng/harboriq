@@ -21,6 +21,7 @@ interface AuthContextValue {
     password: string;
     full_name?: string;
   }) => Promise<void>;
+  acceptInvite: (token: string, input: { password: string; full_name?: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -73,6 +74,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const acceptInvite = useCallback(
+    async (token: string, input: { password: string; full_name?: string }) => {
+      const resp = await authApi.acceptInvite(token, input);
+      applyAuthResponse(resp, setUser);
+    },
+    [],
+  );
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -87,8 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, signup, logout }),
-    [user, loading, login, signup, logout],
+    () => ({ user, loading, login, signup, acceptInvite, logout }),
+    [user, loading, login, signup, acceptInvite, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

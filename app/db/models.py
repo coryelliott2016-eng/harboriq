@@ -128,6 +128,13 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Account lockout (migration 0005). Mutated only inside `auth_service.login`
+    # under the same row lock (`SELECT ... FOR UPDATE`) as the rest of the
+    # login transaction — never a separate round-trip.
+    failed_login_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         Index("uq_users_company_email", "company_id", "email", unique=True),
@@ -653,7 +660,14 @@ class PublicToken(UUIDPKMixin, Base):
     resource_type: Mapped[str] = mapped_column(Text, nullable=False)
     resource_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     purpose: Mapped[str] = mapped_column(
-        Enum("estimate_approve", "invoice_pay", "intake_form", "document_upload", name="token_purpose"),
+        Enum(
+            "estimate_approve",
+            "invoice_pay",
+            "intake_form",
+            "document_upload",
+            "user_invite",
+            name="token_purpose",
+        ),
         nullable=False,
     )
     token_hash: Mapped[str] = mapped_column(Text, unique=True, nullable=False)

@@ -41,6 +41,42 @@ class Settings(BaseSettings):
     password_reset_ttl_minutes: int = 60
     password_min_length: int = 12
 
+    # --- Account lockout / rate limiting ---
+    # After this many consecutive bad passwords, the account is locked for
+    # `login_lockout_minutes` even against the correct password (see README,
+    # "Auth" / "Known gaps"). Deliberately generous enough not to lock out a
+    # user who fat-fingers a password a couple of times, tight enough to make
+    # online guessing impractical.
+    login_max_failed_attempts: int = 5
+    login_lockout_minutes: int = 15
+    # In-process, per-IP sliding-window limiter — see `app/core/rate_limit.py`.
+    # Deliberately NOT coordinated across instances; the natural upgrade once
+    # horizontally scaled is a Redis-backed limiter (e.g. token bucket keyed
+    # by IP in Redis, shared by every app process). One process today, so the
+    # in-memory version is honestly proportionate rather than a real
+    # production-scale guarantee.
+    rate_limit_requests_per_window: int = 10
+    rate_limit_window_seconds: int = 60
+
+    # --- Invite tokens ---
+    invite_ttl_hours: int = 24 * 7
+
+    # --- Email transport ---
+    # Empty smtp_host (the dev default) means "console transport": send_email
+    # logs the message instead of dialing out, mirroring stripe_billing.py's
+    # graceful degrade when stripe_api_key is unset. Setting smtp_host turns
+    # on real delivery via smtplib.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+    email_from_address: str = "no-reply@harboriq.app"
+    # The FRONTEND's origin (Vite dev server in development) — used to build
+    # absolute links in emails, e.g. /accept-invite/:token and /pay/:token.
+    # The API itself never renders these pages.
+    app_base_url: str = "http://localhost:5173"
+
     # --- CORS ---
     # Comma-separated in the env var (CORS_ALLOW_ORIGINS); defaults to the
     # Vite dev server so `npm run dev` works against a local API out of the

@@ -1,8 +1,17 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+)
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_service_db
 from app.schemas.webhooks import StripeEvent
+from app.services.outbox_dispatch import dispatch_outbox_soon
 from app.services.stripe_webhooks import handle_stripe_webhook
 
 router = APIRouter()
@@ -11,6 +20,7 @@ router = APIRouter()
 @router.post("/webhooks/stripe")
 async def stripe_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_service_db),
     stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
 ):
@@ -32,4 +42,5 @@ async def stripe_webhook(
     # TODO: verify signature here (requires raw body + STRIPE_WEBHOOK_SECRET).
 
     status = handle_stripe_webhook(db, event.id, event.type, event.model_dump())
+    dispatch_outbox_soon(background_tasks)
     return Response(status_code=status)

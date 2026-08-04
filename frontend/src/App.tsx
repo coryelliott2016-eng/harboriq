@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { canManageUsers, useAuth } from "./context/AuthContext";
+import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { CustomerDetailPage } from "./pages/CustomerDetailPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -34,6 +35,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/pay/:token" element={<PublicInvoicePage />} />
+      <Route path="/accept-invite/:token" element={<AcceptInvitePage />} />
 
       {/* Authenticated app shell */}
       <Route element={<ProtectedRoute />}>

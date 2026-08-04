@@ -331,7 +331,11 @@ def send_invoice(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> d
             db,
             company_id,
             "invoice.send",
-            {"invoice_id": str(invoice_id), "pay_url": pay_url},
+            {
+                "invoice_id": str(invoice_id),
+                "pay_url": pay_url,
+                "customer_email": customer_email,
+            },
         )
         db.commit()
 

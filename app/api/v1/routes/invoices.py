@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company_id, get_db, require_operations
@@ -27,6 +27,7 @@ from app.schemas.invoices import (
     VoidInvoiceResponse,
 )
 from app.services import invoices as service
+from app.services.outbox_dispatch import dispatch_outbox_soon
 
 router = APIRouter(
     prefix="/invoices", tags=["invoices"], dependencies=[Depends(require_operations)]
@@ -91,6 +92,7 @@ def get_invoice(
 @router.post("/{invoice_id}/send", response_model=InvoiceSendResponse)
 def send_invoice(
     invoice_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     company_id: uuid.UUID = Depends(get_current_company_id),
 ):
@@ -99,6 +101,7 @@ def send_invoice(
     this — the shop can still hand the customer the pay link."""
     with http_errors():
         result = service.send_invoice(db, company_id, invoice_id)
+    dispatch_outbox_soon(background_tasks)
     return InvoiceSendResponse(
         invoice=result["invoice"], pay_token=result["pay_token"], pay_url=result["pay_url"]
     )

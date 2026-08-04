@@ -62,6 +62,22 @@ def _truncate(service_engine):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """Reset the in-process per-IP rate limiters before each test.
+
+    They are module-level dicts (see `app/core/rate_limit.py`) so state would
+    otherwise leak across tests in the same process — the whole suite hits
+    `POST /auth/login` etc. from the TestClient's fixed loopback address, so
+    without this every test after the ~10th login in a module would see a
+    spurious 429 that has nothing to do with what that test is checking.
+    """
+    from app.core.rate_limit import _reset_all_for_tests
+
+    _reset_all_for_tests()
+    yield
+
+
 @pytest.fixture
 def app_db(app_engine) -> Iterator[Session]:
     maker = sessionmaker(bind=app_engine, class_=Session, expire_on_commit=False)

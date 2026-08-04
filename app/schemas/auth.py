@@ -67,3 +67,44 @@ class AuthResponse(BaseModel):
 
 class LogoutResponse(BaseModel):
     revoked_sessions: int
+
+
+class CreateInviteRequest(BaseModel):
+    email: EmailStr
+    role: UserRole = UserRole.TECHNICIAN
+    full_name: str | None = Field(default=None, max_length=200)
+
+
+class InviteOut(BaseModel):
+    """Returned by `POST /auth/invites`.
+
+    Includes the raw accept URL in the response body — the same judgement
+    call `send_invoice` already makes for its pay link (see
+    `InvoiceSendResponse.pay_url`): there is no task queue/worker UI yet for
+    the actor to go re-fetch it from, and the actor is a trusted admin who
+    just requested this invite, so handing them the link directly (to paste
+    into Slack/email themselves if delivery is slow) is a reasonable MVP
+    trade-off, not a security regression — the link is only useful to
+    whoever already holds it.
+    """
+
+    email: str
+    role: str
+    full_name: str | None
+    company_name: str
+    expires_in_hours: int
+    accept_url: str
+
+
+class InvitePreviewOut(BaseModel):
+    """Returned by `GET /auth/invites/{token}` for the accept-invite page."""
+
+    email: str
+    role: str
+    full_name: str | None
+    company_name: str
+
+
+class AcceptInviteRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=1024)
+    full_name: str | None = Field(default=None, max_length=200)

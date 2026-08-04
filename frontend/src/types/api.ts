@@ -25,6 +25,35 @@ export interface AuthResponse {
   tokens: TokenPair;
 }
 
+// --- Invite-link user provisioning ---
+
+export interface CreateInviteInput {
+  email: string;
+  role: UserRole;
+  full_name?: string;
+}
+
+export interface InviteOut {
+  email: string;
+  role: UserRole;
+  full_name: string | null;
+  company_name: string;
+  expires_in_hours: number;
+  accept_url: string;
+}
+
+export interface InvitePreview {
+  email: string;
+  role: UserRole;
+  full_name: string | null;
+  company_name: string;
+}
+
+export interface AcceptInviteInput {
+  password: string;
+  full_name?: string;
+}
+
 // --- Customers ---
 
 export interface Customer {
