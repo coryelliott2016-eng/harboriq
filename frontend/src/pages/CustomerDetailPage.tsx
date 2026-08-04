@@ -23,6 +23,14 @@ export function CustomerDetailPage() {
   const { user } = useAuth();
   const canWrite = canManageOperations(user?.role);
   const [showNewVessel, setShowNewVessel] = useState(false);
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+
+  const inviteMutation = useMutation({
+    mutationFn: () => customersApi.sendPortalInvite(id!),
+    onSuccess: () => setInviteStatus("Portal invite sent."),
+    onError: (err) =>
+      setInviteStatus(err instanceof ApiError ? err.message : "Failed to send portal invite."),
+  });
 
   const customerQuery = useQuery({
     queryKey: ["customers", id],
@@ -52,7 +60,15 @@ export function CustomerDetailPage() {
         <Link to="/customers" className="text-sm text-slate-500 hover:underline">
           ← All customers
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-900">{customerName(customer)}</h1>
+        <div className="mt-1 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-slate-900">{customerName(customer)}</h1>
+          {canWrite && (
+            <Button variant="secondary" onClick={() => inviteMutation.mutate()} disabled={inviteMutation.isPending}>
+              {inviteMutation.isPending ? "Sending…" : "Send portal invite"}
+            </Button>
+          )}
+        </div>
+        {inviteStatus && <p className="mt-2 text-sm text-slate-600">{inviteStatus}</p>}
       </div>
 
       <Card className="grid grid-cols-2 gap-4 p-5 text-sm sm:grid-cols-3">

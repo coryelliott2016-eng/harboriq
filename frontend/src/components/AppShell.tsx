@@ -48,6 +48,20 @@ export function AppShell() {
               AR aging
             </NavLink>
           )}
+          {canManageOperations(user?.role) && (
+            <NavLink
+              to="/messages"
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 text-sm font-medium ${
+                  isActive
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`
+              }
+            >
+              Messages
+            </NavLink>
+          )}
           {canManageUsers(user?.role) && (
             <NavLink
               to="/settings/billing"

@@ -13,6 +13,7 @@ import type {
   Invoice,
   InvoiceDetail,
   InvoiceSendResponse,
+  InboxMessage,
   InviteOut,
   InvitePreview,
   Job,
@@ -22,9 +23,18 @@ import type {
   JobLineItem,
   JobLineItemInput,
   JobStatus,
+  Message,
+  MessageCreate,
+  PortalApproveToken,
+  PortalEstimate,
+  PortalInvoice,
+  PortalInviteResponse,
+  PortalJob,
+  PortalMe,
   PublicInvoice,
   RefundInput,
   RefundResponse,
+  StaffMessageCreate,
   User,
   UserRole,
   Vessel,
@@ -80,6 +90,8 @@ export const customersApi = {
     api.patch<Customer>(`/customers/${id}`, body),
   remove: (id: string) => api.delete<void>(`/customers/${id}`),
   vessels: (id: string) => api.get<Vessel[]>(`/customers/${id}/vessels`),
+  sendPortalInvite: (id: string) =>
+    api.post<PortalInviteResponse>(`/customers/${id}/portal-invite`, {}),
 };
 
 // --- vessels ---
@@ -162,4 +174,44 @@ export const reportsApi = {
 export const publicApi = {
   getInvoice: (token: string) =>
     apiRequest<PublicInvoice>(`/public/invoice/${token}`, { anonymous: true }),
+};
+
+// --- customer self-service portal (Phase 9, unauthenticated + magic link) ---
+
+export const portalApi = {
+  me: (token: string) => apiRequest<PortalMe>(`/portal/${token}/me`, { anonymous: true }),
+  jobs: (token: string) =>
+    apiRequest<PortalJob[]>(`/portal/${token}/jobs`, { anonymous: true }),
+  invoices: (token: string) =>
+    apiRequest<PortalInvoice[]>(`/portal/${token}/invoices`, { anonymous: true }),
+  invoicePayUrl: (token: string, invoiceId: string) =>
+    apiRequest<{ checkout_url: string | null }>(
+      `/portal/${token}/invoices/${invoiceId}/pay-url`,
+      { anonymous: true },
+    ),
+  estimates: (token: string) =>
+    apiRequest<PortalEstimate[]>(`/portal/${token}/estimates`, { anonymous: true }),
+  estimateApproveToken: (token: string, estimateId: string) =>
+    apiRequest<PortalApproveToken>(
+      `/portal/${token}/estimates/${estimateId}/approve-token`,
+      { method: "POST", anonymous: true },
+    ),
+  messages: (token: string) =>
+    apiRequest<Message[]>(`/portal/${token}/messages`, { anonymous: true }),
+  sendMessage: (token: string, body: MessageCreate) =>
+    apiRequest<Message>(`/portal/${token}/messages`, {
+      method: "POST",
+      body,
+      anonymous: true,
+    }),
+};
+
+// --- staff-side customer messaging (Phase 9) ---
+
+export const messagesApi = {
+  inbox: (unreadOnly = false) =>
+    api.get<InboxMessage[]>("/messages", { unread_only: unreadOnly }),
+  reply: (body: StaffMessageCreate) => api.post<Message>("/messages", body),
+  markRead: (id: string) => api.post<Message>(`/messages/${id}/read`, {}),
+  byJob: (jobId: string) => api.get<Message[]>(`/messages/by-job/${jobId}`),
 };

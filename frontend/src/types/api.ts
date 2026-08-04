@@ -342,6 +342,106 @@ export interface PublicInvoice {
   checkout_url: string | null;
 }
 
+// --- Customer self-service portal (Phase 9) ---
+// Mirrors app/schemas/portal.py exactly. Decimal fields are strings, same
+// convention as the rest of this file.
+
+export interface PortalVessel {
+  id: string;
+  name: string | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  hull_id: string | null;
+  registration: string | null;
+}
+
+export interface PortalMe {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  vessels: PortalVessel[];
+}
+
+export interface PortalJob {
+  id: string;
+  title: string | null;
+  status: JobStatus;
+  scheduled_at: string | null;
+  scheduled_end_at: string | null;
+  completed_at: string | null;
+  vessel_id: string | null;
+  technician_name: string | null;
+}
+
+export interface PortalInvoice {
+  id: string;
+  status: InvoiceStatus;
+  currency: string;
+  subtotal: string;
+  tax_total: string;
+  total: string;
+  amount_paid: string;
+  balance_due: string;
+  due_date: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+export interface PortalEstimate {
+  id: string;
+  job_id: string | null;
+  status: string;
+  currency: string;
+  subtotal: string;
+  tax_total: string;
+  total: string;
+  approved_at: string | null;
+  created_at: string;
+}
+
+export interface PortalApproveToken {
+  approve_path: string;
+}
+
+export interface PortalInviteResponse {
+  customer_id: string;
+  outbox_event_id: number;
+}
+
+// --- Customer <-> staff messaging (Phase 9) ---
+// Mirrors app/schemas/messages.py exactly.
+
+export type MessageSenderType = "customer" | "staff";
+
+export interface MessageCreate {
+  body: string;
+  job_id?: string | null;
+}
+
+export interface Message {
+  id: string;
+  company_id: string;
+  customer_id: string;
+  job_id: string | null;
+  sender_type: MessageSenderType;
+  sender_user_id: string | null;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface StaffMessageCreate extends MessageCreate {
+  customer_id: string;
+}
+
+export interface InboxMessage extends Message {
+  customer_label: string | null;
+}
+
 // --- Stripe Connect + dunning (Phase 8) ---
 // Mirrors app/schemas/billing.py exactly.
 

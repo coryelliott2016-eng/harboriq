@@ -13,9 +13,15 @@ import { InvoicesPage } from "./pages/InvoicesPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
 import { JobsPage } from "./pages/JobsPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MessagesPage } from "./pages/MessagesPage";
 import { PublicInvoicePage } from "./pages/PublicInvoicePage";
 import { SignupPage } from "./pages/SignupPage";
 import { TeamPage } from "./pages/TeamPage";
+import { PortalHome } from "./portal/PortalHome";
+import { PortalJobs } from "./portal/PortalJobs";
+import { PortalInvoices } from "./portal/PortalInvoices";
+import { PortalEstimates } from "./portal/PortalEstimates";
+import { PortalMessages } from "./portal/PortalMessages";
 
 function TeamRoute() {
   const { user } = useAuth();
@@ -56,6 +62,19 @@ function ArAgingRoute() {
   return <ArAgingPage />;
 }
 
+function MessagesRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. Customer messages are limited to
+        owners, admins, and office staff.
+      </div>
+    );
+  }
+  return <MessagesPage />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -64,6 +83,15 @@ export default function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/pay/:token" element={<PublicInvoicePage />} />
       <Route path="/accept-invite/:token" element={<AcceptInvitePage />} />
+
+      {/* Customer self-service portal (Phase 9) — magic-link, no staff auth.
+          Deliberately isolated from the staff AppShell/nav: these pages
+          render their own PortalLayout, not <AppShell />. */}
+      <Route path="/portal/:token" element={<PortalHome />} />
+      <Route path="/portal/:token/jobs" element={<PortalJobs />} />
+      <Route path="/portal/:token/invoices" element={<PortalInvoices />} />
+      <Route path="/portal/:token/estimates" element={<PortalEstimates />} />
+      <Route path="/portal/:token/messages" element={<PortalMessages />} />
 
       {/* Authenticated app shell */}
       <Route element={<ProtectedRoute />}>
@@ -76,6 +104,7 @@ export default function App() {
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
           <Route path="/reports/ar-aging" element={<ArAgingRoute />} />
+          <Route path="/messages" element={<MessagesRoute />} />
           <Route path="/settings/billing" element={<BillingSettingsRoute />} />
           <Route path="/team" element={<TeamRoute />} />
         </Route>
