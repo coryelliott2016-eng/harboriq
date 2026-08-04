@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
@@ -61,5 +62,11 @@ class CustomerOut(BaseModel):
     postal_code: str | None
     country: str | None
     notes: str | None
+    # Derived server-side by geocoding address_line1/city/state/postal_code
+    # (Phase 10) -- never accepted from the client, always None until a
+    # geocode call succeeds. Decimal fields serialize as JSON strings,
+    # matching every other Decimal field in this codebase.
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
     created_at: datetime
     updated_at: datetime

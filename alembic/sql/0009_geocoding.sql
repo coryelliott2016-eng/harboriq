@@ -1,0 +1,28 @@
+-- HarborIQ v2 — Geocoding integration (Phase 10).
+-- Executed verbatim by Alembic migration 0009_geocoding.
+--
+-- Users already have `home_latitude`/`home_longitude` (migration 0006, for
+-- the dispatch engine's distance factor) but no free-text address field to
+-- geocode FROM -- a technician has never had anywhere to type their home
+-- address. This migration adds exactly one column: `address_text`, a raw
+-- one-line address string. It is intentionally NOT structured into
+-- line1/city/state/postal_code the way `customers` is -- a technician's
+-- home address is entered once via self-service profile edit and only ever
+-- consumed by the geocoder as a single opaque string, so the extra schema
+-- normalization `customers` needs for reporting/search buys nothing here
+-- for an MVP. Nullable: a technician who never sets an address keeps
+-- `home_latitude`/`home_longitude` NULL, and the dispatch engine's distance
+-- factor already degrades to neutral for that case (see
+-- app/services/dispatch.py::_score_distance).
+--
+-- `companies` gets NO new column in this migration. It already has
+-- `latitude`/`longitude` (migration 0006) but, unlike `users` and
+-- `customers`, has no free-text address field and no existing route for
+-- editing company settings at all (billing.py's admin routes are Stripe
+-- Connect onboarding/status/dunning only) -- there is nothing to geocode
+-- FROM and no natural place to add one without inventing an unrelated
+-- company-settings feature outside this phase's scope. See README's
+-- deferred-items note for the full reasoning; company geocoding remains
+-- backfill-only against whatever `latitude`/`longitude` a company already
+-- has set by hand.
+ALTER TABLE users ADD COLUMN address_text TEXT;

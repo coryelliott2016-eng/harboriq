@@ -25,11 +25,15 @@ import { PortalMessages } from "./portal/PortalMessages";
 
 function TeamRoute() {
   const { user } = useAuth();
-  if (!canManageUsers(user?.role)) {
+  // Phase 10: viewing the roster is require_operations-equivalent
+  // (owner/admin/office) to match the backend's GET /users gate
+  // (app/api/v1/routes/users.py) -- editing someone ELSE's profile still
+  // requires admin, enforced both in TeamPage.tsx and server-side.
+  if (!canManageOperations(user?.role)) {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        You don't have permission to view this page. Team management is limited to
-        owners and admins.
+        You don't have permission to view this page. The team roster is limited to
+        owners, admins, and office staff.
       </div>
     );
   }

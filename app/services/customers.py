@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.tenant import tenant_context
+from app.services import geocoding
 from app.services.crud import (
     Conflict,
     NotFound,
@@ -31,18 +32,45 @@ UPDATABLE_COLUMNS = frozenset(
     }
 )
 
+#: Address-bearing columns that, on any change, trigger re-geocoding into
+#: `latitude`/`longitude` (see `_geocode_if_address_changed`). Not part of
+#: `UPDATABLE_COLUMNS`'s write-through to `latitude`/`longitude` directly —
+#: those two are always derived server-side, never accepted from the client.
+_ADDRESS_COLUMNS = frozenset({"address_line1", "city", "state", "postal_code"})
+
 _INSERT = text(
     """
     INSERT INTO customers
         (company_id, first_name, last_name, company_name, email, phone,
-         address_line1, address_line2, city, state, postal_code, country, notes)
+         address_line1, address_line2, city, state, postal_code, country, notes,
+         latitude, longitude)
     VALUES
         (:company_id, :first_name, :last_name, :company_name, :email, :phone,
          :address_line1, :address_line2, :city, :state, :postal_code,
-         :country, :notes)
+         :country, :notes, :latitude, :longitude)
     RETURNING *
     """
 )
+
+
+def _geocode_address(data: dict[str, Any]) -> tuple[Any, Any]:
+    """Geocode a customer's address_line1/city/state/postal_code, if any is
+    present. Graceful degradation: no address at all, or a geocoding
+    failure (timeout, non-200, no match), both simply mean the customer is
+    saved with null coordinates — never blocks the save. Consistent with how
+    the dispatch engine already treats missing customer coordinates.
+    """
+    parts = [
+        data.get("address_line1"),
+        data.get("city"),
+        data.get("state"),
+        data.get("postal_code"),
+    ]
+    address = ", ".join(p for p in parts if p and str(p).strip())
+    if not address:
+        return None, None
+    result = geocoding.geocode(address)
+    return result if result is not None else (None, None)
 
 
 def _map_integrity_error(exc: IntegrityError) -> Exception:
@@ -58,6 +86,7 @@ def create(db: Session, company_id: uuid.UUID, data: dict[str, Any]) -> Row:
     params = {"company_id": company_id} | {
         column: data.get(column) for column in sorted(UPDATABLE_COLUMNS)
     }
+    params["latitude"], params["longitude"] = _geocode_address(params)
     try:
         with tenant_context(db, company_id):
             row = db.execute(_INSERT, params).first()
@@ -129,10 +158,27 @@ def update(
     if not changes:
         return get(db, company_id, customer_id)
 
+    write_columns = UPDATABLE_COLUMNS | {"latitude", "longitude"}
+    if _ADDRESS_COLUMNS & set(changes):
+        # Any address component changed -> re-geocode from the FULL address
+        # (existing row values merged with the incoming changes), not just
+        # the fields that happened to be in this PATCH, so e.g. changing
+        # only `city` still geocodes the complete address rather than just
+        # the new city name in isolation.
+        current = get(db, company_id, customer_id)
+        merged = {
+            "address_line1": changes.get("address_line1", current.address_line1),
+            "city": changes.get("city", current.city),
+            "state": changes.get("state", current.state),
+            "postal_code": changes.get("postal_code", current.postal_code),
+        }
+        changes = dict(changes)
+        changes["latitude"], changes["longitude"] = _geocode_address(merged)
+
     statement = text(
         f"""
         UPDATE customers
-           SET {assignments(changes, UPDATABLE_COLUMNS)}, updated_at = now()
+           SET {assignments(changes, write_columns)}, updated_at = now()
          WHERE id = :id
         RETURNING *
         """

@@ -76,7 +76,7 @@ export function AppShell() {
               Billing settings
             </NavLink>
           )}
-          {canManageUsers(user?.role) && (
+          {canManageOperations(user?.role) && (
             <NavLink
               to="/team"
               className={({ isActive }) =>

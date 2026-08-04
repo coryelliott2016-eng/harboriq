@@ -13,6 +13,26 @@ export interface User {
   is_active: boolean;
 }
 
+// Phase 10: the team roster (GET /users) and profile edit (PATCH /users/{id})
+// response shape -- a superset of `User` with skills/address/coordinates.
+// See app/schemas/auth.py::TeamMemberOut.
+export interface TeamMember extends User {
+  skills: string[];
+  address_text: string | null;
+  home_latitude: string | null;
+  home_longitude: string | null;
+}
+
+// Every field optional (partial update). Sending `role`/`is_active` as a
+// non-admin is rejected server-side with 403 -- see app/services/users.py.
+export interface UserUpdateInput {
+  full_name?: string | null;
+  skills?: string[] | null;
+  address_text?: string | null;
+  role?: UserRole | null;
+  is_active?: boolean | null;
+}
+
 export interface TokenPair {
   access_token: string;
   refresh_token: string;

@@ -35,8 +35,10 @@ import type {
   RefundInput,
   RefundResponse,
   StaffMessageCreate,
+  TeamMember,
   User,
   UserRole,
+  UserUpdateInput,
   Vessel,
   VesselInput,
   VoidInvoiceResponse,
@@ -78,6 +80,13 @@ export const authApi = {
       body,
       anonymous: true,
     }),
+};
+
+// --- team roster + self-service/admin profile editing (Phase 10) ---
+
+export const usersApi = {
+  list: () => api.get<TeamMember[]>("/users"),
+  update: (id: string, body: UserUpdateInput) => api.patch<TeamMember>(`/users/${id}`, body),
 };
 
 // --- customers ---

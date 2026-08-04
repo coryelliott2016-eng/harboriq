@@ -5,6 +5,7 @@ from app.api.v1.routes import (
     billing,
     customers,
     dispatch,
+    geocode_admin,
     health,
     inventory,
     invoices,
@@ -14,12 +15,14 @@ from app.api.v1.routes import (
     public,
     reports,
     stripe_webhooks,
+    users,
     vessels,
 )
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(auth.router)
+api_router.include_router(users.router)
 api_router.include_router(customers.router)
 api_router.include_router(vessels.router)
 api_router.include_router(jobs.router)
@@ -32,3 +35,4 @@ api_router.include_router(public.router, tags=["public"])
 api_router.include_router(portal.router)
 api_router.include_router(messages.router)
 api_router.include_router(stripe_webhooks.router, tags=["webhooks"])
+api_router.include_router(geocode_admin.router)

@@ -32,6 +32,10 @@ dependencies = [
     "argon2-cffi>=23.1",
     "prometheus-client>=0.20",
     "sentry-sdk[fastapi]>=2.0",
+    # Geocoding (Phase 10): app/services/geocoding.py calls OpenStreetMap
+    # Nominatim over plain HTTPS. A real runtime dependency, not test-only —
+    # promoted here from what used to be a dev-only transitive install.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

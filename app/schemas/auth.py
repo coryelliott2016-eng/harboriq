@@ -1,3 +1,6 @@
+import uuid
+from decimal import Decimal
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.db.models import UserRole
@@ -49,6 +52,51 @@ class UserOut(BaseModel):
     full_name: str | None
     role: str
     is_active: bool
+
+
+class TeamMemberOut(BaseModel):
+    """Returned by `GET /users` (team roster) and `PATCH /users/{id}`.
+
+    Superset of `UserOut` with the Phase 10 profile fields. Kept as a
+    separate model rather than widening `UserOut` itself so the auth
+    endpoints (`/auth/me`, `/auth/login`, etc.) keep their existing,
+    already-relied-upon response shape unchanged.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    company_id: uuid.UUID
+    email: str
+    full_name: str | None
+    role: str
+    is_active: bool
+    skills: list[str] = Field(default_factory=list)
+    address_text: str | None = None
+    #: Decimal fields are serialized as JSON strings, matching every other
+    #: Decimal field in this codebase (Pydantic's default encoding) — see
+    #: `app/schemas/dispatch.py`'s comment on the same pattern.
+    home_latitude: Decimal | None = None
+    home_longitude: Decimal | None = None
+
+
+class UserUpdate(BaseModel):
+    """`PATCH /users/{id}` body.
+
+    Every field is optional (partial update); which fields the caller may
+    actually set depends on whether they are editing themselves or acting
+    as an admin — see `app/services/users.py::update_profile`. All fields
+    use pydantic's `exclude_unset` sentinel behavior: a field the client
+    never sent is simply absent from `model_dump(exclude_unset=True)`,
+    distinct from a field explicitly sent as `null`.
+    """
+
+    full_name: str | None = Field(default=None, max_length=200)
+    skills: list[str] | None = None
+    #: Raw one-line home address; set to "" or null to clear both the
+    #: address and any previously-geocoded coordinates.
+    address_text: str | None = Field(default=None, max_length=500)
+    role: UserRole | None = None
+    is_active: bool | None = None
 
 
 class TokenPair(BaseModel):

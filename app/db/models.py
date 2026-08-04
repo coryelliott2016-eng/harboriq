@@ -173,6 +173,12 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     #: when unset.
     home_latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
     home_longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    #: Raw one-line home address (migration 0009), set via self-service
+    #: profile edit (`PATCH /users/{id}`). Geocoded on save into
+    #: `home_latitude`/`home_longitude` by `app/services/geocoding.py`; kept
+    #: even when geocoding fails so the address itself is never lost, and
+    #: re-geocodable later by the backfill job.
+    address_text: Mapped[Optional[str]] = mapped_column(Text)
 
     __table_args__ = (
         Index("uq_users_company_email", "company_id", "email", unique=True),
