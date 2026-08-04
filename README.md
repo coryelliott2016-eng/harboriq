@@ -5,17 +5,20 @@ build plan: every issue from the technical critique is fixed at the code level.
 
 > **Status:** scaffold, real authentication, the CRM/operations core
 > (customers, vessels, work orders), **invoicing + Stripe payment
-> collection**, the **React frontend**, **deployment/observability
-> hardening** (structured logging, `/metrics`, optional Sentry, hardened
-> Docker images, CI, and backups — see `docs/DEPLOYMENT.md`), and a
-> **rule-based AI dispatch/prioritization engine** (see "AI dispatch
-> engine" below) are all real and runnable. Models, migrations, services,
-> routes, and tests for the **critical fixes**, for **auth + tenant
-> onboarding**, for **customers/vessels/jobs**, for **invoices/payments**,
-> and for **dispatch scoring** all exist and pass. Stripe Connect
-> onboarding and a trained ML dispatch model are intentionally out of
-> scope — see `../HarborIQ_v2_Corrected_Build_Spec.md` for the roadmap and
-> "What's intentionally NOT here yet" below for the full deferred list.
+> collection**, **Stripe Connect onboarding, refunds, PDF/email invoice
+> delivery, dunning, and AR aging** (see "Billing operations" below), the
+> **React frontend**, **deployment/observability hardening** (structured
+> logging, `/metrics`, optional Sentry, hardened Docker images, CI, and
+> backups — see `docs/DEPLOYMENT.md`), and a **rule-based AI
+> dispatch/prioritization engine** (see "AI dispatch engine" below) are all
+> real and runnable. Models, migrations, services, routes, and tests for the
+> **critical fixes**, for **auth + tenant onboarding**, for
+> **customers/vessels/jobs**, for **invoices/payments/refunds/dunning/AR
+> aging**, and for **dispatch scoring** all exist and pass. Destination
+> charges / application-fee revenue on top of Stripe Connect and a trained
+> ML dispatch model are intentionally out of scope — see
+> `../HarborIQ_v2_Corrected_Build_Spec.md` for the roadmap and "What's
+> intentionally NOT here yet" below for the full deferred list.
 
 ## Stack
 
@@ -101,6 +104,11 @@ tests/test_auth_invites.py              # invite create/preview/accept, role-esc
 tests/test_dispatch_scoring.py          # pure scoring-function unit tests: urgency, revenue, distance, skill fit, workload
 tests/test_dispatch_candidates.py       # ranked candidates endpoint, RBAC, tenant isolation, recompute persistence
 tests/test_dispatch_queue.py            # ?sort=priority_score ordering, unscored jobs sort last, invalid sort -> 422
+tests/test_stripe_connect.py            # Connect onboarding link, status, webhook account.updated, direct-charge fallback
+tests/test_refunds.py                   # full/partial refunds, InvoiceSM transitions, over-refund rejected
+tests/test_invoice_pdf_email.py         # PDF bytes generated, outbox invoice.send consumed into an actual email
+tests/test_dunning.py                   # overdue selection, last_reminder_sent_at cadence, idempotent re-runs
+tests/test_ar_aging.py                  # bucket math (1-30/31-60/61-90/90+), per-customer + grand totals
 ```
 
 ## API surface
@@ -161,6 +169,11 @@ its server-side logs (see `app/api/middleware.py`, and
 | GET | `/api/v1/invoices/{id}` | bearer, owner/admin/office | one invoice with its frozen line items |
 | POST | `/api/v1/invoices/{id}/send` | bearer, owner/admin/office | draft -> sent; mints a Stripe Checkout Session (best-effort) and a public pay token |
 | POST | `/api/v1/invoices/{id}/void` | bearer, owner/admin/office | draft/sent -> void; 409 if any payment has already landed; frees line items for re-invoicing |
+| POST | `/api/v1/invoices/{id}/refund` | bearer, owner/admin/office | full/partial refund against `amount_paid`; lands on `refunded`/`partially_refunded` via `InvoiceSM` |
+| POST | `/api/v1/billing/connect/onboarding-link` | bearer, owner/admin | create (or resume) this company's Stripe Connect account + a fresh onboarding link |
+| GET | `/api/v1/billing/connect/status` | bearer, owner/admin | this company's Connect account id + `charges_enabled`/`details_submitted` |
+| POST | `/api/v1/billing/dunning/run` | bearer, owner/admin | run the overdue-reminder sweep on demand; returns reminded invoice ids |
+| GET | `/api/v1/reports/ar-aging` | bearer, owner/admin/office | outstanding balances bucketed 1-30/31-60/61-90/90+ days past due, per customer + totals |
 | GET | `/api/v1/public/invoice/{token}` | public token | read-only pay page: invoice, line items, live checkout URL |
 | POST | `/api/v1/public/estimate/{token}/approve` | public token | public estimate approval (e-sign) |
 | POST | `/api/v1/webhooks/stripe` | Stripe signature | idempotent Stripe webhook (subscription billing *and* invoice payment) |
@@ -527,17 +540,13 @@ index. `tests/test_invoicing_rls.py` proves both halves of the guarantee:
 RLS blocks the read, and even a query that bypasses RLS (an FK check) cannot
 represent a cross-tenant reference in the first place.
 
-**Deferred, on purpose:**
-- Stripe Connect (per-tenant merchant-of-record) onboarding — still the single
-  platform Stripe account; see "Payment architecture" below.
-- Refunds and partial refunds (`refunded`/`partially_refunded` are modeled in
-  `invoice_status`/`payment_status` but nothing writes them yet).
-- PDF invoice generation and email delivery of the pay link — the outbox
-  already queues an `invoice.send` event; nothing consumes it into an actual
-  email yet, matching the pre-existing password-reset email gap.
-- Automated overdue/dunning reminders against `due_date`.
+**Deferred, on purpose (fixed in Phase 8 — see "Billing operations" below):**
+- ~~Stripe Connect (per-tenant merchant-of-record) onboarding~~ — shipped.
+- ~~Refunds and partial refunds~~ — shipped.
+- ~~PDF invoice generation and email delivery of the pay link~~ — shipped.
+- ~~Automated overdue/dunning reminders against `due_date`~~ — shipped.
 - The React customer-facing pay page — the API is ready, there's no frontend
-  yet in this repo.
+  yet in this repo. Still deferred; see "What's intentionally NOT here yet".
 
 ## Payment architecture
 
@@ -555,19 +564,108 @@ Two Stripe surfaces exist in this codebase and must not be conflated:
    API key rather than ever raising, so a Stripe outage cannot block sending
    an invoice or take down the pay page.
 
-**Stripe Connect is still the recommended end state** for (2): each tenant
-connects their own Stripe account so shop revenue settles directly to the
-shop and HarborIQ takes a platform fee, rather than HarborIQ being the
-merchant of record for every marine shop's customer payments. This phase
-deliberately ships on the single platform Stripe account instead, because
-Connect onboarding (Standard vs. Express vs. Custom, KYC, payout scheduling)
-is a substantial project of its own and gates on legal/payment-provider
-review — building the invoicing lifecycle, webhook disambiguation, and
-tenant-safe data model first means the Connect migration later is "point
-`stripe_billing.create_checkout_session` at the tenant's connected account,"
-not a rewrite. **The final merchant-of-record model still requires
+**Stripe Connect shipped in Phase 8** for (2), using Standard accounts and
+the **direct charge** pattern: once a tenant completes onboarding
+(`companies.stripe_connect_account_id` is set), `create_checkout_session`
+passes `stripe_account=<connect_id>` so the Checkout Session — and the
+resulting charge — is created directly on the *connected* account. The
+tenant is the merchant of record and Stripe settles funds straight to them;
+HarborIQ is not in the money-movement path for that transaction. A tenant
+that has not connected (or whose Connect API call fails) transparently
+falls back to the pre-existing single-platform-account Checkout Session —
+`send_invoice` never blocks on Connect status, matching the existing
+"Stripe outage cannot stop sending an invoice" guarantee. See "Billing
+operations" below for the onboarding flow itself.
+
+**Destination charges / `application_fee_amount` (HarborIQ taking a
+platform fee out of each connected-account charge) are explicitly deferred**
+— this phase ships direct charges only, where 100% of the charge belongs to
+the tenant and HarborIQ's own revenue comes solely from SaaS subscription
+billing (surface 1 above), not a take rate on customer payments. Adding a
+platform fee later is a config/parameter change to the same Checkout Session
+call (`application_fee_amount` + a destination on the charge), not a data
+model or architecture change — but it is a pricing/legal decision (what fee,
+disclosed how, in which tenant agreement) that deliberately was not made
+here. **The final merchant-of-record and fee model still requires
 legal/payment-provider review** — do not treat this scaffold as legal advice.
 See the corrected build spec, §8.
+
+## Billing operations (Phase 8)
+
+Four previously-deferred billing gaps close this phase: Stripe Connect
+onboarding, refunds, PDF/email invoice delivery, and dunning — plus a new
+AR aging report. All of it is additive to the invoicing lifecycle above;
+nothing about `InvoiceSM`'s core `draft -> sent -> paid` path changed.
+
+**Stripe Connect onboarding** (`app/services/billing.py`,
+`app/api/v1/routes/billing.py`) is two endpoints behind `require_admin`:
+`POST /billing/connect/onboarding-link` creates a Standard Connect account
+(reusing `companies.stripe_connect_account_id` if onboarding was started but
+never finished, rather than minting a duplicate account on every retry) and
+returns a fresh Stripe-hosted onboarding URL; `GET /billing/connect/status`
+reports `connected`/`charges_enabled`/`details_submitted` for the settings
+page. Both degrade honestly instead of erroring the page: no account on file
+is a normal `connected: false`, and an unreachable Stripe with an account id
+already on file reports `charges_enabled: false` rather than 500ing.
+
+**Refunds** (`app/services/invoices.py::refund_invoice`,
+`POST /invoices/{id}/refund`, `require_operations`) row-locks the invoice,
+validates the requested amount against `amount_paid - already_refunded`
+(over-refunding is a 409, not a partial success), calls
+`stripe_billing.create_refund` — passing the tenant's Connect account id
+when the original charge was a direct charge, otherwise the platform
+account — and lands the invoice on `refunded` (amount == full `amount_paid`)
+or `partially_refunded` (anything less) via `InvoiceSM.assert_transition`.
+A new `refunds` table (migration 0007) records every refund — amount,
+reason, Stripe refund id, who issued it — as an audit trail separate from
+the `payments` table that only ever records money coming in.
+
+**PDF generation + email delivery** (`app/services/invoice_pdf.py`,
+`app/services/invoice_render.py`) finally consumes the `invoice.send` outbox
+event that every phase since invoicing shipped has queued but nothing read:
+the outbox consumer now renders the invoice (line items, totals, pay link)
+to a PDF with **reportlab** (chosen over weasyprint specifically to avoid
+its native pango/cairo/gdk-pixbuf dependency chain, which is not guaranteed
+present on every deploy target — reportlab is pure-Python + Pillow and
+`pip install`s identically everywhere) and attaches it to the same
+email-delivery path `app/services/email.py` already uses for password
+resets and invites (SMTP if configured, console fallback otherwise) —
+no new transport, just a new caller. `pypdf` is a dev/test-only dependency
+used to read the generated bytes back and assert on their contents in
+`tests/test_invoice_pdf_email.py`; it is not used at runtime.
+
+**Dunning** (`app/jobs/dunning_sweep.py`, `app/services/billing.py`) finds
+invoices in `sent`/`partial` status past `due_date` with `balance_due > 0`,
+respects a 3-day `DUNNING_REMINDER_COOLDOWN_DAYS` cooldown tracked in the
+new `invoices.last_reminder_sent_at` column (so a tight cron schedule cannot
+spam a customer who already got a reminder this week), and queues a reminder
+email through the existing outbox rather than sending directly — the same
+claim/retry/dead-letter machinery as every other outbound email. Exposed as
+both `POST /billing/dunning/run` (on-demand, per-tenant, `require_admin`)
+and a standalone `app/jobs/dunning_sweep.py` script loopable over every
+company (there is no Celery/cron runner in this repo to schedule it — see
+"What's intentionally NOT here yet").
+
+**AR aging** (`GET /reports/ar-aging`, `require_operations`) buckets every
+customer's outstanding `balance_due` into 1-30 / 31-60 / 61-90 / 90+ days
+past due (relative to `due_date`), returning per-customer rows plus bucket
+and grand totals — the read-only report a shop's office staff needs to know
+who to chase first, without exporting invoices to a spreadsheet to compute
+it by hand.
+
+**Deferred, on purpose (this phase):**
+- Destination charges / `application_fee_amount` platform-fee revenue on
+  top of Connect — direct charges only; see "Payment architecture" above.
+- A scheduled runner for the dunning sweep (Celery beat, cron, GitHub
+  Actions schedule) — the sweep itself is real and callable on demand or in
+  a loop; nothing in this repo currently calls it automatically.
+- Refund webhooks (`charge.refunded` arriving asynchronously from Stripe to
+  reconcile a refund issued directly in the Stripe Dashboard rather than
+  through this API) — refunds initiated through `POST
+  /invoices/{id}/refund` are fully synchronous and correct; a refund issued
+  outside HarborIQ would not currently update `invoices`/`refunds`.
+- CSV/PDF export of the AR aging report — the JSON API and React table
+  exist; there is no "download as spreadsheet" button yet.
 
 ## Project layout
 
@@ -579,12 +677,14 @@ harboriq/
   alembic/sql/0004_invoicing.sql      # invoice lifecycle columns, composite FKs, updated_at trigger
   alembic/sql/0005_auth_hardening.sql # lockout columns + user_invite token_purpose enum value
   alembic/sql/0006_dispatch_engine.sql # skills/coords/required_skills + dispatch score cache columns
+  alembic/sql/0007_stripe_connect.sql  # stripe_connect_account_id, refunds table, last_reminder_sent_at
   alembic/versions/0001_initial_schema.py
   alembic/versions/0002_auth.py
   alembic/versions/0003_crm_operations.py
   alembic/versions/0004_invoicing.py
   alembic/versions/0005_auth_hardening.py
   alembic/versions/0006_dispatch_engine.py
+  alembic/versions/0007_stripe_connect.py
   app/
     core/      config, logging (env-aware JSON/console), observability (Sentry),
                security (argon2 + JWT), rate_limit (login/reset limiter)
@@ -592,11 +692,16 @@ harboriq/
     api/       deps (auth + job authorization), errors (domain -> HTTP status),
                middleware (request-id correlation + Prometheus metrics)
     api/v1/    routes: auth, customers, vessels, jobs, invoices, health, inventory,
-               public, stripe_webhooks, dispatch
+               public, stripe_webhooks, dispatch, billing, reports
     services/  auth, crud, customers, vessels, jobs, invoices, stripe_billing,
                state_machines, inventory, public_tokens, outbox, outbox_dispatch,
-               email, stripe_webhooks, dispatch
-    schemas/   pydantic models (incl. invoices.py, invite schemas in auth.py, dispatch.py)
+               email, stripe_webhooks, dispatch, billing (Connect + dunning),
+               invoice_pdf, invoice_render
+    schemas/   pydantic models (incl. invoices.py, invite schemas in auth.py,
+               dispatch.py, billing.py, reports.py)
+    jobs/      dunning_sweep.py — standalone script, loopable over every company
+               (no Celery/cron runner in this repo; see "What's intentionally
+               NOT here yet")
   tests/       Postgres-backed integration tests
   frontend/    Vite + React + TS SPA (see "Frontend" below)
   scripts/backup_db.sh                # pg_dump wrapper for a host cron job
@@ -648,9 +753,38 @@ customers (list/search/create + detail with vessels), jobs (list/filter,
 create, detail with line items and status transitions gated by the exact
 same `JobSM` transition map the backend enforces), invoices (list/filter,
 detail with line items/totals, send with a copyable pay link, void gated by
-`InvoiceSM`), a team page (now invite-link based, see below), the public,
-unauthenticated `/pay/:token` invoice page, and the public, unauthenticated
-`/accept-invite/:token` page.
+`InvoiceSM`, and — new in Phase 8 — a Refund action gated by `canRefund()`
+with the amount field defaulting to the invoice's remaining `amount_paid`),
+a team page (now invite-link based, see below), a billing settings page
+(Stripe Connect onboarding/status card + an on-demand dunning-sweep button,
+both owner/admin-only), an AR aging report page (bucketed outstanding-balance
+table, owner/admin/office), the public, unauthenticated `/pay/:token`
+invoice page, and the public, unauthenticated `/accept-invite/:token` page.
+
+**Billing settings + AR aging (Phase 8).** `BillingSettingsPage.tsx`
+(`/settings/billing`, gated by `canManageUsers` — owner/admin, mirroring the
+backend's `require_admin`) shows the tenant's Stripe Connect status
+(`GET /billing/connect/status`) with a "Connect Stripe" button that requests
+an onboarding link and redirects the browser to it
+(`window.location.href = onboarding_url`), plus a "Run dunning sweep" button
+that calls `POST /billing/dunning/run` and reports how many invoices were
+reminded. `ArAgingPage.tsx` (`/reports/ar-aging`, gated by
+`canManageOperations` — owner/admin/office, mirroring `require_operations`)
+renders the 1-30/31-60/61-90/90+ bucket totals as stat cards plus a
+per-customer table, with an explicit empty state when nothing is
+outstanding. Both routes are added to the sidebar nav in `AppShell.tsx`
+behind the same role gates as their routes.
+
+**Refunds (Phase 8), `InvoiceDetailPage.tsx`.** A "Refund" button appears
+only when `canRefund(invoice.status)` — mirrored from the backend's
+`InvoiceSM` (`partial`/`paid`/`partially_refunded` can all take another
+refund up to the remaining balance; `draft`/`sent`/`void`/`refunded` cannot).
+Opening the form defaults the amount field to `invoice.amount_paid` so the
+common case (refund everything) is a single click past "open form, confirm";
+the amount is still editable for partial refunds. On success, a banner
+reports the refunded amount and the invoice's new status badge picks up the
+two new tones added this phase (`partially_refunded` → amber,
+`refunded` → blue) alongside the existing status colors.
 
 **Invite flow (Phase 5).** The Team page's "Send invite" form calls
 `POST /auth/invites` (owner/admin only) instead of asking the admin to pick a
@@ -665,13 +799,21 @@ via `AuthContext.acceptInvite` (the same `applyAuthResponse` path `login`/
 `signup` use) before redirecting to `/`.
 
 **Covered by tests:** the API client's 401-refresh-and-retry logic, the job
-status-transition gating logic, the invoice send/void visibility logic
-(`src/lib/*.test.ts`), and, new in Phase 5, component-level tests for the
-invite flow (`src/pages/TeamPage.test.tsx`, `src/pages/AcceptInvitePage.test.tsx`)
-covering invite submission + accept-link display, server-error surfacing
-(duplicate email, reused/expired token), the invite preview render, and the
-login-and-redirect path on successful acceptance — see "Frontend tests"
-below.
+status-transition gating logic, the invoice send/void/refund visibility
+logic (`src/lib/*.test.ts`, including the Phase 8 `canRefund()` additions),
+component-level tests for the invite flow (`src/pages/TeamPage.test.tsx`,
+`src/pages/AcceptInvitePage.test.tsx`) covering invite submission +
+accept-link display, server-error surfacing (duplicate email, reused/expired
+token), the invite preview render, and the login-and-redirect path on
+successful acceptance, and, new in Phase 8, component-level tests for the
+billing settings page (`src/pages/BillingSettingsPage.test.tsx` — connected
+and not-connected Connect states, the onboarding redirect, dunning-sweep
+success), the AR aging page (`src/pages/ArAgingPage.test.tsx` — table
+rendering and the empty state), the refund flow on the invoice detail page
+(`src/pages/InvoiceDetailPage.test.tsx` — button visibility per status, the
+amount-defaulting behavior, a full submit-and-success-banner flow), and the
+new `billingApi`/`reportsApi`/`invoicesApi.refund` service functions
+(`src/lib/services.billing.test.ts`) — see "Frontend tests" below.
 
 **Deferred:**
 
@@ -752,10 +894,12 @@ just the *what*, consolidated so nothing is scattered or repeated.
 - A CDN and a WAF in front of the frontend/API.
 - Redis and Celery — every place that would normally use them today
   degrades to an honest, smaller-scale substitute instead: the login/reset
-  rate limiter is in-process and per-instance (not Redis-backed), and
-  outbox email dispatch runs via FastAPI `BackgroundTasks` right after a
-  commit rather than a Celery worker on a schedule (see "Auth hardening"
-  above for both).
+  rate limiter is in-process and per-instance (not Redis-backed), outbox
+  email dispatch runs via FastAPI `BackgroundTasks` right after a commit
+  rather than a Celery worker (see "Auth hardening" above for both), and the
+  Phase 8 dunning sweep (`app/jobs/dunning_sweep.py`) is a script callable
+  on demand or in a cron/loop, not a Celery beat schedule (see "Billing
+  operations" above).
 - Multi-instance/horizontal scaling generally — the rate limiter and
   `BackgroundTasks` dispatch above are the two places this would matter
   first if `app` ever runs as more than one replica.
@@ -764,12 +908,23 @@ just the *what*, consolidated so nothing is scattered or repeated.
   pulling a previously-pushed image tag.
 
 **Payments:**
-- Stripe Connect (per-tenant merchant-of-record) onboarding — still the
-  single platform Stripe account (see "Payment architecture" above).
-- Refunds and partial refunds.
-- PDF invoice generation and email delivery of the pay link (the outbox
-  queues the event; nothing renders/sends it yet).
-- Automated overdue/dunning reminders.
+- Destination charges / `application_fee_amount` platform-fee revenue on
+  top of Stripe Connect — this phase ships **direct charges only** (the
+  tenant is the merchant of record on 100% of the connected-account charge);
+  HarborIQ's own revenue is SaaS subscription billing only, not a take rate
+  on customer payments. Adding a fee later is a parameter change to the
+  same Checkout Session call, but is a pricing/legal decision that was
+  deliberately not made here — see "Payment architecture" above.
+- A scheduled runner (Celery beat/cron) for the dunning sweep — the sweep
+  itself ships and is callable on demand or in a loop (see "Billing
+  operations" above); nothing in this repo calls it automatically yet.
+- Refund webhooks — a refund issued directly from the Stripe Dashboard
+  (rather than through `POST /invoices/{id}/refund`) does not currently
+  reconcile back into `invoices`/`refunds`.
+- CSV/PDF export of the AR aging report — the JSON API and React table
+  exist; there is no "download as spreadsheet" button.
+- The React customer-facing pay page's own dedicated UI polish beyond what
+  already exists — covered under "Frontend" below, not repeated here.
 
 **Frontend:**
 - End-to-end browser tests (Playwright) — only unit/logic-level Vitest +
@@ -818,9 +973,12 @@ context, not because they're still open): Phase 5 added login rate
 limiting + account lockout ("Auth hardening" above), rewrote outbox email
 dispatch to actually send via SMTP/console fallback, and replaced
 admin-set-password user provisioning with invite links. Phase 6 added
-everything under "Deployment & observability" above. Phase 7 (this one)
-fixed the `HTTP_422_UNPROCESSABLE_ENTITY` deprecation warning (renamed to
+everything under "Deployment & observability" above. Phase 7 fixed the
+`HTTP_422_UNPROCESSABLE_ENTITY` deprecation warning (renamed to
 `HTTP_422_UNPROCESSABLE_CONTENT`) and the `httpx`/TestClient deprecation
 warning (pinned `httpx2`), and added everything under "AI dispatch engine"
-above. None of that is listed as deferred anymore — see each section's own
-text for exactly what changed and why.
+above. Phase 8 (this one) added everything under "Billing operations"
+above — Stripe Connect onboarding, refunds, PDF/email invoice delivery,
+dunning, and AR aging — plus the corresponding frontend (Refund action,
+billing settings page, AR aging page). None of that is listed as deferred
+anymore — see each section's own text for exactly what changed and why.

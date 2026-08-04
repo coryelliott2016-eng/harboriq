@@ -5,24 +5,35 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 7 (commit `0361ae4`): auth, multi-tenant CRM, invoicing +
-single-account Stripe Checkout, React frontend, a rule-based explainable AI
-dispatch engine, and production deployment/observability hooks. 313 backend
-tests, 27 frontend tests, CI green.
+Status as of Phase 8: auth, multi-tenant CRM, invoicing + Stripe Checkout
+(single-account and, as of this phase, per-tenant Stripe Connect direct
+charges), refunds, PDF/email invoice delivery, dunning, AR aging, React
+frontend, a rule-based explainable AI dispatch engine, and production
+deployment/observability hooks. 357 backend tests, 42 frontend tests, CI
+green.
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
 `concepts/harboriq-deferred-items` in the project wiki for the raw backlog
 this is organized from).
 
-## Phase 8 — Payments & Billing Parity
-- Stripe Connect (Standard accounts) so each tenant is its own merchant of
-  record instead of all payments routing through one platform Stripe account.
-- Refunds and partial refunds (enum values already reserved).
-- PDF invoice generation + real email delivery of the pay link (outbox
-  already queues `invoice.send`; nothing consumes it into an email yet).
-- Automated dunning / overdue-invoice reminders against `due_date`.
-- Basic AR aging report.
+## Phase 8 — Payments & Billing Parity — **COMPLETE**
+- [x] Stripe Connect (Standard accounts, direct-charge pattern) so each
+      onboarded tenant is its own merchant of record; falls back to the
+      single platform account until a tenant connects. Destination charges /
+      `application_fee_amount` platform-fee revenue on top of Connect is
+      explicitly deferred to a later phase (pricing/legal decision, not an
+      architecture gap) — see the README's "Payment architecture" section.
+- [x] Refunds and partial refunds, with a `refunds` audit table and
+      `InvoiceSM` transitions to `refunded`/`partially_refunded`.
+- [x] PDF invoice generation (reportlab) + real email delivery of the pay
+      link, consuming the `invoice.send` outbox event that previously queued
+      but was never read.
+- [x] Automated dunning / overdue-invoice reminders against `due_date`, with
+      a cooldown to avoid re-spamming; callable on demand or via a
+      standalone script (no Celery beat/cron runner wired up yet).
+- [x] Basic AR aging report (1-30/31-60/61-90/90+ day buckets), API +
+      frontend page.
 
 ## Phase 9 — Customer Self-Service Portal
 - Extend existing `public_tokens` pattern: customers view vessel/service
@@ -56,9 +67,10 @@ this is organized from).
   parts-availability factor up to real data.
 
 ## Phase 14 — Accounting & Reporting
-- AR aging, a simple P&L/cash-flow view, exportable reports, and
-  QuickBooks/Xero sync — pragmatically smarter than building a full GL
-  from scratch to match DockMaster's accounting suite.
+- Basic AR aging shipped in Phase 8; this phase covers the rest: a simple
+  P&L/cash-flow view, exportable (CSV/PDF) reports including AR aging
+  itself, and QuickBooks/Xero sync — pragmatically smarter than building a
+  full GL from scratch to match DockMaster's accounting suite.
 
 ## Phase 15 — Marina/Slip Management (optional — different business model)
 - Visual slip map, reservations, dry-stack scheduling, storage billing —
