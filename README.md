@@ -6,7 +6,9 @@ build plan: every issue from the technical critique is fixed at the code level.
 > **Status:** scaffold, real authentication, the CRM/operations core
 > (customers, vessels, work orders), **invoicing + Stripe payment
 > collection**, **Stripe Connect onboarding, refunds, PDF/email invoice
-> delivery, dunning, and AR aging** (see "Billing operations" below), the
+> delivery, dunning, and AR aging** (see "Billing operations" below), a
+> **customer self-service portal + customer<->staff messaging** (see
+> "Customer self-service portal" below), the
 > **React frontend**, **deployment/observability hardening** (structured
 > logging, `/metrics`, optional Sentry, hardened Docker images, CI, and
 > backups — see `docs/DEPLOYMENT.md`), and a **rule-based AI
@@ -14,8 +16,10 @@ build plan: every issue from the technical critique is fixed at the code level.
 > real and runnable. Models, migrations, services, routes, and tests for the
 > **critical fixes**, for **auth + tenant onboarding**, for
 > **customers/vessels/jobs**, for **invoices/payments/refunds/dunning/AR
-> aging**, and for **dispatch scoring** all exist and pass. Destination
-> charges / application-fee revenue on top of Stripe Connect and a trained
+> aging**, for **the customer portal + messaging**, and for **dispatch
+> scoring** all exist and pass. Destination charges / application-fee
+> revenue on top of Stripe Connect, a full customer password/login system
+> (the portal uses durable magic links instead — see below), and a trained
 > ML dispatch model are intentionally out of scope — see
 > `../HarborIQ_v2_Corrected_Build_Spec.md` for the roadmap and "What's
 > intentionally NOT here yet" below for the full deferred list.
@@ -109,6 +113,10 @@ tests/test_refunds.py                   # full/partial refunds, InvoiceSM transi
 tests/test_invoice_pdf_email.py         # PDF bytes generated, outbox invoice.send consumed into an actual email
 tests/test_dunning.py                   # overdue selection, last_reminder_sent_at cadence, idempotent re-runs
 tests/test_ar_aging.py                  # bucket math (1-30/31-60/61-90/90+), per-customer + grand totals
+tests/test_portal_access.py             # portal token issue/resolve, non-consumption, expiry/revocation, tenant + customer isolation
+tests/test_portal_data.py               # /me, /jobs, /invoices, /estimates scoping; estimate-approve reuses public flow
+tests/test_portal_messages.py           # customer/staff send + list, outbox notifications, job-threaded messages, isolation
+tests/test_portal_invite.py             # invite issues/renews a token + queues an email, role gating, cross-tenant 404
 ```
 
 ## API surface
@@ -177,6 +185,18 @@ its server-side logs (see `app/api/middleware.py`, and
 | GET | `/api/v1/public/invoice/{token}` | public token | read-only pay page: invoice, line items, live checkout URL |
 | POST | `/api/v1/public/estimate/{token}/approve` | public token | public estimate approval (e-sign) |
 | POST | `/api/v1/webhooks/stripe` | Stripe signature | idempotent Stripe webhook (subscription billing *and* invoice payment) |
+| POST | `/api/v1/customers/{id}/portal-invite` | bearer, owner/admin/office | issue (or renew) a customer's durable portal magic link and email it |
+| GET | `/api/v1/portal/{token}/me` | portal token | that customer's profile + vessels only |
+| GET | `/api/v1/portal/{token}/jobs` | portal token | that customer's job history (status/schedule/technician, no internal notes or pricing) |
+| GET | `/api/v1/portal/{token}/invoices` | portal token | that customer's invoices |
+| GET | `/api/v1/portal/{token}/invoices/{invoice_id}/pay-url` | portal token | a fresh checkout URL for one of that customer's invoices (reuses `get_or_create_checkout_url`) |
+| GET | `/api/v1/portal/{token}/estimates` | portal token | that customer's estimates |
+| POST | `/api/v1/portal/{token}/estimates/{estimate_id}/approve-token` | portal token | mints a short-lived `estimate_approve` token for the SAME existing public approval endpoint |
+| GET, POST | `/api/v1/portal/{token}/messages` | portal token | that customer's message thread; POST sends a new customer message |
+| GET | `/api/v1/messages` | bearer, owner/admin/office | company-wide staff inbox, newest first; `unread_only=true` narrows to unread customer messages |
+| POST | `/api/v1/messages` | bearer, owner/admin/office | staff reply/send to a customer's thread |
+| POST | `/api/v1/messages/{id}/read` | bearer, owner/admin/office | mark a message read |
+| GET | `/api/v1/messages/by-job/{job_id}` | bearer, owner/admin/office | every message tied to one job, oldest first |
 
 † `/metrics` is unauthenticated on purpose (standard practice for Prometheus
 scraping), but should be firewalled to the scraper's network at the reverse
@@ -667,6 +687,89 @@ it by hand.
 - CSV/PDF export of the AR aging report — the JSON API and React table
   exist; there is no "download as spreadsheet" button yet.
 
+## Customer self-service portal (Phase 9)
+
+A durable, magic-link customer portal plus a customer<->staff messaging
+thread. Two access-model options were on the table; **Option A (a durable
+magic link, extending the existing `public_tokens` pattern) was chosen over
+Option B (a full customer password/login system)** for this phase — it is
+the smallest correct thing that gets a real customer-facing surface
+shipped, it reuses infrastructure that already has isolation and
+expiry/revocation tests (`app/services/public_tokens.py`), and it avoids
+introducing a second authentication system (separate from `users`/sessions)
+for a login a customer will use rarely. See `app/services/portal.py`'s
+module docstring for the full reasoning.
+
+**How the link works.** `POST /customers/{id}/portal-invite`
+(`require_operations`) issues a `public_tokens` row with the new
+`purpose="portal"` value, a 2,160-hour (90-day) TTL, and a high use ceiling
+(10,000) — unlike `invoice_pay`/`estimate_approve` tokens, a portal link is
+meant to be opened repeatedly over months, not consumed once. Resolving it
+(`GET /portal/{token}/...`) never burns a use, the same non-consuming read
+pattern `GET /public/invoice/{token}` already established. The link is
+emailed through the existing outbox (`customer.portal_invite` event,
+console fallback in dev) — the raw token itself is never returned by the
+API, matching every other `issue_public_token` caller. Calling the invite
+endpoint again **renews** the link (a fresh token; the old one still works
+until it separately expires) rather than erroring, so staff can always hand
+out a working link.
+
+**What the portal shows** (`app/services/portal.py`, `app/schemas/portal.py`,
+`app/api/v1/routes/portal.py`): profile + vessels (`/me`), job history
+with status/schedule/technician but no internal notes or cost/margin data
+(`/jobs`), invoices (`/invoices`), and estimates (`/estimates`). Payment and
+approval are **not reimplemented** for the portal —
+`/invoices/{id}/pay-url` calls the same `get_or_create_checkout_url` the
+staff-side send flow uses, and `/estimates/{id}/approve-token` mints a
+fresh, single-purpose `estimate_approve` token so the portal's "Approve"
+button POSTs to the exact same `POST /public/estimate/{token}/approve`
+endpoint an emailed estimate link already uses — one approval code path,
+two ways to reach it.
+
+**Tenant *and* customer isolation** (the critical requirement for this
+phase): every portal route resolves the token to a `(company_id,
+customer_id)` pair and every downstream query is scoped to *both* — not
+just the tenant. A token for customer A can never return customer B's
+data even inside the same company, and every list/read query filters on
+`customer_id`, not only `company_id`. `tests/test_portal_access.py` and
+`tests/test_portal_data.py` assert this directly (same-company
+customer-A-vs-B isolation, not just cross-company).
+
+**Messaging** (`app/db/models.py::Message`, `app/services/messages.py`,
+`app/schemas/messages.py`, `app/api/v1/routes/portal.py` +
+`app/api/v1/routes/messages.py`) is a new `messages` table (migration
+0008) with RLS tenant isolation like every other tenant table, a
+`sender_type` of `customer`/`staff`, and an optional `job_id` (a message
+can be general, not tied to one work order). Customers send/read through
+`POST`/`GET /portal/{token}/messages`; staff get a **company-wide inbox**
+(`GET /messages`, `unread_only` filter) as the primary surface — chosen
+over an exclusively job-nested endpoint because a general message has no
+job to nest under — plus a `GET /messages/by-job/{job_id}` convenience view
+and `POST /messages/{id}/read`. Each direction queues a best-effort outbox
+notification (`message.new_from_customer` to the shop, `message.new_from_staff`
+to the customer, when an email is on file) using the same outbox
+machinery as everything else in this repo — no new transport.
+
+**Deferred, on purpose (this phase):**
+- **Option B (full customer password/account system).** A durable magic
+  link (Option A, above) was chosen instead — see the reasoning above and
+  in `app/services/portal.py`. Revisit if customers need concurrent
+  multi-device sessions with their own credentials rather than a single
+  shared link, or if a link's 90-day/10,000-use ceiling ever proves
+  insufficient in practice.
+- **Real-time messaging (WebSockets/SSE/push notifications).** Both sides
+  poll/refetch today; a new message shows up on the next page load or
+  `react-query` refetch, not instantly. The outbox email is the only
+  "push" that exists.
+- **A Celery/cron-scheduled outbox worker for portal-invite and message
+  emails.** Same precedent as every other outbox consumer in this repo
+  (see `app/services/outbox.py`'s docstring and "What's intentionally NOT
+  here yet" below) — dispatch runs via `BackgroundTasks` right after commit,
+  not a scheduled worker.
+- **Read receipts beyond staff-side "mark read."** The customer portal does
+  not currently mark staff replies read on the customer's behalf, and
+  there is no per-message read receipt visible to the customer.
+
 ## Project layout
 
 ```
@@ -758,8 +861,11 @@ with the amount field defaulting to the invoice's remaining `amount_paid`),
 a team page (now invite-link based, see below), a billing settings page
 (Stripe Connect onboarding/status card + an on-demand dunning-sweep button,
 both owner/admin-only), an AR aging report page (bucketed outstanding-balance
-table, owner/admin/office), the public, unauthenticated `/pay/:token`
-invoice page, and the public, unauthenticated `/accept-invite/:token` page.
+table, owner/admin/office), a staff Messages panel (Phase 9,
+owner/admin/office — see below), the public, unauthenticated `/pay/:token`
+invoice page, the public, unauthenticated `/accept-invite/:token` page, and
+the public, magic-link-gated `/portal/:token/*` customer portal (Phase 9,
+see below).
 
 **Billing settings + AR aging (Phase 8).** `BillingSettingsPage.tsx`
 (`/settings/billing`, gated by `canManageUsers` — owner/admin, mirroring the
@@ -785,6 +891,37 @@ the amount is still editable for partial refunds. On success, a banner
 reports the refunded amount and the invoice's new status badge picks up the
 two new tones added this phase (`partially_refunded` → amber,
 `refunded` → blue) alongside the existing status colors.
+
+**Customer self-service portal (Phase 9), `src/portal/`.** Five routes
+under `/portal/:token/*` — `PortalHome` (`/me`), `PortalJobs`,
+`PortalInvoices`, `PortalEstimates`, `PortalMessages` — share a
+`PortalLayout` shell that is deliberately isolated from `AppShell`: no
+staff nav, no `AuthContext`, no bearer token. Every call goes through
+`apiRequest(..., { anonymous: true })`, the same pattern
+`PublicInvoicePage.tsx` established, with the magic-link token as a path
+segment rather than a header. A 404 on any portal fetch renders the same
+"this link is invalid or has expired" message across all five pages
+(`PORTAL_INVALID_LINK_MESSAGE` in `PortalLayout.tsx`) rather than five
+slightly different ones. `PortalInvoices` reuses the existing pay flow
+(`portalApi.invoicePayUrl` → redirect to the returned Stripe Checkout URL,
+not a new payment UI); `PortalEstimates`'s "Approve" button calls
+`portalApi.estimateApproveToken` then POSTs straight to the existing
+public approval endpoint — no duplicate approval logic on the frontend
+either. `PortalMessages` is a two-pane chat list (customer messages
+right-aligned/dark, staff left-aligned/light) with a send box that
+invalidates the `react-query` cache on success.
+
+**Staff Messages panel (Phase 9), `src/pages/MessagesPage.tsx`.** Added to
+`AppShell`'s nav behind `canManageOperations` (owner/admin/office,
+mirroring the backend's `require_operations` on `/messages`), the same
+gating pattern as AR aging. Shows the company-wide inbox (`GET /messages`)
+with an "Unread only" toggle, an unread `Badge` on customer messages
+nobody has opened, a per-row "Mark read"/"Reply" action, and a reply box
+that posts to `POST /messages` with the selected `customer_id`.
+`CustomerDetailPage.tsx` gained a "Send portal invite" button (gated by
+`canWrite`, next to the customer's name) that calls
+`customersApi.sendPortalInvite` and reports success/failure inline — the
+staff-side entry point into everything above.
 
 **Invite flow (Phase 5).** The Team page's "Send invite" form calls
 `POST /auth/invites` (owner/admin only) instead of asking the admin to pick a
@@ -813,7 +950,14 @@ rendering and the empty state), the refund flow on the invoice detail page
 (`src/pages/InvoiceDetailPage.test.tsx` — button visibility per status, the
 amount-defaulting behavior, a full submit-and-success-banner flow), and the
 new `billingApi`/`reportsApi`/`invoicesApi.refund` service functions
-(`src/lib/services.billing.test.ts`) — see "Frontend tests" below.
+(`src/lib/services.billing.test.ts`), and, new in Phase 9, component-level
+tests for `PortalHome` (`src/portal/PortalHome.test.tsx` — profile/vessel
+rendering and the invalid-link 404 state), `PortalMessages`
+(`src/portal/PortalMessages.test.tsx` — message list rendering and sending
+a new message), and the staff `MessagesPage`
+(`src/pages/MessagesPage.test.tsx` — inbox rendering with the unread badge,
+the reply flow posting to the right customer, and the empty state) — see
+"Frontend tests" below.
 
 **Deferred:**
 
@@ -832,6 +976,9 @@ new `billingApi`/`reportsApi`/`invoicesApi.refund` service functions
   gap, not a frontend shortcut — see "What's intentionally NOT here yet" below.
 - Optimistic UI updates, offline support, and any kind of design system
   beyond the shared Tailwind components in `src/components/ui.tsx`.
+- **Real-time messaging on the frontend.** `PortalMessages` and
+  `MessagesPage` both rely on `react-query` refetch/cache invalidation, not
+  a live socket — a new message appears on the next fetch, not instantly.
 
 ## Frontend tests
 
@@ -853,7 +1000,13 @@ not have caught the same class of mistake. Full user flows beyond that are
 still exercised manually and via the backend-facing smoke test described in
 the delivery notes for each phase; full Playwright E2E remains deferred (see
 above — also not installable in this sandbox's OS image, an environment
-limitation rather than a scope decision).
+limitation rather than a scope decision). Phase 9 added component-level
+tests for the customer portal (`src/portal/PortalHome.test.tsx`,
+`src/portal/PortalMessages.test.tsx`) and the staff Messages panel
+(`src/pages/MessagesPage.test.tsx`), for the same reason as Phase 5's invite
+flow — both have enough branching (valid link vs. 404, empty vs. populated
+inbox, send/reply success vs. failure) that logic-only tests would not have
+caught the same class of regression.
 
 ## Deployment & observability
 
@@ -935,6 +1088,28 @@ just the *what*, consolidated so nothing is scattered or repeated.
 - A real "list teammates" screen — no `GET`-all-users backend endpoint yet.
 - Optimistic UI updates, offline support, a design system beyond the
   shared Tailwind components.
+- Real-time messaging (`PortalMessages`/`MessagesPage` rely on `react-query`
+  refetch, not a socket) — see "Customer portal / messaging" below.
+
+**Customer portal / messaging (see "Customer self-service portal" above
+for the full rationale):**
+- **Option B — a full customer password/account system.** Option A (a
+  durable 90-day magic link extending `public_tokens`) was chosen instead
+  for this phase; a real login/password system for customers, with its own
+  session management, is deferred until a shared link genuinely proves
+  insufficient (e.g. customers needing independent concurrent sessions of
+  their own).
+- **Real-time messaging (WebSockets/SSE/push notifications).** Both the
+  customer portal and the staff Messages panel poll/refetch via
+  `react-query`; a new message appears on the next fetch, not instantly.
+  The outbox email is the only "push" that exists today.
+- **A Celery/cron-scheduled worker for portal-invite and message emails.**
+  Same precedent as every other outbox consumer in this repo (see "Redis
+  and Celery" above) — dispatch runs via `BackgroundTasks` right after
+  commit, not a scheduled worker.
+- **Read receipts beyond staff-side "mark read."** The customer portal does
+  not mark staff replies read on the customer's behalf, and there is no
+  per-message read receipt visible back to the customer.
 
 **Auth:**
 - No MFA yet, though `users.mfa_secret_enc` is reserved for it.
@@ -977,8 +1152,14 @@ everything under "Deployment & observability" above. Phase 7 fixed the
 `HTTP_422_UNPROCESSABLE_ENTITY` deprecation warning (renamed to
 `HTTP_422_UNPROCESSABLE_CONTENT`) and the `httpx`/TestClient deprecation
 warning (pinned `httpx2`), and added everything under "AI dispatch engine"
-above. Phase 8 (this one) added everything under "Billing operations"
+above. Phase 8 added everything under "Billing operations"
 above — Stripe Connect onboarding, refunds, PDF/email invoice delivery,
 dunning, and AR aging — plus the corresponding frontend (Refund action,
-billing settings page, AR aging page). None of that is listed as deferred
-anymore — see each section's own text for exactly what changed and why.
+billing settings page, AR aging page). Phase 9 (this one) added everything
+under "Customer self-service portal" above — the magic-link customer
+portal (profile, jobs, invoices, estimates, all reusing the existing
+pay/approve flows) and customer<->staff messaging — plus the corresponding
+frontend (`src/portal/*` pages and the staff Messages panel). None of that
+is listed as deferred anymore — see each section's own text for exactly
+what changed and why, and "Customer portal / messaging" above for what is
+still deliberately deferred within this phase's scope.

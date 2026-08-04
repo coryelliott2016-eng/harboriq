@@ -5,11 +5,12 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 8: auth, multi-tenant CRM, invoicing + Stripe Checkout
-(single-account and, as of this phase, per-tenant Stripe Connect direct
-charges), refunds, PDF/email invoice delivery, dunning, AR aging, React
-frontend, a rule-based explainable AI dispatch engine, and production
-deployment/observability hooks. 357 backend tests, 42 frontend tests, CI
+Status as of Phase 9: auth, multi-tenant CRM, invoicing + Stripe Checkout
+(single-account and per-tenant Stripe Connect direct charges), refunds,
+PDF/email invoice delivery, dunning, AR aging, a durable magic-link customer
+self-service portal with customer<->staff messaging, React frontend, a
+rule-based explainable AI dispatch engine, and production
+deployment/observability hooks. 390 backend tests, 49 frontend tests, CI
 green.
 
 This document sequences everything still missing for parity, in priority
@@ -35,10 +36,19 @@ this is organized from).
 - [x] Basic AR aging report (1-30/31-60/61-90/90+ day buckets), API +
       frontend page.
 
-## Phase 9 — Customer Self-Service Portal
-- Extend existing `public_tokens` pattern: customers view vessel/service
-  history, approve estimates, pay invoices, and message the shop without
-  a login — matching DockMaster Web's customer portal.
+## Phase 9 — Customer Self-Service Portal — **COMPLETE**
+- [x] Extended the existing `public_tokens` pattern with a durable 90-day
+      magic link (`purpose="portal"`) instead of a full customer
+      login/password system: customers view their vessel/profile and job
+      history, pay invoices and approve estimates via the SAME existing
+      pay/approve flows (no duplicate logic), and exchange messages with
+      the shop without a login — matching DockMaster Web's customer portal.
+      New customer<->staff messaging (`messages` table) with a company-wide
+      staff inbox, job-threaded view, and a "Send portal invite" action on
+      the customer detail page. Real-time delivery (sockets/push) and a
+      full customer password/account system remain explicitly deferred —
+      see the README's "Customer self-service portal" and "Customer portal
+      / messaging" sections.
 
 ## Phase 10 — Team, Skills & Geocoding
 - `PATCH /users` (self-service profile edits) — today a technician's
