@@ -96,3 +96,24 @@ class PaymentSM(StateMachine):
         "refunded": set(),
         "partially_refunded": set(),
     }
+
+
+class PurchaseOrderSM(StateMachine):
+    """Phase 13: draft -> submitted -> received, matching the
+    Job/Invoice discipline of loading the row FOR UPDATE before asserting.
+
+    Cancellation is allowed from `draft` or `submitted` -- a shop can back out
+    of an order before the vendor ships or even after submitting but before
+    anything arrives. It is NOT allowed from `received`: stock has already
+    been incremented onto the shelf by then (real inventory movement, not
+    just a paperwork state), so undoing it would need an explicit reversing
+    adjustment, not a status flip. `received` and `cancelled` are both
+    terminal, same as `refunded`/`void` elsewhere.
+    """
+
+    transitions = {
+        "draft": {"submitted", "cancelled"},
+        "submitted": {"received", "cancelled"},
+        "received": set(),
+        "cancelled": set(),
+    }

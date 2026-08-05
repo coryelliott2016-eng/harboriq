@@ -77,6 +77,21 @@ class JobLineItemKind(StrEnum):
     FEE = "fee"
 
 
+class PurchaseOrderStatus(StrEnum):
+    """Mirrors the `purchase_order_status` PostgreSQL enum (migration 0012).
+
+    Driven exclusively by `app.services.state_machines.PurchaseOrderSM`, same
+    discipline as `JobStatus`/`InvoiceStatus`: draft -> submitted -> received,
+    cancellable from draft or submitted but not from received (stock has
+    already moved by then).
+    """
+
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    RECEIVED = "received"
+    CANCELLED = "cancelled"
+
+
 class UserRole(StrEnum):
     """Mirrors the `user_role` PostgreSQL enum (migration 0002).
 
@@ -454,12 +469,125 @@ class InventoryItem(UUIDPKMixin, TimestampMixin, Base):
     low_stock_alerted: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    #: Phase 13: last/default vendor for reorder-suggestion grouping. Nullable
+    #: -- an item with no purchasing history yet is grouped under an
+    #: "unassigned vendor" bucket by the service layer, not blocked.
+    default_vendor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("vendors.id")
+    )
 
     __table_args__ = (
         CheckConstraint("unit_cost >= 0", name="ck_inv_unit_cost_gte0"),
         CheckConstraint("retail_price >= 0", name="ck_inv_retail_gte0"),
         CheckConstraint("quantity_on_hand >= 0", name="ck_inv_qty_gte0"),
         Index("idx_inventory_company_sku", "company_id", "sku"),
+        # Phase 13 (migration 0012) additionally adds a partial UNIQUE index
+        # on (company_id, sku) WHERE sku IS NOT NULL -- SKU doubles as the
+        # barcode lookup key. Not re-declared here (this file mirrors DDL for
+        # ORM convenience; the raw SQL migration is the source of truth for
+        # constraints, same as `uq_jobs_company_id` and other composite
+        # constraints added by later migrations are not re-declared on `Job`).
+    )
+
+
+class Vendor(UUIDPKMixin, TimestampMixin, Base):
+    """A parts supplier (Phase 13) -- who a purchase order is placed with."""
+
+    __tablename__ = "vendors"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    contact_email: Mapped[Optional[str]] = mapped_column(Text)
+    contact_phone: Mapped[Optional[str]] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (Index("idx_vendors_company", "company_id"),)
+
+
+class PurchaseOrder(UUIDPKMixin, TimestampMixin, Base):
+    """A purchase order against a vendor (Phase 13).
+
+    `status` is driven exclusively by
+    `app.services.state_machines.PurchaseOrderSM`; the service layer loads the
+    current value under `FOR UPDATE` before asserting a transition, matching
+    `Job`/`Invoice`. Receiving increments the linked inventory items'
+    `quantity_on_hand` through the SAME `FOR UPDATE`-guarded writer pattern
+    `app.services.inventory` already established -- this model has no direct
+    relationship to that write.
+    """
+
+    __tablename__ = "purchase_orders"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    vendor_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("vendors.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        Enum(
+            PurchaseOrderStatus,
+            name="purchase_order_status",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=PurchaseOrderStatus.DRAFT, server_default=PurchaseOrderStatus.DRAFT.value,
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    line_items: Mapped[list["PurchaseOrderLineItem"]] = relationship(back_populates="purchase_order")
+
+    # Migration 0012 also adds `uq_purchase_orders_company_id UNIQUE
+    # (company_id, id)` as the target of the line items' composite FK --
+    # not re-declared here, same convention as `Job`/`uq_jobs_company_id`.
+    __table_args__ = (
+        Index("idx_purchase_orders_company", "company_id", "status"),
+    )
+
+
+class PurchaseOrderLineItem(UUIDPKMixin, Base):
+    """A requested (and, on receipt, partially/fully fulfilled) quantity of
+    one inventory item on a purchase order (Phase 13).
+    """
+
+    __tablename__ = "purchase_order_line_items"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    purchase_order_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    inventory_item_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("inventory_items.id"), nullable=False
+    )
+    quantity_ordered: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity_received: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    unit_cost: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    purchase_order: Mapped[PurchaseOrder] = relationship(back_populates="line_items")
+
+    __table_args__ = (
+        CheckConstraint("quantity_ordered > 0", name="ck_po_line_qty_ordered_gt0"),
+        CheckConstraint("quantity_received >= 0", name="ck_po_line_qty_received_gte0"),
+        CheckConstraint("unit_cost >= 0", name="ck_po_line_unit_cost_gte0"),
+        CheckConstraint(
+            "quantity_received <= quantity_ordered", name="ck_po_line_received_lte_ordered"
+        ),
+        Index("idx_po_line_items_po", "company_id", "purchase_order_id"),
     )
 
 

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.services.dispatch import score_job
+from app.services.dispatch import PARTS_AVAILABILITY_WEIGHT, score_job
 
 
 def _job(
@@ -243,22 +243,51 @@ def test_skill_fit_is_zero_when_required_skills_exist_but_technician_has_none():
 
 
 # ---------------------------------------------------------------------------
-# Parts availability — documented no-op
+# Parts availability — real signal as of Phase 13 (previously a documented
+# permanent no-op; this is an intentional, planned behavior change, not a
+# regression -- see `_score_parts_availability`'s docstring in dispatch.py).
 # ---------------------------------------------------------------------------
-def test_parts_availability_is_always_neutral_today():
-    with_shortfall = score_job(
+def test_parts_shortfall_scores_lower_than_available():
+    shortfall = score_job(
         _job(), customer=_customer(), inventory_shortfall=True, now=NOW
     )
-    without_shortfall = score_job(
+    available = score_job(
         _job(), customer=_customer(), inventory_shortfall=False, now=NOW
     )
+    assert shortfall.breakdown["parts_availability"] == Decimal("0.00")
+    assert available.breakdown["parts_availability"] == PARTS_AVAILABILITY_WEIGHT
+    assert shortfall.total < available.total
+
+
+def test_no_part_line_items_is_neutral_full_weight_same_as_all_covered():
+    """A job with no tracked parts is never blocked by parts, so it must not
+    be penalized relative to one whose parts happen to be fully in stock."""
     unspecified = score_job(_job(), customer=_customer(), now=NOW)
-    assert (
-        with_shortfall.breakdown["parts_availability"]
-        == without_shortfall.breakdown["parts_availability"]
-        == unspecified.breakdown["parts_availability"]
-        == Decimal("0.00")
+    explicit_none = score_job(
+        _job(), customer=_customer(), inventory_shortfall=None, now=NOW
     )
+    available = score_job(
+        _job(), customer=_customer(), inventory_shortfall=False, now=NOW
+    )
+    assert (
+        unspecified.breakdown["parts_availability"]
+        == explicit_none.breakdown["parts_availability"]
+        == available.breakdown["parts_availability"]
+        == PARTS_AVAILABILITY_WEIGHT
+    )
+
+
+def test_a_shortfall_does_not_outweigh_urgency():
+    """A genuinely urgent job with a parts shortfall should still outrank a
+    routine job with none -- parts availability is weighted below urgency by
+    design (see PARTS_AVAILABILITY_WEIGHT vs URGENCY_WEIGHT in dispatch.py)."""
+    urgent_but_short = score_job(
+        _job(priority="urgent"), customer=_customer(), inventory_shortfall=True, now=NOW
+    )
+    routine_and_stocked = score_job(
+        _job(priority="low"), customer=_customer(), inventory_shortfall=False, now=NOW
+    )
+    assert urgent_but_short.total > routine_and_stocked.total
 
 
 # ---------------------------------------------------------------------------

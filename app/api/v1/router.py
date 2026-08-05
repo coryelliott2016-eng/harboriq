@@ -14,10 +14,12 @@ from app.api.v1.routes import (
     messages,
     portal,
     public,
+    purchase_orders,
     reports,
     sms_webhooks,
     stripe_webhooks,
     users,
+    vendors,
     vessels,
 )
 
@@ -31,6 +33,8 @@ api_router.include_router(jobs.router)
 api_router.include_router(field_app.router)
 api_router.include_router(dispatch.router)
 api_router.include_router(inventory.router, tags=["inventory"])
+api_router.include_router(vendors.router)
+api_router.include_router(purchase_orders.router)
 api_router.include_router(invoices.router)
 api_router.include_router(billing.router)
 api_router.include_router(reports.router)

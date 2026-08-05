@@ -67,10 +67,15 @@ CUSTOMER_VALUE_WEIGHT = Decimal("8")
 #: "is this actually urgent" or "will this pay for the truck roll".
 DISTANCE_WEIGHT = Decimal("12")
 
-#: Parts availability is currently a no-op (see `_score_parts_availability`)
-#: but the weight constant is declared here so wiring it up later (once
-#: line-item-to-inventory reservation linkage exists) is a one-line change
-#: rather than a new factor design.
+#: Parts availability (Phase 13): full weight when every `part` line item on
+#: the job has enough `quantity_on_hand` to cover it (or the job has no part
+#: line items at all -- nothing to be short on), zero when any part line item
+#: is short. Binary rather than a smooth curve because "can this job actually
+#: be worked as scheduled" is a yes/no operational question, not a matter of
+#: degree -- a shop either has the impeller in stock or it doesn't. Weighted
+#: below urgency/revenue/technician-fit (a genuinely urgent job with a
+#: shortfall should still rank above a routine job with none) but above
+#: workload, since a parts shortfall is a harder blocker than a busy calendar.
 PARTS_AVAILABILITY_WEIGHT = Decimal("10")
 
 #: Technician skill fit — meaningful but secondary to urgency/revenue; a
@@ -251,23 +256,32 @@ def _score_distance(
 
 
 def _score_parts_availability(inventory_shortfall: bool | None) -> tuple[Decimal, str]:
-    """No-op placeholder returning a neutral score.
+    """Real signal as of Phase 13 (previously a permanent no-op).
 
-    Job line items MAY reference an `inventory_item_id` (see
-    `app/services/jobs.py::add_line_item` / `app/services/inventory.py`), but
-    that link only records which SKU was fitted — there is no reservation
-    system that holds stock against a scheduled-but-not-yet-worked job. Wiring
-    real "will we have the part when this job is worked" logic requires that
-    reservation linkage, which is a prerequisite from a future inventory
-    phase (tracked in the README deferred-items list). Inventing a
-    shortfall signal from the current schema would not reflect anything real,
-    so this factor stays neutral until that prerequisite lands. The
-    `inventory_shortfall` parameter exists so a future implementation has an
-    obvious seam to plug into without changing `score_job`'s signature.
+    `inventory_shortfall` is computed by `_compute_inventory_shortfall` below
+    from the job's actual `part` line items vs. real `quantity_on_hand` --
+    this function itself stays a pure, DB-free scoring rule so it is still
+    unit-testable without a database, same as every other factor here:
+
+    - `None` (the job has no `part` line items with an `inventory_item_id`,
+      or was never checked): neutral full weight. A job that draws no
+      tracked parts is never blocked by parts, so it should not be penalized
+      relative to one that happens to need a well-stocked part.
+    - `False` (every needed part line is covered by current stock): full
+      weight, same as the no-parts case -- "covered" and "nothing to cover"
+      both mean this job is not blocked.
+    - `True` (at least one part line item needs more than is on hand): zero.
+      Not negative -- a parts shortfall does not actively make a job worse
+      than one with no parts at all, it simply forfeits the availability
+      credit those other jobs get, exactly like every other "missing input"
+      factor in this module (see `_score_distance`'s neutral-when-unknown
+      reasoning for the same shape of decision).
     """
     if inventory_shortfall is None:
-        return Decimal("0.00"), "not evaluated (no parts-reservation linkage yet)"
-    return Decimal("0.00"), "not evaluated (no parts-reservation linkage yet)"
+        return PARTS_AVAILABILITY_WEIGHT, "no part line items to check"
+    if inventory_shortfall:
+        return Decimal("0.00"), "shortfall: insufficient stock for one or more parts"
+    return PARTS_AVAILABILITY_WEIGHT, "all needed parts in stock"
 
 
 def _score_technician_fit(
@@ -418,6 +432,43 @@ def _customer_completed_job_count(db: Session, customer_id: uuid.UUID) -> int:
     )
 
 
+def _compute_inventory_shortfall(
+    db: Session, company_id: uuid.UUID, job_id: uuid.UUID
+) -> bool | None:
+    """`None` if `job_id` has no `part` line items linked to inventory,
+    `True` if any linked item's summed needed quantity exceeds its current
+    `quantity_on_hand`, `False` if every linked item is sufficiently stocked.
+
+    Sums quantity per item first (a job can have two line items pointing at
+    the same part -- e.g. two separate labor entries each installing one
+    unit) rather than checking each line independently, so "2 needed across
+    two lines, 1 in stock" is correctly flagged as a shortfall rather than
+    two individually-small checks that each look fine in isolation.
+
+    Callers must already be inside `tenant_context(db, company_id)` -- this
+    function does not open its own, matching every other query helper in
+    this module (`_job_revenue_amount`, `_customer_completed_job_count`, etc).
+    """
+    rows = db.execute(
+        text(
+            """
+            SELECT jli.inventory_item_id, SUM(jli.quantity) AS needed,
+                   ii.quantity_on_hand
+              FROM job_line_items jli
+              JOIN inventory_items ii ON ii.id = jli.inventory_item_id
+             WHERE jli.job_id = :job_id
+               AND jli.kind = 'part'
+               AND jli.inventory_item_id IS NOT NULL
+             GROUP BY jli.inventory_item_id, ii.quantity_on_hand
+            """
+        ),
+        {"job_id": job_id},
+    ).all()
+    if not rows:
+        return None
+    return any(row.needed > row.quantity_on_hand for row in rows)
+
+
 def _active_job_count_for_technician(db: Session, technician_id: uuid.UUID) -> int:
     return int(
         db.execute(
@@ -466,6 +517,7 @@ def rank_technicians_for_job(
         customer = _load_customer(db, job.customer_id)
         revenue_amount = _job_revenue_amount(db, job_id)
         completed_job_count = _customer_completed_job_count(db, job.customer_id)
+        inventory_shortfall = _compute_inventory_shortfall(db, company_id, job_id)
 
         technicians = db.execute(
             text(
@@ -488,6 +540,7 @@ def rank_technicians_for_job(
                 customer=customer,
                 technician=tech,
                 completed_job_count=completed_job_count,
+                inventory_shortfall=inventory_shortfall,
                 active_technician_job_count=active_count,
             )
             candidates.append(
@@ -515,12 +568,14 @@ def recompute_and_cache_score(
         customer = _load_customer(db, job.customer_id)
         revenue_amount = _job_revenue_amount(db, job_id)
         completed_job_count = _customer_completed_job_count(db, job.customer_id)
+        inventory_shortfall = _compute_inventory_shortfall(db, company_id, job_id)
 
         job_with_revenue = dict(job._mapping) | {"revenue_amount": revenue_amount}
         score = score_job(
             _Row(job_with_revenue),
             customer=customer,
             completed_job_count=completed_job_count,
+            inventory_shortfall=inventory_shortfall,
         )
 
         db.execute(

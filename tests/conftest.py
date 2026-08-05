@@ -32,6 +32,7 @@ _TENANT_TABLES = [
     "audit_log", "outbox_events", "public_tokens", "messages", "refunds", "payments",
     "invoices", "estimate_line_items", "estimates", "job_attachments",
     "job_time_entries", "job_line_items", "jobs",
+    "purchase_order_line_items", "purchase_orders", "vendors",
     "inventory_items", "vessels", "customers", "stripe_processed_events",
     "subscriptions", "password_reset_tokens", "user_sessions", "users",
     "subscription_plans", "companies",
@@ -179,21 +180,79 @@ def company_b(service_db) -> uuid.UUID:
 
 
 def make_inventory(db: Session, company_id: uuid.UUID, name: str, qty: int,
-                   unit_cost: str = "12.99", retail: str = "29.99") -> uuid.UUID:
+                   unit_cost: str = "12.99", retail: str = "29.99",
+                   reorder_point: int = 0, sku: str | None = None) -> uuid.UUID:
+    # Historically this always derived `sku` from `name.upper()`; Phase 13's
+    # `uq_inventory_items_company_sku` partial unique index means two calls
+    # with the same `name` in the same test/company would now collide, so
+    # callers that need multiple items sharing a name (rare) can pass an
+    # explicit `sku=None` override, or a distinct one.
     row = db.execute(
         text(
             """
             INSERT INTO inventory_items
-                (company_id, name, sku, unit_cost, retail_price, quantity_on_hand)
-            VALUES (:cid, :name, :sku, :uc, :rp, :qty)
+                (company_id, name, sku, unit_cost, retail_price, quantity_on_hand,
+                 reorder_point)
+            VALUES (:cid, :name, :sku, :uc, :rp, :qty, :reorder_point)
             RETURNING id
             """
         ),
-        {"cid": company_id, "name": name, "sku": name.upper(),
-         "uc": unit_cost, "rp": retail, "qty": qty},
+        {"cid": company_id, "name": name, "sku": sku if sku is not None else name.upper(),
+         "uc": unit_cost, "rp": retail, "qty": qty, "reorder_point": reorder_point},
     ).first()
     db.commit()
     return uuid.UUID(str(row[0]))
+
+
+def make_vendor(db: Session, company_id: uuid.UUID, name: str = "Acme Marine Supply",
+                contact_email: str | None = "orders@acmemarine.test") -> uuid.UUID:
+    row = db.execute(
+        text(
+            """
+            INSERT INTO vendors (company_id, name, contact_email)
+            VALUES (:cid, :name, :email)
+            RETURNING id
+            """
+        ),
+        {"cid": company_id, "name": name, "email": contact_email},
+    ).first()
+    db.commit()
+    return uuid.UUID(str(row[0]))
+
+
+def make_purchase_order(
+    db: Session,
+    company_id: uuid.UUID,
+    vendor_id: uuid.UUID,
+    created_by: uuid.UUID,
+    line_items: list[tuple[uuid.UUID, int, str]],
+    status: str = "draft",
+) -> uuid.UUID:
+    """`line_items` is `[(inventory_item_id, quantity_ordered, unit_cost), ...]`."""
+    po_row = db.execute(
+        text(
+            """
+            INSERT INTO purchase_orders (company_id, vendor_id, created_by, status)
+            VALUES (:cid, :vendor_id, :created_by, CAST(:status AS purchase_order_status))
+            RETURNING id
+            """
+        ),
+        {"cid": company_id, "vendor_id": vendor_id, "created_by": created_by, "status": status},
+    ).first()
+    po_id = uuid.UUID(str(po_row[0]))
+    for item_id, qty, unit_cost in line_items:
+        db.execute(
+            text(
+                """
+                INSERT INTO purchase_order_line_items
+                    (company_id, purchase_order_id, inventory_item_id, quantity_ordered, unit_cost)
+                VALUES (:cid, :po_id, :item_id, :qty, :unit_cost)
+                """
+            ),
+            {"cid": company_id, "po_id": po_id, "item_id": item_id, "qty": qty, "unit_cost": unit_cost},
+        )
+    db.commit()
+    return po_id
 
 
 def make_estimate(db: Session, company_id: uuid.UUID, status: str = "sent",
