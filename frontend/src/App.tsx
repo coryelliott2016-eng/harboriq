@@ -32,6 +32,7 @@ import { PortalJobs } from "./portal/PortalJobs";
 import { PortalInvoices } from "./portal/PortalInvoices";
 import { PortalEstimates } from "./portal/PortalEstimates";
 import { PortalMessages } from "./portal/PortalMessages";
+import { PortalDockLocation } from "./portal/PortalDockLocation";
 
 function TeamRoute() {
   const { user } = useAuth();
@@ -202,6 +203,7 @@ export default function App() {
       <Route path="/portal/:token/invoices" element={<PortalInvoices />} />
       <Route path="/portal/:token/estimates" element={<PortalEstimates />} />
       <Route path="/portal/:token/messages" element={<PortalMessages />} />
+      <Route path="/portal/:token/dock" element={<PortalDockLocation />} />
 
       {/* Phase 12: technician field app -- offline-first, single-column,
           deliberately outside <AppShell /> (no admin sidebar/nav; see

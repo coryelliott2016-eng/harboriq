@@ -162,6 +162,45 @@ def list_estimates(db: Session, company_id: uuid.UUID, customer_id: uuid.UUID) -
         )
 
 
+def list_dock_locations(db: Session, company_id: uuid.UUID, customer_id: uuid.UUID) -> list[Row]:
+    """GPS "find my dock" (Phase 17, Area D): this customer's own active/
+    upcoming slip reservation(s) with the slip's coordinates, for a
+    customer-facing map. `checked_in`/`confirmed` reservations only --
+    `pending` (not yet confirmed by staff), `checked_out`, and `cancelled`
+    are excluded since there is nothing to navigate to yet or anymore.
+
+    Only returns rows where the slip actually has coordinates set
+    (`latitude`/`longitude` are nullable per `alembic/sql/0016...`'s
+    comment -- a marina that never populated them has nothing to show
+    here, and the frontend should treat an empty list as "no GPS location
+    on file for your dock" rather than an error). Filtered by
+    `customer_id = :cid` in the SQL itself, not just company_id --
+    mirrors every other query in this module (see module docstring's
+    isolation-guarantee #2): Customer A's token must never resolve
+    Customer B's slip location even within the same tenant.
+    """
+    with tenant_context(db, company_id):
+        return list(
+            db.execute(
+                text(
+                    """
+                    SELECT r.id AS reservation_id, r.status, r.start_date, r.end_date,
+                           s.id AS slip_id, s.identifier AS slip_identifier,
+                           s.latitude, s.longitude
+                      FROM slip_reservations r
+                      JOIN slips s ON s.id = r.slip_id
+                     WHERE r.customer_id = :cid
+                       AND r.status IN ('confirmed', 'checked_in')
+                       AND s.latitude IS NOT NULL
+                       AND s.longitude IS NOT NULL
+                     ORDER BY r.start_date DESC
+                    """
+                ),
+                {"cid": customer_id},
+            ).all()
+        )
+
+
 def send_portal_invite(db: Session, company_id: uuid.UUID, customer_id: uuid.UUID) -> int:
     """Staff-triggered: issue (or renew) a customer's portal link and queue
     the notification email. Mirrors `invoices.send_invoice`'s exact shape --

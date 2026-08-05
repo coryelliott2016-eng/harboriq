@@ -16,6 +16,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
     { to: `/portal/${token}/invoices`, label: "Invoices" },
     { to: `/portal/${token}/estimates`, label: "Estimates" },
     { to: `/portal/${token}/messages`, label: "Messages" },
+    { to: `/portal/${token}/dock`, label: "Find my dock" },
   ];
 
   return (

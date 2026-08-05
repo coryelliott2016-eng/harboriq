@@ -17,6 +17,7 @@ from app.db.session import get_service_db
 from app.schemas.messages import MessageCreate, MessageOut
 from app.schemas.portal import (
     PortalApproveTokenOut,
+    PortalDockLocationOut,
     PortalEstimateOut,
     PortalInvoiceOut,
     PortalJobOut,
@@ -90,6 +91,15 @@ def get_invoice_pay_url(invoice_id: uuid.UUID, ctx: tuple = Depends(_resolve)):
 def get_estimates(ctx: tuple = Depends(_resolve)):
     db, company_id, customer_id = ctx
     return portal_service.list_estimates(db, company_id, customer_id)
+
+
+@router.get("/{public_token}/dock-locations", response_model=list[PortalDockLocationOut])
+def get_dock_locations(ctx: tuple = Depends(_resolve)):
+    """GPS "find my dock" (Phase 17, Area D). Empty list is a normal,
+    non-error response -- it means either no active/upcoming reservation,
+    or the marina hasn't recorded GPS coordinates for the assigned slip."""
+    db, company_id, customer_id = ctx
+    return portal_service.list_dock_locations(db, company_id, customer_id)
 
 
 @router.post(

@@ -490,6 +490,17 @@ export interface PortalApproveToken {
   approve_path: string;
 }
 
+export interface PortalDockLocation {
+  reservation_id: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  slip_id: string;
+  slip_identifier: string;
+  latitude: string;
+  longitude: string;
+}
+
 export interface PortalInviteResponse {
   customer_id: string;
   outbox_event_id: number;

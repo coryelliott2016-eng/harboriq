@@ -42,6 +42,7 @@ import type {
   MessageCreate,
   OnMyWayResponse,
   PortalApproveToken,
+  PortalDockLocation,
   PortalEstimate,
   PortalInvoice,
   PortalInviteResponse,
@@ -286,6 +287,10 @@ export const portalApi = {
     apiRequest<Message>(`/portal/${token}/messages`, {
       method: "POST",
       body,
+      anonymous: true,
+    }),
+  dockLocations: (token: string) =>
+    apiRequest<PortalDockLocation[]>(`/portal/${token}/dock-locations`, {
       anonymous: true,
     }),
 };

@@ -7,7 +7,7 @@ no cost/margin detail, nothing about other customers. See
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
@@ -87,6 +87,22 @@ class PortalApproveTokenOut(BaseModel):
     portal duplicating approval logic."""
 
     approve_path: str
+
+
+class PortalDockLocationOut(BaseModel):
+    """GPS "find my dock" (Phase 17, Area D): one of the customer's own
+    active/upcoming reservations, with just enough slip detail to plot it
+    on a map -- no other customer's data, no internal notes/pricing."""
+
+    model_config = ConfigDict(from_attributes=True)
+    reservation_id: uuid.UUID
+    status: str
+    start_date: date
+    end_date: date
+    slip_id: uuid.UUID
+    slip_identifier: str
+    latitude: Decimal
+    longitude: Decimal
 
 
 class PortalInviteOut(BaseModel):
