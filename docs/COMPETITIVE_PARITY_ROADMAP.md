@@ -5,7 +5,7 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 12: auth, multi-tenant CRM, invoicing + Stripe Checkout
+Status as of Phase 13: auth, multi-tenant CRM, invoicing + Stripe Checkout
 (single-account and per-tenant Stripe Connect direct charges), refunds,
 PDF/email invoice delivery, dunning, AR aging, a durable magic-link customer
 self-service portal with customer<->staff messaging, self-service + admin
@@ -15,11 +15,17 @@ Maps/Mapbox swap point) feeding the AI dispatch engine's distance factor,
 React frontend, a rule-based explainable AI dispatch engine, production
 deployment/observability hooks, a visual drag-and-drop dispatch board
 with a live Leaflet/OpenStreetMap map and two-way SMS (console-fallback
-graceful degradation until a real Twilio account is connected), and now an
+graceful degradation until a real Twilio account is connected), an
 installable offline-first PWA field app for technicians (job queue, offline
 action queue with idempotent sync-on-reconnect, photo/signature capture,
-time clock) installable on iPhone via Safari with no App Store account.
-483 backend tests, 81 frontend tests, CI green.
+time clock) installable on iPhone via Safari with no App Store account, and
+now full inventory CRUD with per-tenant SKU/barcode-style lookup, vendors,
+a draft/submit/receive purchase-order lifecycle with correctly guarded
+`quantity_on_hand` writes, low-stock reorder suggestions with one-click
+*draft* PO generation (a human still has to submit — deliberately not
+unattended auto-reordering), and the AI dispatch engine's parts-availability
+factor wired up to that real inventory data instead of its former permanent
+no-op. 526 backend tests, 90 frontend tests, CI green.
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
@@ -159,10 +165,63 @@ this is organized from).
 - [ ] **Push notifications** — needs a VAPID keypair and a backend
       subscription/send path; not implemented this phase.
 
-## Phase 13 — Inventory, Parts & Vendor Integration
-- Barcode/ticket scanning, purchase orders, low-stock auto-reorder, vendor
-  catalog integration — and wires the dispatch engine's currently no-op
-  parts-availability factor up to real data.
+## Phase 13 — Inventory, Parts & Vendor Integration — **COMPLETE**
+- [x] Full inventory CRUD (`app/services/inventory.py` extended alongside
+      the pre-existing `FOR UPDATE`-guarded `use_inventory_part_atomic` —
+      no second, competing writer of `quantity_on_hand` was introduced) plus
+      a per-tenant partial-unique-index SKU constraint (migration `0012`)
+      enabling `GET /inventory/lookup?sku=...`, a barcode-scan-or-type
+      workflow. Frontend feature-detects the `BarcodeDetector` Web API and
+      falls back to manual entry with an explicit caveat on Firefox/Safari,
+      where that API is not supported — see the README's "Inventory, parts
+      & vendors (Phase 13)" section for sourcing on that browser-support
+      gap.
+- [x] Vendors (`vendors` table + CRUD service/routes) with an optional
+      `inventory_items.default_vendor_id` used to group reorder
+      suggestions. No delete endpoint by design — same "deactivate by
+      convention, never orphan a historical FK" pattern already used for
+      customers/technicians elsewhere in this codebase.
+- [x] Purchase orders: a `PurchaseOrderSM` state machine
+      (`draft → {submitted, cancelled}`, `submitted → {received,
+      cancelled}`, terminal states `received`/`cancelled`) mirroring
+      `JobSM`/`InvoiceSM`. Receiving reuses the exact `FOR UPDATE`-guarded
+      pattern the atomic part-decrement already established, just
+      incrementing `quantity_on_hand` instead of decrementing it, and
+      supports partial receipt per line item with a database-level CHECK
+      (`quantity_received <= quantity_ordered`) plus an application-level
+      422 guard against over-receiving in a single call.
+- [x] Low-stock reorder suggestions (`GET /inventory/reorder-suggestions`,
+      read-only) with one-click **draft** PO generation (`POST
+      /inventory/reorder-suggestions/generate-po`) grouped by vendor. A
+      human must still call `POST /purchase-orders/{id}/submit` before
+      anything is committed to a vendor — **explicitly not** unattended
+      background auto-ordering, a deliberate scope boundary documented in
+      both the README and the route docstrings, not a gap.
+- [x] AI dispatch engine's `parts_availability` factor (Phase 7's reserved,
+      permanently-neutral weight) is now a real signal:
+      `_compute_inventory_shortfall` sums a job's `part`-kind line items
+      against current `quantity_on_hand` and the existing dispatch test
+      suite was updated to assert the new real scoring behavior (a job
+      with an out-of-stock required part now scores measurably lower) —
+      an intentional planned change flagged in the test diffs, not a
+      regression.
+- [ ] **Unattended auto-reordering** — see the draft-PO-generation bullet
+      above; deliberately out of scope this phase, a materially different
+      (higher-trust, no-human-in-the-loop) feature from "suggest and let a
+      human draft."
+- [ ] **Client-side barcode decoding fallback for Firefox/Safari** (e.g. a
+      WASM barcode-reading library) — not implemented; those browsers get
+      manual SKU entry only, with the gap explicitly surfaced in the UI
+      rather than silently degraded.
+- [ ] **Multi-warehouse/multi-location inventory** — `quantity_on_hand`
+      remains one number per item per company, consistent with the
+      single-shop-location assumption made since Phase 1.
+- [ ] **Vendor-side integration** (EDI, vendor catalog/pricing feeds,
+      emailing the PO to the vendor) — a submitted PO is a fact the shop
+      acts on manually; nothing is transmitted to the vendor automatically.
+- [ ] **Vendor deletion/archival UI** — vendors can be created/updated only;
+      no archived/inactive flag or delete route exists yet, matching the
+      "deactivate by convention" decision above.
 
 ## Phase 14 — Accounting & Reporting
 - Basic AR aging shipped in Phase 8; this phase covers the rest: a simple

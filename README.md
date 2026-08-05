@@ -181,6 +181,23 @@ its server-side logs (see `app/api/middleware.py`, and
 | PATCH | `/api/v1/jobs/{id}/line-items/{line_id}` | bearer, office or the assigned tech | correct a line; 409 once invoiced |
 | DELETE | `/api/v1/jobs/{id}/line-items/{line_id}` | bearer, office or the assigned tech | remove a line; 409 once invoiced |
 | POST | `/api/v1/inventory/use` | bearer | atomic stock deduction; with `job_id`, bills the part to that work order |
+| POST | `/api/v1/inventory` | bearer, owner/admin/office | register a new inventory item (starts at `quantity_on_hand = 0`) |
+| GET | `/api/v1/inventory` | bearer | list/search inventory; `low_stock_only=true` filters to items at/below their reorder point |
+| GET | `/api/v1/inventory/lookup?sku=...` | bearer | resolve a SKU straight to its item (barcode-scan-or-type workflow) |
+| GET | `/api/v1/inventory/reorder-suggestions` | bearer | items at/below their reorder point, annotated with `default_vendor_id` |
+| POST | `/api/v1/inventory/reorder-suggestions/generate-po` | bearer, owner/admin/office | create one `draft` PO from selected low-stock items and a vendor; nothing submitted to the vendor yet |
+| GET | `/api/v1/inventory/{id}` | bearer | one inventory item |
+| PATCH | `/api/v1/inventory/{id}` | bearer, owner/admin/office | partial update |
+| POST | `/api/v1/vendors` | bearer, owner/admin/office | create a vendor |
+| GET | `/api/v1/vendors` | bearer | list/search vendors by name |
+| GET | `/api/v1/vendors/{id}` | bearer | one vendor |
+| PATCH | `/api/v1/vendors/{id}` | bearer, owner/admin/office | partial update; no delete endpoint (see "Inventory, parts & vendors") |
+| POST | `/api/v1/purchase-orders` | bearer, owner/admin/office | create a `draft` PO with its line items |
+| GET | `/api/v1/purchase-orders` | bearer | list POs; filter by `status` |
+| GET | `/api/v1/purchase-orders/{id}` | bearer | one PO with its line items |
+| POST | `/api/v1/purchase-orders/{id}/submit` | bearer, owner/admin/office | `draft` -> `submitted`: the human commitment point |
+| POST | `/api/v1/purchase-orders/{id}/receive` | bearer, owner/admin/office | record received quantities (may be partial); increments `quantity_on_hand` through the same guarded writer `POST /inventory/use` decrements it with |
+| POST | `/api/v1/purchase-orders/{id}/cancel` | bearer, owner/admin/office | `draft`/`submitted` -> `cancelled`; not allowed once `received` |
 | POST | `/api/v1/invoices` | bearer, owner/admin/office | invoice every currently-uninvoiced line on a job |
 | GET | `/api/v1/invoices` | bearer, owner/admin/office | list invoices; filter by status, customer, job |
 | GET | `/api/v1/invoices/{id}` | bearer, owner/admin/office | one invoice with its frozen line items |
@@ -467,7 +484,7 @@ scoring logic itself):
 | Revenue | 15 | `log1p` curve on the job's line-item revenue, saturating around $5,000 — diminishing returns so a single huge invoice cannot dwarf urgency. |
 | Distance | 12 | Haversine miles from technician to customer, exponential half-life falloff (half-life 15 miles). **Graceful degradation:** scores neutral (0.00) rather than penalizing when either side is missing coordinates, since most customers do not have geocoded addresses yet (see deferred list). |
 | Customer value | 8 | The customer's completed-job count, saturating at 12 — a mild loyalty signal, not a hard gate. |
-| Parts availability | 10 | Currently a documented permanent no-op (always neutral): there is no inventory-reservation-to-line-item linkage yet to know whether a job's parts are actually on the shelf (see deferred list). The weight is reserved so wiring in real inventory data later is a pure addition, not a rescoring of every other factor. |
+| Parts availability | 10 | **Real signal as of Phase 13** (previously a documented permanent no-op — the weight was reserved from Phase 7 specifically so this could be wired in later as a pure addition, not a rescoring of every other factor). `_compute_inventory_shortfall` sums the job's `part`-kind line items against current `quantity_on_hand`: full weight if the job has no tracked parts or every needed part is in stock, zero (not negative) if any linked part needs more than is on hand. See "Inventory, parts & vendors (Phase 13)" below for the full mechanism. |
 | Workload | −6 (penalty) | Subtracted, not added: a technician's current active-job count, saturating at 5 concurrent jobs, so the engine spreads load instead of piling everything onto whoever scores best on the other factors. |
 
 **Two scoring entry points, because "prioritize the queue" and "who should do
@@ -1229,6 +1246,191 @@ See `docs/COMPETITIVE_PARITY_ROADMAP.md`'s Phase 12 entry for how this maps
 to ServiceTitan/Jobber's native mobile technician apps as the competitive
 parity target.
 
+## Inventory, parts & vendors (Phase 13)
+
+Phase 7's dispatch engine shipped a `parts_availability` scoring factor that
+was, by design, a **permanent documented no-op** — there was no linkage
+between a job's parts and real stock levels to score against, so it always
+returned neutral. This phase closes that gap: real inventory CRUD, SKU/
+barcode-style lookup, vendors, a draft/submit/receive purchase-order
+lifecycle with correctly guarded `quantity_on_hand` writes, low-stock reorder
+suggestions with one-click *draft* PO generation, and — the payoff — wiring
+all of it into the dispatch scorer so `parts_availability` is now a real
+signal instead of a reserved weight.
+
+**Migration `0012_inventory_procurement`.** Three changes: a partial unique
+index `uq_inventory_items_company_sku ON inventory_items (company_id, sku)
+WHERE sku IS NOT NULL` (SKU stays optional, but if two items in the same
+company both have one, it must be unique — the same rule a real barcode/UPC
+would enforce, and required for `GET /inventory/lookup?sku=...` to be
+unambiguous); a new `vendors` table (own RLS policy, same tenant-isolation
+pattern as every other table since migration 0001) plus a nullable
+`inventory_items.default_vendor_id` FK added after `vendors` exists; and
+`purchase_orders` / `purchase_order_line_items` — status is a Postgres enum
+(`draft`, `submitted`, `received`, `cancelled`), line items carry both
+`quantity_ordered` and `quantity_received` with a `CHECK
+(quantity_received <= quantity_ordered)` at the database level (belt-and-
+suspenders under the application-level guard below), and the line-items
+table uses the same composite-FK-to-`(company_id, id)` pattern established
+for `job_attachments` in migration 0011 so a line item can never reference a
+purchase order belonging to a different tenant even if application logic
+had a bug. Verified by dropping and recreating the database and reapplying
+migrations `0001`–`0012` from scratch during this phase's work, not just
+applied incrementally on top of already-migrated state.
+
+**Two schema quirks worth knowing about, both intentional:** `inventory_items`
+has no `updated_at` column — it predates `TimestampMixin` gaining one and
+was never backfilled, so `app/services/inventory.py::update()` does not
+attempt to set one (a raw SQL `UPDATE ... SET updated_at = now()` would
+simply fail against this table); and `InventoryItemOut` exposes a `currency`
+field sourced from the existing `money_currency` enum column (always `"USD"`
+today, same single-currency assumption as invoicing) even though no
+migration added a dedicated currency column for inventory — it reuses the
+column the money-math work already put in place rather than adding a
+redundant one.
+
+**`app/services/inventory.py` extensions — CRUD, lookup, reorder
+suggestions.** `create`, `get`, `list_items` (search + `low_stock_only`
+filter + pagination), `update`, and `lookup_by_sku` are added alongside the
+pre-existing `use_inventory_part_atomic` (unchanged — still the one
+`FOR UPDATE`-guarded writer of `quantity_on_hand`; this phase does not
+introduce a second, competing writer for that column). A newly created item
+always starts at `quantity_on_hand = 0`: receiving stock is a purchase-order
+event, not a field on the create form, so there is exactly one code path
+("receive a PO line") that increases stock, matching the existing
+one-code-path discipline the atomic decrement already established for
+decreasing it. `reorder_suggestions` returns every item where
+`quantity_on_hand <= reorder_point`, each annotated with its
+`default_vendor_id` so the frontend can group suggestions by vendor.
+
+**Vendors — plain CRUD, `app/services/vendors.py`.** Create/get/list
+(search)/update. No delete: a vendor referenced by a historical purchase
+order should never disappear and orphan that PO's `vendor_id` FK, so, same
+as customers and technicians elsewhere in this codebase, vendors are
+deactivated by convention (or simply left unused) rather than deleted —
+there is intentionally no `DELETE /vendors/{id}` route.
+
+**Purchase orders — state-machine-guarded lifecycle,
+`app/services/purchase_orders.py` + `app/services/state_machines.py`
+(`PurchaseOrderSM`).** `draft → {submitted, cancelled}`,
+`submitted → {received, cancelled}`, `received`/`cancelled` are terminal —
+mirroring the existing `JobSM`/`InvoiceSM` convention of "a completed
+money/stock movement cannot be un-done by re-opening the state machine, only
+by a new compensating action." Receiving is the one operation that touches
+`quantity_on_hand`, and it reuses the exact `FOR UPDATE`-guarded pattern
+`use_inventory_part_atomic` established in an earlier phase — the same
+lock-then-check-then-write shape, just incrementing instead of decrementing,
+so there remains a single family of guarded writers for that column rather
+than a second, parallel implementation with its own concurrency bugs to
+find. Receiving supports **partial receipt**: each line item tracks its own
+`quantity_received` independently and a `POST /purchase-orders/{id}/receive`
+call can cover any subset of a PO's lines in any quantity up to what's still
+outstanding on that line; the PO as a whole moves to `received` once called
+(matching this phase's chosen design — a single receiving event closes the
+PO even if a line was only partially fulfilled, rather than modeling
+"partially received" as a fifth status), while over-receiving on a single
+line (asking to receive more than `quantity_ordered - quantity_received` in
+one call) is rejected with a 422 and writes nothing, verified by a dedicated
+concurrency/guard test.
+
+**Reorder suggestions → one-click draft PO, but not unattended
+auto-ordering — a deliberate scope boundary.** `GET
+/inventory/reorder-suggestions` is read-only and side-effect-free. `POST
+/inventory/reorder-suggestions/generate-po` takes a vendor and a set of
+low-stock item ids and creates exactly one new purchase order in `draft`
+status with a line item per selected item — nothing is submitted to a
+vendor and no stock moves. A human still has to review the draft and call
+`POST /purchase-orders/{id}/submit` before it means anything outside the
+system. This phase deliberately does **not** implement unattended background
+reordering (e.g. a Celery beat task that submits POs on a schedule once
+stock crosses the reorder point) — that is a meaningfully different, higher-
+trust feature (letting the system commit the business to a vendor spend
+without a person in the loop) than "tell a human what's low and save them
+the data entry," and conflating the two would be the kind of over-automation
+this platform's AI standards explicitly warn against shipping without a
+human-review step.
+
+**SKU/barcode lookup and the `BarcodeDetector` browser-support caveat.**
+`GET /inventory/lookup?sku=...` is a plain exact-match lookup — there is no
+server-side barcode decoding, on purpose: decoding a barcode image is a
+client-side camera concern, not something that belongs behind an API call.
+`InventoryPage.tsx` feature-detects the browser's native [`BarcodeDetector`
+Web API](https://developer.mozilla.org/en-US/docs/Web/API/BarcodeDetector)
+via `"BarcodeDetector" in globalThis` and shows a manual-entry fallback with
+an explicit caveat when it's unsupported, because that API's real-world
+support is narrow: it works in Chrome/Edge and Chromium-based Android
+browsers (Chrome for Android, Android WebView, Samsung Internet), but is
+**not supported in Firefox on any platform, and not enabled by default in
+Safari/Safari iOS** — WebKit has tracked it as "Under Consideration" since
+2024 ([WebKit bug #254573](https://bugs.webkit.org/show_bug.cgi?id=254573))
+and even recent Safari builds gate it behind a disabled-by-default
+experimental flag. Concretely: an iPhone technician using Safari — the
+majority mobile case for this platform's field app per the Phase 12 PWA
+work — will see the manual SKU-entry fallback, not a live barcode scan, and
+the UI says so rather than silently failing. Sources: [MDN's
+`BarcodeDetector`
+docs](https://developer.mozilla.org/en-US/docs/Web/API/BarcodeDetector) and
+[caniuse's BarcodeDetector API
+table](https://caniuse.com/mdn-api_barcodedetector) (both checked during
+this phase's work).
+
+**Dispatch engine: `parts_availability` is no longer a no-op.**
+`app/services/dispatch.py::_compute_inventory_shortfall` sums each job's
+`part`-kind line items by `inventory_item_id` (so two line items pulling
+from the same part correctly combine into one needed-quantity check instead
+of each looking individually fine) and compares against that item's current
+`quantity_on_hand`. The pure `_score_parts_availability` scoring function
+(still DB-free and unit-testable in isolation, same as every other factor)
+then returns: full weight (10 points) if the job has no tracked part line
+items at all (nothing to be blocked by); full weight if every needed part is
+covered by stock; **zero** — not negative — if any part line item needs more
+than is currently on hand, matching the "forfeit the credit, don't actively
+penalize" shape already used for `distance` when coordinates are missing.
+Both scoring entry points (`recompute_and_cache_score` for the job-level
+priority queue, and `rank_technicians_for_job` for per-candidate ranking)
+now call `_compute_inventory_shortfall` before scoring. **This is an
+intentional planned change, not a regression:** the existing dispatch test
+suite was updated this phase to assert the new real behavior (a job whose
+required parts are out of stock now scores measurably lower than an
+otherwise-identical job with no parts shortfall) rather than asserting the
+old permanent-neutral placeholder.
+
+**Frontend — three new pages, gated the same way "Team" already is.**
+`/inventory` (search, low-stock filter with a highlighted/badged row style,
+the SKU lookup form described above, and a create/edit modal with a
+default-vendor dropdown), `/vendors` (list, search, create/edit modal), and
+`/purchase-orders` (status-filtered list with per-row submit/cancel/receive
+actions, a reorder-suggestions panel grouped by vendor with a one-click
+"Draft PO" button per group that explicitly labels the result a draft — not
+an auto-submitted order — and a create-PO modal with dynamic line-item
+rows). All three are added to `AppShell`'s navigation and registered as
+protected routes in `App.tsx` following the exact `TeamRoute` pattern:
+gated behind `canManageOperations(user?.role)`, with a permission-denied
+message rather than a 404 for a logged-in user who simply lacks the role.
+
+### What's intentionally NOT here yet (Phase 13)
+
+- **Unattended auto-reordering.** Covered above — a human must submit a
+  generated draft PO; there is no scheduled/background job that submits
+  purchase orders on its own.
+- **Real barcode/camera decoding on unsupported browsers.** The
+  `BarcodeDetector` Web API is used where the browser supports it; there is
+  no JS-decoding-library fallback (e.g. a WASM barcode reader) for
+  Firefox/Safari — those browsers get manual SKU entry only, this phase.
+- **Multi-warehouse / multi-location inventory.** `quantity_on_hand` remains
+  a single number per item per company, not per-location — fine for the
+  single-shop-location assumption this platform has made since Phase 1, but
+  would need a real location dimension for a multi-yard operator.
+- **Vendor-side integration (EDI, vendor catalogs/pricing feeds, PO email
+  delivery to the vendor).** Purchase orders live entirely inside HarborIQ;
+  nothing is transmitted to the vendor automatically. A submitted PO is a
+  fact the *shop* now needs to act on (call/email the vendor), not
+  something the system sends on the shop's behalf yet.
+- **Vendor deletion / archival UI.** Vendors can only be created and
+  updated from the frontend today, matching the "no delete, deactivate by
+  convention" service-layer decision above — there is no archived/inactive
+  flag or filter yet.
+
 ## Project layout
 
 ```
@@ -1673,9 +1875,11 @@ rationale):**
   `users`/`jobs` — fine for an exact-match Jaccard overlap today, but a real
   taxonomy (with proficiency levels, certifications, synonyms) would need a
   proper join table.
-- Real inventory-to-line-item parts-reservation linkage — the parts
-  availability factor is a permanent, documented no-op until there is an
-  actual signal for "are this job's parts on the shelf" to score against.
+- ~~Real inventory-to-line-item parts-reservation linkage — the parts
+  availability factor is a permanent, documented no-op~~ **Shipped in Phase
+  13** — see "Inventory, parts & vendors (Phase 13)" above: `job_line_items`
+  of kind `part` are now compared against real `quantity_on_hand`, and the
+  scoring factor is a live signal, not a placeholder.
 - The eventual ML dispatch model itself, once the platform has accumulated
   roughly 500+ real, labeled repair outcomes to train on — see "AI dispatch
   engine" above. Explicitly not attempted now; faking one against no data
