@@ -89,6 +89,25 @@ def create(
             if vessel_id is not None:
                 _require_row(db, "vessels", vessel_id, "vessel")
 
+            # Serialize concurrent bookings of the *same slip* with a
+            # transaction-scoped advisory lock (auto-released on commit or
+            # rollback below, same lifetime as everything else in this
+            # transaction). Without this, N>=3 concurrent inserts racing
+            # against `ex_slip_reservations_no_overlap` can deadlock --
+            # Postgres has each waiting transaction take a ShareLock on the
+            # others' not-yet-committed tuple to see whether it will commit,
+            # and with three or more overlapping inserts that wait graph can
+            # form a genuine cycle instead of resolving pairwise. Locking
+            # per-slip means only one transaction is ever inserting/checking
+            # for a given slip at a time, so the exclusion constraint never
+            # has more than one concurrent writer left to referee -- it
+            # remains the actual correctness guarantee (see module
+            # docstring), this lock only removes the deadlock opportunity.
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                {"key": f"slip_reservation:{company_id}:{slip_id}"},
+            )
+
             if not slips.is_available(db, company_id, slip_id, start_date, end_date):
                 db.rollback()
                 raise Conflict(
