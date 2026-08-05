@@ -36,6 +36,17 @@ dependencies = [
     # Nominatim over plain HTTPS. A real runtime dependency, not test-only —
     # promoted here from what used to be a dev-only transitive install.
     "httpx>=0.27",
+    # Phase 16 — Redis-backed rate limiting (app/core/rate_limit.py) and the
+    # Celery broker/result backend (app/core/celery_app.py). One dependency
+    # covers both: the `redis` package is both a plain client (rate limiter)
+    # and Celery's broker/result-backend transport.
+    "redis>=5.0",
+    "celery>=5.4",
+    # MFA/TOTP enrollment (Phase 16): pyotp generates/verifies RFC 6238 TOTP
+    # codes and builds the otpauth:// URI; cryptography's Fernet encrypts
+    # `users.mfa_secret_enc` at rest (see app/core/crypto.py).
+    "pyotp>=2.9",
+    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]

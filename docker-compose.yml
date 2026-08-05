@@ -16,16 +16,33 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    # Phase 16 — broker/result-backend for Celery (`app.core.celery_app`) and
+    # the shared store for the distributed rate limiter
+    # (`app.core.rate_limit`). `alpine` keeps the image small; no auth/TLS
+    # configured here because it is only reachable over the compose-internal
+    # network (not published to the host), matching `db`'s posture.
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   app:
     build: .
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://harboriq_app:harboriq_app_pass@db:5432/harboriq
       SERVICE_DATABASE_URL: postgresql+psycopg://harboriq_service:harboriq_service_pass@db:5432/harboriq
+      REDIS_URL: redis://redis:6379/0
       STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
       STRIPE_API_KEY: "${STRIPE_API_KEY:-}"
+      MFA_ENCRYPTION_KEY: "${MFA_ENCRYPTION_KEY:-}"
       # The frontend container below is a separate origin (port 5173), so the
       # browser enforces CORS on every API call it makes.
       CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:5173}"
@@ -34,6 +51,47 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    # Phase 16 — Celery worker: consumes `app.tasks.outbox_tasks` /
+    # `app.tasks.sweep_tasks` jobs from the `redis` broker above. Same image
+    # as `app` (built from the same Dockerfile) since it needs the identical
+    # Python environment/dependencies; only the container command differs.
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://harboriq_app:harboriq_app_pass@db:5432/harboriq
+      SERVICE_DATABASE_URL: postgresql+psycopg://harboriq_service:harboriq_service_pass@db:5432/harboriq
+      REDIS_URL: redis://redis:6379/0
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+      STRIPE_API_KEY: "${STRIPE_API_KEY:-}"
+      MFA_ENCRYPTION_KEY: "${MFA_ENCRYPTION_KEY:-}"
+    command: celery -A app.core.celery_app worker --loglevel=info
+
+  beat:
+    # Phase 16 — Celery Beat: the single scheduler process that enqueues the
+    # periodic tasks defined in `app.core.celery_app`'s `beat_schedule`
+    # (dunning sweep, geocode backfill, outbox safety-net sweep). Exactly one
+    # `beat` process should ever run per deployment — running more than one
+    # would enqueue every scheduled task multiple times.
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://harboriq_app:harboriq_app_pass@db:5432/harboriq
+      SERVICE_DATABASE_URL: postgresql+psycopg://harboriq_service:harboriq_service_pass@db:5432/harboriq
+      REDIS_URL: redis://redis:6379/0
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+      STRIPE_API_KEY: "${STRIPE_API_KEY:-}"
+      MFA_ENCRYPTION_KEY: "${MFA_ENCRYPTION_KEY:-}"
+    command: celery -A app.core.celery_app beat --loglevel=info
 
   frontend:
     build:

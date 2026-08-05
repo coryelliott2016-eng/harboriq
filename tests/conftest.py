@@ -34,7 +34,8 @@ _TENANT_TABLES = [
     "job_time_entries", "job_line_items", "jobs",
     "purchase_order_line_items", "purchase_orders", "vendors",
     "inventory_items", "vessels", "customers", "stripe_processed_events",
-    "subscriptions", "password_reset_tokens", "user_sessions", "users",
+    "subscriptions", "password_reset_tokens", "mfa_backup_codes",
+    "user_sessions", "users",
     "subscription_plans", "companies",
 ]
 
@@ -66,17 +67,37 @@ def _truncate(service_engine):
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
-    """Reset the in-process per-IP rate limiters before each test.
+    """Reset the Redis-backed per-IP rate limiters before each test.
 
-    They are module-level dicts (see `app/core/rate_limit.py`) so state would
-    otherwise leak across tests in the same process — the whole suite hits
-    `POST /auth/login` etc. from the TestClient's fixed loopback address, so
-    without this every test after the ~10th login in a module would see a
-    spurious 429 that has nothing to do with what that test is checking.
+    Counters live in Redis, keyed by IP (see `app/core/rate_limit.py`), so
+    state would otherwise leak across tests in the same process — the whole
+    suite hits `POST /auth/login` etc. from the TestClient's fixed loopback
+    address, so without this every test after the ~10th login in a module
+    would see a spurious 429 that has nothing to do with what that test is
+    checking.
     """
     from app.core.rate_limit import _reset_all_for_tests
 
     _reset_all_for_tests()
+    yield
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _celery_eager_mode():
+    """Run Celery tasks synchronously/in-process for the whole test session.
+
+    `dispatch_outbox_soon` (see `app/services/outbox_dispatch.py`) enqueues a
+    real Celery task via `.delay()`. Flipping `task_always_eager` on here
+    means that call executes the task body immediately, in the calling
+    thread, with no broker or worker process required — the standard Celery
+    testing pattern. This preserves the exact behavior tests already depend
+    on from the pre-Phase-16 BackgroundTasks version: the dispatch pass has
+    already run by the time `client.post(...)` returns.
+    """
+    from app.core.celery_app import celery_app
+
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
     yield
 
 

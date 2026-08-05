@@ -9,6 +9,13 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-before-deploying"
 MIN_JWT_SECRET_BYTES = 32
 
+# Fixed, obviously-insecure Fernet key used only when APP_ENV=development and
+# MFA_ENCRYPTION_KEY is unset, so `users.mfa_secret_enc` encryption works out
+# of the box locally without requiring every developer to generate their own
+# key. Generated once via `Fernet.generate_key()`; never used outside dev
+# (enforced by `_require_strong_mfa_key_outside_development` below).
+DEV_MFA_ENCRYPTION_KEY = "3gWn9z6r0m1cX2h8vQvB5sYyF4dK7pL0aT9uJ6eR3iM="
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -49,17 +56,45 @@ class Settings(BaseSettings):
     # online guessing impractical.
     login_max_failed_attempts: int = 5
     login_lockout_minutes: int = 15
-    # In-process, per-IP sliding-window limiter — see `app/core/rate_limit.py`.
-    # Deliberately NOT coordinated across instances; the natural upgrade once
-    # horizontally scaled is a Redis-backed limiter (e.g. token bucket keyed
-    # by IP in Redis, shared by every app process). One process today, so the
-    # in-memory version is honestly proportionate rather than a real
-    # production-scale guarantee.
+    # Redis-backed, per-IP fixed-window limiter — see `app/core/rate_limit.py`.
+    # Phase 16: replaced the old in-process dict/threading.Lock implementation
+    # so the limit is shared and consistent across every app process/pod
+    # rather than reset per-instance. Thresholds/behavior unchanged from the
+    # original in-process version.
     rate_limit_requests_per_window: int = 10
     rate_limit_window_seconds: int = 60
 
     # --- Invite tokens ---
     invite_ttl_hours: int = 24 * 7
+
+    # --- Redis (Phase 16) ---
+    # Backs the distributed rate limiter (app/core/rate_limit.py) and is the
+    # Celery broker + result backend (app/core/celery_app.py). Defaults to a
+    # local dev Redis on the standard port; docker-compose.yml's `redis`
+    # service and DEPLOYMENT.md both use this same default in-cluster.
+    redis_url: str = "redis://localhost:6379/0"
+
+    # --- MFA / TOTP (Phase 16) ---
+    # Fernet symmetric key (44-char urlsafe-base64, e.g. via
+    # `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`)
+    # used to encrypt `users.mfa_secret_enc` at rest — see app/core/crypto.py.
+    # Empty in development: a deterministic, obviously-insecure dev-only key
+    # is substituted so MFA enrollment works out of the box locally, mirroring
+    # the `DEV_JWT_SECRET` pattern above. Non-development environments MUST
+    # set a real key (enforced below, same validator style as jwt_secret).
+    mfa_encryption_key: str = ""
+
+    # --- Off-host database backups (Phase 16) ---
+    # All empty by default => `scripts/backup_db_s3.sh` runs local-only (pg_dump
+    # + gzip to BACKUP_OUTPUT_DIR), mirroring the smtp_host/twilio_account_sid
+    # graceful-degrade pattern above. Setting all three of
+    # BACKUP_S3_BUCKET/AWS credentials (via the AWS CLI's own standard env
+    # vars or an attached IAM role) turns on an additional `aws s3 cp` push
+    # of each local dump to off-host, off-provider storage. Not consumed by
+    # pydantic-settings directly (the backup script is a standalone shell
+    # script, not part of the FastAPI app), documented here for discoverability.
+    backup_s3_bucket: str = ""
+    backup_s3_prefix: str = "harboriq-backups"
 
     # --- Email transport ---
     # Empty smtp_host (the dev default) means "console transport": send_email
@@ -135,6 +170,24 @@ class Settings(BaseSettings):
                 f"JWT_SECRET must be at least {MIN_JWT_SECRET_BYTES} bytes"
             )
         return self
+
+    @model_validator(mode="after")
+    def _require_strong_mfa_key_outside_development(self) -> "Settings":
+        if self.app_env == "development":
+            return self
+        if self.mfa_encryption_key in ("", DEV_MFA_ENCRYPTION_KEY):
+            raise ValueError(
+                "MFA_ENCRYPTION_KEY must be set to a real Fernet key when "
+                f"APP_ENV={self.app_env!r} (try: python -c \"from cryptography.fernet "
+                'import Fernet; print(Fernet.generate_key().decode())\")'
+            )
+        return self
+
+    @property
+    def effective_mfa_encryption_key(self) -> str:
+        """The Fernet key to actually use: configured value, or the fixed
+        dev-only placeholder when running locally with none set."""
+        return self.mfa_encryption_key or DEV_MFA_ENCRYPTION_KEY
 
 
 settings = Settings()

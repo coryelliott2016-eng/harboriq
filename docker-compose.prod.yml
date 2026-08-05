@@ -41,6 +41,14 @@ services:
           cpus: "1.0"
           memory: 1g
 
+  redis:
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
+
   app:
     restart: unless-stopped
     env_file:
@@ -52,12 +60,43 @@ services:
       # anything deployment-specific come from `.env` via `env_file` above.
       DATABASE_URL: "postgresql+psycopg://harboriq_app:${POSTGRES_APP_PASSWORD:-harboriq_app_pass}@db:5432/harboriq"
       SERVICE_DATABASE_URL: "postgresql+psycopg://harboriq_service:${POSTGRES_SERVICE_PASSWORD:-harboriq_service_pass}@db:5432/harboriq"
+      REDIS_URL: "redis://redis:6379/0"
       APP_ENV: production
     deploy:
       resources:
         limits:
           cpus: "2.0"
           memory: 2g
+
+  worker:
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://harboriq_app:${POSTGRES_APP_PASSWORD:-harboriq_app_pass}@db:5432/harboriq"
+      SERVICE_DATABASE_URL: "postgresql+psycopg://harboriq_service:${POSTGRES_SERVICE_PASSWORD:-harboriq_service_pass}@db:5432/harboriq"
+      REDIS_URL: "redis://redis:6379/0"
+      APP_ENV: production
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+
+  beat:
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://harboriq_app:${POSTGRES_APP_PASSWORD:-harboriq_app_pass}@db:5432/harboriq"
+      SERVICE_DATABASE_URL: "postgresql+psycopg://harboriq_service:${POSTGRES_SERVICE_PASSWORD:-harboriq_service_pass}@db:5432/harboriq"
+      REDIS_URL: "redis://redis:6379/0"
+      APP_ENV: production
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
 
   frontend:
     restart: unless-stopped

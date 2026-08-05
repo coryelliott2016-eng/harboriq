@@ -32,9 +32,25 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Phase 16 — the Redis-backed rate limiter (app/core/rate_limit.py) and
+      # the Celery broker/backend (app/core/celery_app.py) both need a real
+      # Redis to talk to; tests/test_rate_limit_redis.py and
+      # tests/test_celery_outbox_tasks.py exercise it directly. Mirrors the
+      # `postgres` service container above: a plain image + a healthcheck
+      # gate, published to the runner's localhost so the app's default
+      # `redis://localhost:6379/0` needs no override here.
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: postgresql+psycopg://harboriq_app:harboriq_app_pass@localhost:5432/harboriq
       SERVICE_DATABASE_URL: postgresql+psycopg://harboriq_service:harboriq_service_pass@localhost:5432/harboriq
+      REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,6 +63,10 @@ jobs:
         env:
           POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/harboriq
       - run: pip install -e ".[dev]"
+      - name: Verify Redis is reachable
+        run: |
+          sudo apt-get install -y redis-tools
+          redis-cli -h localhost -p 6379 ping
       - name: Apply migrations (service role)
         run: alembic upgrade head
       - name: Run tests
