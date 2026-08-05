@@ -1,0 +1,17 @@
+HarborIQ
+Copyright (c) 2026 Cory Elliott. All Rights Reserved.
+
+This is proprietary, confidential software. See the LICENSE file in the
+repository root for the full terms. No open-source license applies to any
+part of this repository unless a specific third-party dependency's own
+license (see pyproject.toml / package.json / package-lock.json for the
+full dependency list) states otherwise for that dependency itself — those
+third-party components remain governed by their own respective licenses
+and are not affected by HarborIQ's proprietary license.
+
+AI-assisted development notice: portions of this codebase were generated
+with the assistance of AI coding tools under the direction, prompting,
+review, and editorial control of the human author named above, who
+selected, arranged, tested, corrected, and integrated the resulting code
+into the finished work. See docs/COPYRIGHT_REGISTRATION_GUIDE.md for the
+authorship disclosure prepared for U.S. Copyright Office registration.
