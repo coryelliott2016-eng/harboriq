@@ -10,6 +10,9 @@ import type {
   CustomerInput,
   DispatchCandidate,
   DunningRunResponse,
+  GeneratePOInput,
+  InventoryItem,
+  InventoryItemInput,
   Invoice,
   InvoiceDetail,
   InvoiceSendResponse,
@@ -39,14 +42,20 @@ import type {
   PortalJob,
   PortalMe,
   PublicInvoice,
+  PurchaseOrder,
+  PurchaseOrderInput,
+  ReceivePurchaseOrderInput,
   RefundInput,
   RefundResponse,
+  ReorderSuggestion,
   StaffMessageCreate,
   TeamMember,
   TechnicianLocation,
   User,
   UserRole,
   UserUpdateInput,
+  Vendor,
+  VendorInput,
   Vessel,
   VesselInput,
   VoidInvoiceResponse,
@@ -250,4 +259,36 @@ export const fieldApi = {
   clockOut: (jobId: string, body: ClockActionInput = {}) =>
     api.post<JobTimeEntry>(`/jobs/${jobId}/clock-out`, body),
   timeEntries: (jobId: string) => api.get<JobTimeEntry[]>(`/jobs/${jobId}/time-entries`),
+};
+
+// --- inventory, vendors & purchase orders (Phase 13) ---
+
+export const inventoryApi = {
+  list: (params?: { search?: string; low_stock_only?: boolean; limit?: number; offset?: number }) =>
+    api.get<InventoryItem[]>("/inventory", params),
+  get: (id: string) => api.get<InventoryItem>(`/inventory/${id}`),
+  lookupBySku: (sku: string) => api.get<InventoryItem>("/inventory/lookup", { sku }),
+  create: (body: InventoryItemInput) => api.post<InventoryItem>("/inventory", body),
+  update: (id: string, body: Partial<InventoryItemInput>) =>
+    api.patch<InventoryItem>(`/inventory/${id}`, body),
+  reorderSuggestions: () => api.get<ReorderSuggestion[]>("/inventory/reorder-suggestions"),
+  generatePurchaseOrder: (body: GeneratePOInput) =>
+    api.post<PurchaseOrder>("/inventory/reorder-suggestions/generate-po", body),
+};
+
+export const vendorsApi = {
+  list: (search?: string) => api.get<Vendor[]>("/vendors", { search }),
+  get: (id: string) => api.get<Vendor>(`/vendors/${id}`),
+  create: (body: VendorInput) => api.post<Vendor>("/vendors", body),
+  update: (id: string, body: Partial<VendorInput>) => api.patch<Vendor>(`/vendors/${id}`, body),
+};
+
+export const purchaseOrdersApi = {
+  list: (status?: string) => api.get<PurchaseOrder[]>("/purchase-orders", { status }),
+  get: (id: string) => api.get<PurchaseOrder>(`/purchase-orders/${id}`),
+  create: (body: PurchaseOrderInput) => api.post<PurchaseOrder>("/purchase-orders", body),
+  submit: (id: string) => api.post<PurchaseOrder>(`/purchase-orders/${id}/submit`, {}),
+  receive: (id: string, body: ReceivePurchaseOrderInput) =>
+    api.post<PurchaseOrder>(`/purchase-orders/${id}/receive`, body),
+  cancel: (id: string) => api.post<PurchaseOrder>(`/purchase-orders/${id}/cancel`, {}),
 };

@@ -102,6 +102,48 @@ export function AppShell() {
               Team
             </NavLink>
           )}
+          {canManageOperations(user?.role) && (
+            <NavLink
+              to="/inventory"
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 text-sm font-medium ${
+                  isActive
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`
+              }
+            >
+              Inventory
+            </NavLink>
+          )}
+          {canManageOperations(user?.role) && (
+            <NavLink
+              to="/vendors"
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 text-sm font-medium ${
+                  isActive
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`
+              }
+            >
+              Vendors
+            </NavLink>
+          )}
+          {canManageOperations(user?.role) && (
+            <NavLink
+              to="/purchase-orders"
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 text-sm font-medium ${
+                  isActive
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`
+              }
+            >
+              Purchase orders
+            </NavLink>
+          )}
         </nav>
       </aside>
 

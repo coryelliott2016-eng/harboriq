@@ -586,3 +586,107 @@ export interface JobTimeEntry {
 export interface ClockActionInput {
   idempotency_key?: string | null;
 }
+
+// --- inventory, vendors & purchase orders (Phase 13) ---
+
+export interface InventoryItem {
+  id: string;
+  company_id: string;
+  name: string;
+  sku: string | null;
+  unit_cost: string;
+  retail_price: string;
+  currency: string;
+  quantity_on_hand: number;
+  reorder_point: number;
+  low_stock_alerted: boolean;
+  default_vendor_id: string | null;
+  created_at: string;
+}
+
+export interface InventoryItemInput {
+  name: string;
+  sku?: string | null;
+  unit_cost?: string;
+  retail_price?: string;
+  reorder_point?: number;
+  default_vendor_id?: string | null;
+}
+
+export interface ReorderSuggestion {
+  id: string;
+  name: string;
+  sku: string | null;
+  quantity_on_hand: number;
+  reorder_point: number;
+  default_vendor_id: string | null;
+  unit_cost: string;
+}
+
+export interface GeneratePOInput {
+  vendor_id: string;
+  item_ids: string[];
+}
+
+export interface Vendor {
+  id: string;
+  company_id: string;
+  name: string;
+  contact_email: string | null;
+  contact_phone: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VendorInput {
+  name: string;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  notes?: string | null;
+}
+
+export type PurchaseOrderStatus = "draft" | "submitted" | "received" | "cancelled";
+
+export interface PurchaseOrderLineItem {
+  id: string;
+  inventory_item_id: string;
+  quantity_ordered: number;
+  quantity_received: number;
+  unit_cost: string;
+}
+
+export interface PurchaseOrderLineItemInput {
+  inventory_item_id: string;
+  quantity_ordered: number;
+  unit_cost?: string;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  company_id: string;
+  vendor_id: string;
+  status: PurchaseOrderStatus;
+  created_by: string;
+  submitted_at: string | null;
+  received_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  line_items: PurchaseOrderLineItem[];
+}
+
+export interface PurchaseOrderInput {
+  vendor_id: string;
+  notes?: string | null;
+  line_items: PurchaseOrderLineItemInput[];
+}
+
+export interface ReceiptLineInput {
+  line_item_id: string;
+  quantity: number;
+}
+
+export interface ReceivePurchaseOrderInput {
+  receipts: ReceiptLineInput[];
+}

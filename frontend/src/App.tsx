@@ -9,6 +9,7 @@ import { CustomerDetailPage } from "./pages/CustomerDetailPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DispatchBoardPage } from "./pages/DispatchBoardPage";
+import { InventoryPage } from "./pages/InventoryPage";
 import { InvoiceDetailPage } from "./pages/InvoiceDetailPage";
 import { InvoicesPage } from "./pages/InvoicesPage";
 import { FieldPage } from "./pages/FieldPage";
@@ -17,8 +18,10 @@ import { JobsPage } from "./pages/JobsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { PublicInvoicePage } from "./pages/PublicInvoicePage";
+import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { SignupPage } from "./pages/SignupPage";
 import { TeamPage } from "./pages/TeamPage";
+import { VendorsPage } from "./pages/VendorsPage";
 import { PortalHome } from "./portal/PortalHome";
 import { PortalJobs } from "./portal/PortalJobs";
 import { PortalInvoices } from "./portal/PortalInvoices";
@@ -81,6 +84,48 @@ function MessagesRoute() {
   return <MessagesPage />;
 }
 
+// Phase 13: inventory, vendors, and purchase orders are all
+// require_operations-gated to match their backend routes
+// (app/api/v1/routes/{inventory,vendors,purchase_orders}.py).
+function InventoryRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. Inventory is limited to owners,
+        admins, and office staff.
+      </div>
+    );
+  }
+  return <InventoryPage />;
+}
+
+function VendorsRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. Vendors are limited to owners,
+        admins, and office staff.
+      </div>
+    );
+  }
+  return <VendorsPage />;
+}
+
+function PurchaseOrdersRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. Purchase orders are limited to
+        owners, admins, and office staff.
+      </div>
+    );
+  }
+  return <PurchaseOrdersPage />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -124,6 +169,9 @@ export default function App() {
           <Route path="/messages" element={<MessagesRoute />} />
           <Route path="/settings/billing" element={<BillingSettingsRoute />} />
           <Route path="/team" element={<TeamRoute />} />
+          <Route path="/inventory" element={<InventoryRoute />} />
+          <Route path="/vendors" element={<VendorsRoute />} />
+          <Route path="/purchase-orders" element={<PurchaseOrdersRoute />} />
         </Route>
       </Route>
 
