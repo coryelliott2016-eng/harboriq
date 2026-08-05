@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -27,6 +27,7 @@ from app.api.deps import (
 )
 from app.api.errors import http_errors
 from app.db.models import JobPriority, JobStatus
+from app.schemas.dispatch_board import OnMyWayResponse
 from app.schemas.jobs import (
     JobAssign,
     JobCreate,
@@ -39,9 +40,27 @@ from app.schemas.jobs import (
     JobUpdate,
 )
 from app.services import jobs as service
+from app.services import outbox
 from app.services.auth import AuthenticatedUser
+from app.services.outbox_dispatch import dispatch_outbox_soon
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def _customer_label(ctx) -> str:
+    return ctx.company_name or " ".join(
+        filter(None, [ctx.first_name, ctx.last_name])
+    ) or "there"
+
+
+def _enqueue_job_sms(db: Session, company_id: uuid.UUID, ctx, body: str) -> int | None:
+    """Best-effort SMS via the outbox — no-op if the customer has no phone
+    on file or has opted out (`Customer.sms_opted_out`, Phase 9)."""
+    if not ctx.customer_phone or ctx.customer_sms_opted_out:
+        return None
+    event_id = outbox.enqueue(db, company_id, "sms.send", {"to": ctx.customer_phone, "body": body})
+    db.commit()
+    return event_id
 
 
 # ---------------------------------------------------------------------------
@@ -199,12 +218,64 @@ def delete_job(
 def assign_job(
     job_id: uuid.UUID,
     body: JobAssign,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     company_id: uuid.UUID = Depends(get_current_company_id),
 ):
-    """Dispatch the job to a technician, or unassign it with a null id."""
+    """Dispatch the job to a technician, or unassign it with a null id.
+
+    Assigning (not unassigning) best-effort enqueues a job-confirmation SMS
+    to the customer, via the same outbox pattern as every other
+    notification — a delivery failure here never rolls back the assignment
+    itself. This is the SAME endpoint the Phase 7 ranked-candidate list
+    (`DispatchSuggestions`) and the Phase 11 drag-and-drop dispatch board
+    both call; there is exactly one assignment code path.
+    """
     with http_errors():
-        return service.assign(db, company_id, job_id, body.technician_id)
+        row = service.assign(db, company_id, job_id, body.technician_id)
+    if body.technician_id is not None:
+        with http_errors():
+            ctx = service.get_notification_context(db, company_id, job_id)
+        when = f" on {ctx.scheduled_at:%b %d at %I:%M %p}" if ctx.scheduled_at else ""
+        _enqueue_job_sms(
+            db,
+            company_id,
+            ctx,
+            f"Hi {_customer_label(ctx)}, your service \"{ctx.title}\" has been "
+            f"scheduled{when}. Reply here with any questions.",
+        )
+        dispatch_outbox_soon(background_tasks)
+    return row
+
+
+@router.post("/{job_id}/notify-on-my-way", response_model=OnMyWayResponse)
+def notify_on_my_way(
+    job_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Technician-triggered "on my way" text to the customer.
+
+    Same authorization as moving the job's status
+    (`app.api.deps.authorize_job_action`): office staff may trigger this for
+    any job, the assigned technician may trigger it for their own job, and
+    nobody else may. Best-effort — a missing customer phone number is a
+    silent no-op (documented in `_enqueue_job_sms`), not an error, since
+    that reflects the shop's own data, not something the caller did wrong.
+    """
+    authorize_job_action(db, user, job_id)
+    with http_errors():
+        ctx = service.get_notification_context(db, user.company_id, job_id)
+    tech_name = ctx.technician_name or "Your technician"
+    event_id = _enqueue_job_sms(
+        db,
+        user.company_id,
+        ctx,
+        f"{tech_name} is on the way for your service \"{ctx.title}\".",
+    )
+    dispatch_outbox_soon(background_tasks)
+    return OnMyWayResponse(outbox_event_id=event_id)
 
 
 @router.post("/{job_id}/status", response_model=JobOut)

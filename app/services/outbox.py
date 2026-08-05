@@ -4,8 +4,9 @@ Webhook-triggered receipts/emails/SMS are written here inside the same
 transaction as the DB state change, then dispatched by a separate worker
 after commit. This prevents 'receipt sent but invoice rolled back' bugs.
 
-`dispatch_pending` now actually sends email (via `app.services.email`)
-instead of just marking rows dispatched. There is no Celery/Redis task queue
+`dispatch_pending` now actually sends email (via `app.services.email`) and
+SMS (via `app.services.sms`, Phase 11's `sms.send` event type) instead of
+just marking rows dispatched. There is no Celery/Redis task queue
 in this stack yet — adding that infrastructure is out of scope for this
 phase (see README, "Email delivery"). Instead, `dispatch_pending` is invoked
 via FastAPI `BackgroundTasks` scheduled right after each commit that
@@ -25,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.tenant import tenant_context
-from app.services import email
+from app.services import email, sms
 
 #: After this many failed attempts, a row moves to `dead_letter` instead of
 #: staying `pending` forever (the `status` column already documents this
@@ -183,6 +184,23 @@ def _build_email(
     return None
 
 
+def _build_sms(event_type: str, payload: dict[str, Any]) -> tuple[str, str] | None:
+    """Return (to, body) for a known SMS event type, or None.
+
+    `None` means "not an SMS event" -- `_dispatch_one` tries `_build_sms`
+    first and falls back to `_build_email`, so a single outbox table cleanly
+    carries both transports without a `channel` discriminator column of its
+    own (the `event_type` string IS the discriminator, same role it already
+    plays for every email event above).
+    """
+    if event_type != "sms.send":
+        return None
+
+    to = payload.get("to") or ""
+    body = payload.get("body") or ""
+    return (to, body)
+
+
 def _build_invoice_pdf_attachment(
     db: Session, payload: dict[str, Any]
 ) -> list[email.Attachment]:
@@ -211,12 +229,22 @@ def _build_invoice_pdf_attachment(
 
 
 def _dispatch_one(db: Session, row) -> bool:
-    """Send one outbox row's email. Returns True on success."""
+    """Send one outbox row's email or SMS. Returns True on success."""
+    sms_built = _build_sms(row.event_type, row.payload)
+    if sms_built is not None:
+        to, body = sms_built
+        if not to:
+            # No recipient resolvable from the payload — cannot be delivered
+            # by retrying, same permanent-failure treatment as an email with
+            # no recipient below.
+            return False
+        return sms.send_sms(to, body)
+
     built = _build_email(db, row.event_type, row.payload)
     if built is None:
-        # Unknown/non-email event type: nothing to send, treat as a no-op
-        # success so it does not spin forever waiting on a transport that
-        # will never handle it.
+        # Unknown/non-email/non-SMS event type: nothing to send, treat as a
+        # no-op success so it does not spin forever waiting on a transport
+        # that will never handle it.
         return True
 
     to, subject, text_body, attachments = built

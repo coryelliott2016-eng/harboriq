@@ -179,6 +179,18 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     #: even when geocoding fails so the address itself is never lost, and
     #: re-geocodable later by the backfill job.
     address_text: Mapped[Optional[str]] = mapped_column(Text)
+    #: Best-effort LIVE position (migration 0010), distinct from the static
+    #: `home_latitude`/`home_longitude` above. Written only by
+    #: `POST /users/me/location-ping`, which the frontend calls periodically
+    #: while a technician has the staff web app open in a browser (see
+    #: `frontend/src/lib/useLocationPing.ts`) -- there is no background
+    #: tracking and no mobile app yet (that is Phase 12), so this is
+    #: honestly "as of the last time their tab pinged", not truly live.
+    #: `location_updated_at` is what lets a consumer (the dispatch board map)
+    #: tell a fresh ping from a stale one.
+    current_latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    current_longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    location_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         Index("uq_users_company_email", "company_id", "email", unique=True),
@@ -188,6 +200,10 @@ class User(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint(
             "(home_latitude IS NULL) = (home_longitude IS NULL)",
             name="ck_users_home_latlng_pair",
+        ),
+        CheckConstraint(
+            "(current_latitude IS NULL) = (current_longitude IS NULL)",
+            name="ck_users_current_latlng_pair",
         ),
     )
 
@@ -823,6 +839,11 @@ class Message(UUIDPKMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("users.id")
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    #: How this message arrived (migration 0010, Phase 11): 'portal' (the
+    #: Phase 9 default, backfilled for every historical row) or 'sms'. Lets
+    #: the staff inbox show the channel and lets `app.services.messages`
+    #: decide whether a staff reply should go out over SMS instead of email.
+    channel: Mapped[str] = mapped_column(Text, nullable=False, default="portal", server_default="portal")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -834,6 +855,7 @@ class Message(UUIDPKMixin, Base):
             "sender_type != 'staff' OR sender_user_id IS NOT NULL",
             name="ck_messages_staff_has_sender",
         ),
+        CheckConstraint("channel IN ('portal', 'sms')", name="ck_messages_channel"),
         Index("idx_messages_company_customer", "company_id", "customer_id", "created_at"),
         Index(
             "idx_messages_company_job",

@@ -91,6 +91,10 @@ export interface Customer {
   postal_code: string | null;
   country: string | null;
   notes: string | null;
+  // Derived server-side by geocoding the address (Phase 10) -- null until a
+  // geocode call has succeeded for this customer. See app/schemas/customers.py.
+  latitude: string | null;
+  longitude: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -246,6 +250,37 @@ export interface JobDispatchScore {
   dispatch_score: string | null;
   dispatch_score_breakdown: Record<string, string> | null;
   dispatch_scored_at: string | null;
+}
+
+// --- Phase 11: live dispatch board -- location ping + on-my-way SMS ---
+// Mirrors app/schemas/dispatch_board.py exactly.
+
+export interface LocationPingInput {
+  latitude: string;
+  longitude: string;
+}
+
+export interface LocationPingOut {
+  id: string;
+  current_latitude: string;
+  current_longitude: string;
+  location_updated_at: string;
+}
+
+// Best-effort position for the dispatch board map. `is_live` is true only
+// when it came from an actual location-ping; false means this is a
+// fallback to the technician's static home base (no ping received yet).
+export interface TechnicianLocation {
+  id: string;
+  full_name: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  is_live: boolean;
+  location_updated_at: string | null;
+}
+
+export interface OnMyWayResponse {
+  outbox_event_id: number | null;
 }
 
 export interface JobLineItemInput {
@@ -450,6 +485,8 @@ export interface Message {
   sender_type: MessageSenderType;
   sender_user_id: string | null;
   body: string;
+  // 'portal' or 'sms' (migration 0010, Phase 11) -- how this message arrived.
+  channel: "portal" | "sms";
   created_at: string;
   read_at: string | null;
 }

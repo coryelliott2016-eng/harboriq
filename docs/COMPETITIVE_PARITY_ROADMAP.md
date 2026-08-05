@@ -5,16 +5,18 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 10: auth, multi-tenant CRM, invoicing + Stripe Checkout
+Status as of Phase 11: auth, multi-tenant CRM, invoicing + Stripe Checkout
 (single-account and per-tenant Stripe Connect direct charges), refunds,
 PDF/email invoice delivery, dunning, AR aging, a durable magic-link customer
 self-service portal with customer<->staff messaging, self-service + admin
 team profile editing with a team roster page, real OpenStreetMap Nominatim
 geocoding for user and customer addresses (with a documented Google
 Maps/Mapbox swap point) feeding the AI dispatch engine's distance factor,
-React frontend, a rule-based explainable AI dispatch engine, and production
-deployment/observability hooks. 429 backend tests, 52 frontend tests, CI
-green.
+React frontend, a rule-based explainable AI dispatch engine, production
+deployment/observability hooks, and a visual drag-and-drop dispatch board
+with a live Leaflet/OpenStreetMap map and two-way SMS (console-fallback
+graceful degradation until a real Twilio account is connected). 462 backend
+tests, 63 frontend tests, CI green.
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
@@ -83,12 +85,32 @@ this is organized from).
       the Google Maps/Mapbox swap itself, and a background/scheduled
       geocoding queue).
 
-## Phase 11 — Live Dispatch Board + Map View
-- Visual drag-and-drop dispatch board (calendar + map hybrid), replacing
-  today's ranked-list UI — this is what makes "AI dispatch" feel real to a
-  dispatcher, matching ServiceTitan's dispatch board.
-- Opt-in live technician location.
-- Two-way SMS (job confirmations, "on my way" texts).
+## Phase 11 — Live Dispatch Board + Map View — **COMPLETE**
+- [x] Visual drag-and-drop dispatch board (`/dispatch`, one column per active
+      technician plus an "Unassigned" column) as the primary day-to-day
+      assignment surface — this is what makes "AI dispatch" feel real to a
+      dispatcher, matching ServiceTitan's dispatch board. Dropping a job on
+      a technician's column calls the SAME `POST /jobs/{id}/assign` endpoint
+      the Phase 7 ranked-candidates list already used (`DispatchSuggestions`
+      was left untouched) — one assignment code path, two UIs.
+- [x] A live Leaflet/OpenStreetMap map (free, no API key) under the board,
+      showing technician markers (live GPS ping vs. static geocoded
+      home-base fallback) and job/customer markers (reusing Phase 10's
+      geocoded `Customer.latitude`/`longitude`).
+- [x] Opt-in, best-effort live technician location, POSTed from the browser's
+      Geolocation API every few minutes while the staff web app is open —
+      explicitly NOT background/mobile tracking; true background tracking
+      is deferred to Phase 12 (the offline-capable mobile field app).
+- [x] Two-way SMS: outbound job-confirmation and "on my way" texts via the
+      outbox pattern, and an inbound Twilio-shaped webhook that lands
+      customer replies in the SAME Phase 9 `messages` table/staff inbox,
+      tagged `channel="sms"`. Mirrors `app/services/email.py`'s SMTP
+      graceful-degradation exactly: no Twilio account is connected in this
+      workspace, so every send logs to console/INFO instead of actually
+      dispatching until `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/
+      `TWILIO_FROM_NUMBER` are set — see the README's "Live dispatch board,
+      map & SMS (Phase 11)" section for the full write-up and deferred
+      items (per-tenant Twilio-number routing, true background tracking).
 
 ## Phase 12 — Offline-Capable Mobile Field App
 - The single most important gap for a mobile-mechanic-first wedge: an

@@ -448,6 +448,35 @@ def set_status(
     return row
 
 
+def get_notification_context(db: Session, company_id: uuid.UUID, job_id: uuid.UUID) -> Row:
+    """Job + customer + technician fields needed to compose an SMS/email
+    notification (Phase 11 job-confirmation and "on my way" texts), in one
+    query rather than three round trips through separate services.
+
+    Raises `NotFound` if the job does not belong to this tenant.
+    """
+    with tenant_context(db, company_id):
+        row = db.execute(
+            text(
+                """
+                SELECT j.id, j.title, j.scheduled_at, j.technician_id,
+                       c.id AS customer_id, c.phone AS customer_phone,
+                       c.sms_opted_out AS customer_sms_opted_out,
+                       c.first_name, c.last_name, c.company_name,
+                       t.full_name AS technician_name
+                  FROM jobs j
+                  JOIN customers c ON c.id = j.customer_id
+             LEFT JOIN users t ON t.id = j.technician_id
+                 WHERE j.id = :id
+                """
+            ),
+            {"id": job_id},
+        ).first()
+    if row is None:
+        raise NotFound(f"job {job_id} not found")
+    return row
+
+
 # ---------------------------------------------------------------------------
 # line items — the invoicing phase's input
 # ---------------------------------------------------------------------------

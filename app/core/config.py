@@ -77,6 +77,18 @@ class Settings(BaseSettings):
     # The API itself never renders these pages.
     app_base_url: str = "http://localhost:5173"
 
+    # --- SMS transport (Phase 11) ---
+    # Empty twilio_account_sid (the dev default) means "console transport":
+    # app/services/sms.py logs the message instead of calling out, mirroring
+    # smtp_host's exact graceful-degrade pattern above. Setting all three of
+    # TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_FROM_NUMBER turns on real
+    # delivery via a plain httpx POST to the Twilio REST API -- no `twilio`
+    # PyPI SDK dependency, since httpx is already a dependency and a single
+    # REST call is all sending a message requires.
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+
     # --- Observability ---
     # Empty (the default) means "Sentry is off": app/core/observability.py
     # never calls sentry_sdk.init(), mirroring the exact graceful-degrade

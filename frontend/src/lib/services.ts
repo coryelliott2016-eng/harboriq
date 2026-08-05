@@ -23,8 +23,11 @@ import type {
   JobLineItem,
   JobLineItemInput,
   JobStatus,
+  LocationPingInput,
+  LocationPingOut,
   Message,
   MessageCreate,
+  OnMyWayResponse,
   PortalApproveToken,
   PortalEstimate,
   PortalInvoice,
@@ -36,6 +39,7 @@ import type {
   RefundResponse,
   StaffMessageCreate,
   TeamMember,
+  TechnicianLocation,
   User,
   UserRole,
   UserUpdateInput,
@@ -87,6 +91,10 @@ export const authApi = {
 export const usersApi = {
   list: () => api.get<TeamMember[]>("/users"),
   update: (id: string, body: UserUpdateInput) => api.patch<TeamMember>(`/users/${id}`, body),
+  // Phase 11 live dispatch board.
+  pingLocation: (body: LocationPingInput) =>
+    api.post<LocationPingOut>("/users/me/location-ping", body),
+  technicianLocations: () => api.get<TechnicianLocation[]>("/users/technician-locations"),
 };
 
 // --- customers ---
@@ -138,6 +146,8 @@ export const jobsApi = {
     api.patch<JobLineItem>(`/jobs/${jobId}/line-items/${lineItemId}`, body),
   removeLineItem: (jobId: string, lineItemId: string) =>
     api.delete<void>(`/jobs/${jobId}/line-items/${lineItemId}`),
+  notifyOnMyWay: (id: string) =>
+    api.post<OnMyWayResponse>(`/jobs/${id}/notify-on-my-way`, {}),
 };
 
 // --- AI dispatch engine (Phase 7) ---

@@ -11,8 +11,10 @@ build plan: every issue from the technical critique is fixed at the code level.
 > "Customer self-service portal" below), the
 > **React frontend**, **deployment/observability hardening** (structured
 > logging, `/metrics`, optional Sentry, hardened Docker images, CI, and
-> backups — see `docs/DEPLOYMENT.md`), and a **rule-based AI
-> dispatch/prioritization engine** (see "AI dispatch engine" below) are all
+> backups — see `docs/DEPLOYMENT.md`), a **rule-based AI
+> dispatch/prioritization engine** (see "AI dispatch engine" below), and a
+> **visual drag-and-drop dispatch board with a live Leaflet/OpenStreetMap
+> map and two-way SMS** (see "Live dispatch board, map & SMS" below) are all
 > real and runnable. Models, migrations, services, routes, and tests for the
 > **critical fixes**, for **auth + tenant onboarding**, for
 > **customers/vessels/jobs**, for **invoices/payments/refunds/dunning/AR
@@ -120,6 +122,10 @@ tests/test_portal_invite.py             # invite issues/renews a token + queues 
 tests/test_user_profile.py              # self-edit vs admin-edit, restricted-field enforcement, tenant isolation, roster RBAC
 tests/test_geocoding.py                 # mocked Nominatim: happy path, failure/timeout degrades gracefully, rate limiting, dispatch-distance integration
 tests/test_geocode_backfill.py          # backfill only touches null-coordinate rows, tenant isolation, idempotency, admin-only route
+tests/test_location_ping.py             # POST /users/me/location-ping validation, own-location-only, technician-locations RBAC + tenant isolation
+tests/test_sms_service.py               # console-fallback vs real Twilio REST send, is_configured(), httpx failure never raises
+tests/test_dispatch_board_assignment.py # board drag-and-drop reuses POST /jobs/{id}/assign; assignment queues a job-confirmation SMS
+tests/test_sms_inbound_webhook.py       # inbound SMS -> messages(channel='sms'), staff-reply channel routing, unmatched-number drop, signature verification
 ```
 
 ## API surface
@@ -203,6 +209,10 @@ its server-side logs (see `app/api/middleware.py`, and
 | GET | `/api/v1/users` | bearer, owner/admin/office | team roster: every user in the caller's company, incl. skills, address, geocoded home coordinates |
 | PATCH | `/api/v1/users/{id}` | bearer (self) or owner/admin (anyone in-company) | edit `full_name`/`skills`/`address_text` (self or admin); `role`/`is_active` restricted to owner/admin editing someone else |
 | POST | `/api/v1/admin/geocode-backfill` | bearer, owner/admin | geocode every customer/user in the caller's company that has an address but no coordinates yet; `?force=true` re-geocodes everything |
+| POST | `/api/v1/users/me/location-ping` | bearer | record the caller's own current `{latitude, longitude}` for the dispatch board map (best-effort, tab-open only) |
+| GET | `/api/v1/users/technician-locations` | bearer, owner/admin/office | every technician's best-known position (live ping or static geocoded home fallback) for the map |
+| POST | `/api/v1/jobs/{id}/notify-on-my-way` | bearer, office or the assigned tech | send an "on my way" SMS to the job's customer (best-effort; silent no-op if no phone on file) |
+| POST | `/api/v1/webhooks/sms/inbound` | Twilio signature (once configured) | inbound SMS/MMS webhook; matches the sender's phone to a customer and appends to the existing Phase 9 messages thread |
 
 † `/metrics` is unauthenticated on purpose (standard practice for Prometheus
 scraping), but should be firewalled to the scraper's network at the reverse
@@ -888,6 +898,150 @@ editing, not provisioning.
   of latency). Fine at this request volume; a queue (Celery/RQ) would be
   the upgrade if geocoding ever needs to happen off the request path.
 
+## Live dispatch board, map & SMS (Phase 11)
+
+Two gaps existed going into this phase: dispatching was a ranked list with no
+visual/spatial context, and there was no way for the shop or a customer to
+reach each other by text. Both are closed now, following the exact
+precedent already established in this repo: reuse existing infrastructure
+(the Phase 7 assignment endpoint, the Phase 9 `messages` table) rather than
+building a parallel path, and gracefully degrade to a console/log transport
+when no real provider is configured — the same trade-off already made for
+SMTP.
+
+**Live technician location — honest scope.** `POST
+/api/v1/users/me/location-ping` lets any authenticated user record their own
+`{latitude, longitude}` (never someone else's — there is no `user_id` in the
+request body; it always comes from the auth token). The frontend
+(`frontend/src/hooks/useLocationPing.ts`) calls this every 3 minutes for
+technician-role users only, using the browser's Geolocation API, while the
+staff web app tab is open and the user has granted location permission.
+**This is best-effort, not background tracking:** closing the tab, closing
+the browser, or the device sleeping stops pings immediately, and there is no
+mobile app yet to keep pinging from a phone in a pocket. `GET
+/api/v1/users/technician-locations` (`require_operations`, same gate as the
+team roster) returns every technician's best-known position — the live ping
+if one exists (`is_live=true`), otherwise a static fallback to their
+Phase 10 geocoded home address (`is_live=false`) so the map is never simply
+blank for a technician who hasn't opened the app today. **True
+background/mobile location tracking that keeps working with the app closed
+is deliberately out of scope here — that is Phase 12** (the offline-capable
+mobile field app), which is the only place a real background-location
+primitive (a native app, or a PWA with a service worker and the
+background-geolocation APIs mobile OSes require for that) belongs.
+
+**Dispatch board — `/dispatch` (frontend).** A visual, drag-and-drop board
+replacing the ranked list as the primary day-to-day assignment surface: one
+column per active technician plus an "Unassigned" column, native HTML5 drag-
+and-drop (no extra DnD library dependency). Dropping a job on a technician's
+column calls the exact same `POST /api/v1/jobs/{id}/assign` endpoint the
+existing `DispatchSuggestions` ranked-candidates list on `JobDetailPage`
+already calls — `DispatchSuggestions` itself was left untouched, so there
+are now two UIs reaching one assignment code path, matching the precedent
+the customer portal set for invoice-pay/estimate-approve reuse in Phase 9.
+Assigning a job from the board also queues the same job-confirmation SMS
+described below.
+
+**Map — Leaflet + OpenStreetMap, free, no API key.** `DispatchMap.tsx`
+renders underneath the board using `react-leaflet` against OpenStreetMap's
+free tile servers — no API key, no billing account, consistent with the
+Nominatim geocoding choice already made in Phase 10 (same free-OSM-ecosystem
+reasoning; see "Team, skills & geocoding" above). It plots technician
+markers (live-ping vs. home-base fallback, visually distinguished) and
+job/customer markers (reusing the `Customer.latitude`/`longitude` Phase 10
+already geocodes — no new backend geocoding call needed). Default map
+center is Sarasota/Bradenton, FL, matching where this pilot's first tenant
+operates. Marker icon images are pulled from the `unpkg.com` CDN rather than
+bundled, because Vite does not automatically resolve Leaflet's default
+marker image asset paths.
+
+**Two-way SMS — console-fallback graceful degradation, exactly mirroring
+SMTP.** `app/services/sms.py::send_sms` mirrors `app/services/email.py`'s
+exact shape: `is_configured()` is `True` only once all three of
+`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` are set;
+when any is missing (the default in this workspace — no Twilio account is
+connected here), every outbound SMS logs the destination and a truncated
+body at INFO instead of sending, so a contributor can exercise every SMS-
+triggering flow without a real Twilio account, the same as password-reset/
+invite emails without a real mailbox. When configured, `send_sms` POSTs
+directly to the Twilio REST API (`https://api.twilio.com/2010-04-01/
+Accounts/{sid}/Messages.json`) via `httpx` with HTTP Basic auth —
+deliberately **not** the `twilio` PyPI SDK, since sending one SMS is a
+single POST and `httpx` is already a dependency; a full SDK would be new
+weight for a provider not even configured yet. Any HTTP/network failure is
+caught and logged, never raised, so a transport failure can never roll back
+the business transaction that already committed — the same reasoning
+`outbox.dispatch_pending` already documents for email.
+
+**Outbound triggers.** Two events reuse the existing outbox pattern (new
+`sms.send` event type, consumed by `outbox.dispatch_pending` alongside the
+existing email event types): a job-confirmation text queued when a job is
+assigned to a technician (`POST /jobs/{id}/assign`, extended this phase),
+and an "on my way" text via the new `POST /api/v1/jobs/{id}/notify-on-my-way`
+(same authorization as moving a job's status — office staff for any job,
+the assigned technician for their own job). Both are best-effort: a customer
+with no phone number on file is a silent no-op, not an error, since that
+reflects the shop's own data rather than a mistake by the caller.
+
+**Inbound webhook — `POST /api/v1/webhooks/sms/inbound`.** Public,
+unauthenticated (like the Stripe webhook), Twilio-shaped: reads `From`/
+`Body` from the standard form-encoded POST Twilio sends on every inbound
+SMS/MMS. **Register `{APP_BASE_URL}/api/v1/webhooks/sms/inbound`** as the
+"A message comes in" webhook on the shop's Twilio phone number once real
+credentials exist. Signature verification (`X-Twilio-Signature`, HMAC-SHA1
+over the URL + sorted form params, the standard Twilio validation scheme) is
+enforced only once `TWILIO_AUTH_TOKEN` is configured — exactly the same
+shape of trade-off `app/api/v1/routes/stripe_webhooks.py`'s Stripe webhook
+already documents for `Stripe-Signature`: hard-failing every request with no way to
+configure a secret would make the endpoint untestable and would not protect
+anything today. An inbound message matched to a customer by phone number
+lands in the exact same Phase 9 `messages` table the customer portal and
+staff inbox already use, tagged `channel="sms"` (migration `0010` adds this
+column, `NOT NULL DEFAULT 'portal'` so every pre-Phase-11 message is
+correctly backfilled as portal traffic); it shows up in the existing staff
+`GET /messages` inbox with no separate "SMS inbox" UI. A staff reply
+(`POST /messages`) is routed back out over SMS instead of email when the
+customer's most recent inbound message on that thread was itself SMS —
+otherwise it behaves exactly as it did before this phase.
+
+**Phone-matching simplification — documented, not hidden.** Customer-phone
+resolution for inbound SMS (`app/services/sms_webhooks.py::
+_find_customer_by_phone`) matches globally across **all** tenants by phone
+number, not per-tenant Twilio-number routing. That is the honest scope for
+a workspace with a single (unconfigured) Twilio number: there is no second
+Toll-Free/local number per company yet to route an inbound text to the
+correct tenant by *which* Twilio number received it, so the match is by the
+customer's phone number alone. **This becomes a real gap the moment two
+tenants share an overlapping customer phone number or once this platform
+onboards more than one paying tenant with its own Twilio number** — the
+fix is routing inbound webhooks by the `To` field (the shop's own Twilio
+number) once every tenant has a dedicated number, which is a Twilio
+account/billing decision as much as a code change, and was out of scope
+for this phase.
+
+**Deferred, on purpose (this phase):**
+- **True background/mobile location tracking.** Location pings only happen
+  while a technician has the staff web app open in a foreground browser tab
+  with location permission granted — see the honest-scope note above.
+  Deferred to Phase 12 (the offline-capable mobile field app).
+- **Per-tenant Twilio number routing for inbound SMS.** Customers are
+  matched globally by phone number across all tenants, not routed by which
+  Twilio number received the text — see the phone-matching simplification
+  above. Revisit once more than one tenant needs its own Twilio number.
+- **Outbound MMS / rich media.** Only plain-text SMS bodies are sent;
+  Twilio's `MediaUrl` inbound fields are ignored by the webhook today.
+- **A calendar/time-grid view on the dispatch board.** This phase ships the
+  column-per-technician kanban-style board; a true calendar/Gantt hybrid
+  (jobs laid out against a time axis, not just a status column) remains a
+  future iteration of the same `/dispatch` page.
+- **Real-time board/map updates (WebSockets/SSE).** The board and map
+  refetch on an interval (`react-query`, 60s for technician locations) and
+  on manual actions, not via a live socket — the same trade-off already
+  made for the customer portal's messaging in Phase 9.
+
+See `docs/COMPETITIVE_PARITY_ROADMAP.md`'s Phase 11 entry for how this maps
+to ServiceTitan's dispatch board as the competitive parity target.
+
 ## Project layout
 
 ```
@@ -989,7 +1143,10 @@ a team page (now invite-link based, see below), a billing settings page
 (Stripe Connect onboarding/status card + an on-demand dunning-sweep button,
 both owner/admin-only), an AR aging report page (bucketed outstanding-balance
 table, owner/admin/office), a staff Messages panel (Phase 9,
-owner/admin/office — see below), the public, unauthenticated `/pay/:token`
+owner/admin/office — see below), a live dispatch board with a Leaflet/
+OpenStreetMap map (Phase 11, `/dispatch`, open to every authenticated role
+— not gated like Messages/Team/Billing, since every technician needs to
+see and act on their own column), the public, unauthenticated `/pay/:token`
 invoice page, the public, unauthenticated `/accept-invite/:token` page, and
 the public, magic-link-gated `/portal/:token/*` customer portal (Phase 9,
 see below).
@@ -1050,6 +1207,23 @@ that posts to `POST /messages` with the selected `customer_id`.
 `customersApi.sendPortalInvite` and reports success/failure inline — the
 staff-side entry point into everything above.
 
+**Live dispatch board + map (Phase 11), `src/pages/DispatchBoardPage.tsx`.**
+A native HTML5 drag-and-drop board (one column per active technician plus
+an "Unassigned" column) that calls the existing `jobsApi.assign` on drop —
+the same call `JobDetailPage`'s `DispatchSuggestions` already makes, left
+untouched. `src/components/DispatchMap.tsx` renders a `react-leaflet` map
+below the board (free OpenStreetMap tiles, no API key) with technician
+markers (refetched every 60s) and job/customer markers. `src/hooks/
+useLocationPing.ts` polls the browser Geolocation API every 3 minutes for
+technician-role users only and POSTs to `usersApi.pingLocation`, driving a
+status banner on the page (`idle`/`unsupported`/`requesting-permission`/
+`denied`/`active`/`error`) so a technician always knows whether their
+location is actually being shared — see "Live dispatch board, map & SMS"
+above for the honest best-effort-not-background-tracking framing. Added to
+`AppShell`'s nav as "Dispatch board", open to every authenticated role
+(unlike Messages/Team/Billing) since a technician needs to see and act on
+their own column.
+
 **Invite flow (Phase 5).** The Team page's "Send invite" form calls
 `POST /auth/invites` (owner/admin only) instead of asking the admin to pick a
 temporary password for the invitee — the response's `accept_url` is shown
@@ -1083,8 +1257,15 @@ rendering and the invalid-link 404 state), `PortalMessages`
 (`src/portal/PortalMessages.test.tsx` — message list rendering and sending
 a new message), and the staff `MessagesPage`
 (`src/pages/MessagesPage.test.tsx` — inbox rendering with the unread badge,
-the reply flow posting to the right customer, and the empty state) — see
-"Frontend tests" below.
+the reply flow posting to the right customer, and the empty state), and,
+new in Phase 11, component-level tests for the dispatch board
+(`src/pages/DispatchBoardPage.test.tsx` — column rendering, the Leaflet map
+rendering, and a drag-and-drop interaction triggering the assign call), the
+`useLocationPing` hook (`src/hooks/useLocationPing.test.ts` — non-technician
+no-op, unsupported-browser handling, a successful ping, and permission
+denial), and the new `usersApi.pingLocation`/`technicianLocations` and
+`jobsApi.notifyOnMyWay` service functions
+(`src/lib/services.dispatchBoard.test.ts`) — see "Frontend tests" below.
 
 **Deferred:**
 
@@ -1129,7 +1310,14 @@ tests for the customer portal (`src/portal/PortalHome.test.tsx`,
 (`src/pages/MessagesPage.test.tsx`), for the same reason as Phase 5's invite
 flow — both have enough branching (valid link vs. 404, empty vs. populated
 inbox, send/reply success vs. failure) that logic-only tests would not have
-caught the same class of regression.
+caught the same class of regression. Phase 11 added component-level tests
+for the dispatch board (`src/pages/DispatchBoardPage.test.tsx` — column
+rendering, the Leaflet map rendering inside a `MemoryRouter`, and a
+drag-and-drop interaction that triggers the assign call) and the
+`useLocationPing` hook (`src/hooks/useLocationPing.test.ts` —
+non-technician no-op, unsupported-browser detection, a successful ping, and
+permission denial), for the same branching-coverage reason as every prior
+phase's component tests.
 
 ## Deployment & observability
 
@@ -1232,6 +1420,24 @@ for the full rationale):**
 - **Read receipts beyond staff-side "mark read."** The customer portal does
   not mark staff replies read on the customer's behalf, and there is no
   per-message read receipt visible back to the customer.
+
+**Live dispatch board, map & SMS (see "Live dispatch board, map & SMS
+(Phase 11)" above for the full rationale):**
+- **True background/mobile location tracking.** Pings only happen while a
+  technician has the staff web app open in a foreground browser tab with
+  location permission granted; closing the tab/browser stops them
+  immediately. Deferred to Phase 12, the offline-capable mobile field app.
+- **Per-tenant Twilio number routing for inbound SMS.** Inbound messages are
+  matched to a customer globally by phone number across all tenants, not by
+  which Twilio number received the text — the honest scope for a single,
+  currently-unconfigured Twilio number in this workspace. Revisit once more
+  than one tenant needs its own dedicated number.
+- **Outbound MMS / rich media**, and a **calendar/time-grid view** on the
+  dispatch board (this phase ships the column-per-technician kanban board,
+  not a time-axis/Gantt layout).
+- **Real-time board/map updates (WebSockets/SSE).** The board and map
+  refetch on an interval and on manual actions via `react-query`, the same
+  trade-off already made for the customer portal's messaging.
 
 **Auth:**
 - No MFA yet, though `users.mfa_secret_enc` is reserved for it.

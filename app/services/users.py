@@ -159,3 +159,69 @@ def update_profile(
     if row is None:
         raise NotFound(f"user {target_user_id} not found")
     return row
+
+
+def ping_location(
+    db: Session,
+    company_id: uuid.UUID,
+    *,
+    user_id: uuid.UUID,
+    latitude,
+    longitude,
+) -> Row:
+    """Record one `POST /users/me/location-ping` reading (Phase 11).
+
+    Always self-service: a technician can only ever ping their OWN location
+    (the route passes `user_id` from the authenticated principal, never from
+    the request body), so there is no separate admin path to guard here the
+    way `update_profile` must for `role`/`is_active`.
+    """
+    with tenant_context(db, company_id):
+        row = db.execute(
+            text(
+                """
+                UPDATE users
+                   SET current_latitude = :lat,
+                       current_longitude = :lng,
+                       location_updated_at = now()
+                 WHERE id = :id
+                RETURNING *
+                """
+            ),
+            {"lat": latitude, "lng": longitude, "id": user_id},
+        ).first()
+        db.commit()
+    if row is None:
+        raise NotFound(f"user {user_id} not found")
+    return row
+
+
+def list_technician_locations(db: Session, company_id: uuid.UUID) -> list[Row]:
+    """Every technician's best-known position for the dispatch board map.
+
+    Falls back to the static home base (`home_latitude`/`home_longitude`,
+    set via geocoded `address_text`) when no ping has ever landed, and
+    reports whether the coordinates are live so the map/legend never implies
+    more freshness than the data actually has (see `TechnicianLocationOut`).
+    """
+    with tenant_context(db, company_id):
+        return list(
+            db.execute(
+                text(
+                    """
+                    SELECT id,
+                           full_name,
+                           COALESCE(current_latitude, home_latitude) AS latitude,
+                           COALESCE(current_longitude, home_longitude) AS longitude,
+                           (current_latitude IS NOT NULL) AS is_live,
+                           location_updated_at
+                      FROM users
+                     WHERE company_id = :cid
+                       AND role = 'technician'
+                       AND is_active
+                     ORDER BY full_name NULLS LAST, email
+                    """
+                ),
+                {"cid": company_id},
+            ).all()
+        )

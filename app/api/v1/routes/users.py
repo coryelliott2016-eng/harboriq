@@ -26,6 +26,11 @@ from app.api.deps import (
 )
 from app.api.errors import http_errors
 from app.schemas.auth import TeamMemberOut, UserUpdate
+from app.schemas.dispatch_board import (
+    LocationPing,
+    LocationPingOut,
+    TechnicianLocationOut,
+)
 from app.services import users as users_service
 from app.services.auth import AuthenticatedUser
 from app.services.users import FieldNotPermitted
@@ -82,3 +87,50 @@ def update_user(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
 
     return TeamMemberOut.model_validate(row)
+
+
+@router.post("/me/location-ping", response_model=LocationPingOut)
+def ping_my_location(
+    body: LocationPing,
+    actor: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Record the caller's current position (Phase 11 dispatch board map).
+
+    Any authenticated technician may ping their OWN location — there is no
+    `user_id` in the request; it always comes from the auth token. This is
+    best-effort: the frontend calls this every few minutes while a
+    technician has the staff web app open and has granted the browser's
+    Geolocation permission (see `frontend/src/hooks/useLocationPing.ts`).
+    It is NOT background tracking — closing the tab or the browser stops
+    pings immediately, and there is no mobile app yet. True background
+    tracking is deliberately out of scope for this phase (Phase 12).
+    """
+    with http_errors():
+        row = users_service.ping_location(
+            db,
+            actor.company_id,
+            user_id=actor.id,
+            latitude=body.latitude,
+            longitude=body.longitude,
+        )
+    return LocationPingOut.model_validate(row)
+
+
+@router.get(
+    "/technician-locations",
+    response_model=list[TechnicianLocationOut],
+    dependencies=[Depends(require_operations)],
+)
+def list_technician_locations(
+    db: Session = Depends(get_db),
+    company_id: uuid.UUID = Depends(get_current_company_id),
+):
+    """Every technician's best-known position, for the dispatch board map.
+
+    Gated the same as the roster (`require_operations`) — knowing where the
+    team physically is right now is shop-management information, same tier
+    as the roster itself.
+    """
+    rows = users_service.list_technician_locations(db, company_id)
+    return [TechnicianLocationOut.model_validate(row) for row in rows]

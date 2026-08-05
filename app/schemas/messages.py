@@ -25,6 +25,9 @@ class MessageOut(BaseModel):
     sender_type: MessageSenderType
     sender_user_id: uuid.UUID | None
     body: str
+    #: 'portal' or 'sms' (migration 0010, Phase 11) — how this message
+    #: arrived, not necessarily how a reply to it will go out.
+    channel: str
     created_at: datetime
     read_at: datetime | None
 
