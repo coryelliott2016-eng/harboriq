@@ -196,6 +196,7 @@ its server-side logs (see `app/api/middleware.py`, and
 | GET | `/api/v1/vendors` | bearer | list/search vendors by name |
 | GET | `/api/v1/vendors/{id}` | bearer | one vendor |
 | PATCH | `/api/v1/vendors/{id}` | bearer, owner/admin/office | partial update; no delete endpoint (see "Inventory, parts & vendors") |
+| POST | `/api/v1/vendors/{id}/status` | bearer, owner/admin/office | deactivate (archive) or reactivate a vendor (Phase 17) |
 | POST | `/api/v1/purchase-orders` | bearer, owner/admin/office | create a `draft` PO with its line items |
 | GET | `/api/v1/purchase-orders` | bearer | list POs; filter by `status` |
 | GET | `/api/v1/purchase-orders/{id}` | bearer | one PO with its line items |
@@ -223,6 +224,7 @@ its server-side logs (see `app/api/middleware.py`, and
 | GET | `/api/v1/portal/{token}/estimates` | portal token | that customer's estimates |
 | POST | `/api/v1/portal/{token}/estimates/{estimate_id}/approve-token` | portal token | mints a short-lived `estimate_approve` token for the SAME existing public approval endpoint |
 | GET, POST | `/api/v1/portal/{token}/messages` | portal token | that customer's message thread; POST sends a new customer message |
+| GET | `/api/v1/portal/{token}/dock-locations` | portal token | that customer's own confirmed/checked-in slip reservation(s) with GPS coordinates, for the "find my dock" map (Phase 17) |
 | GET | `/api/v1/messages` | bearer, owner/admin/office | company-wide staff inbox, newest first; `unread_only=true` narrows to unread customer messages |
 | POST | `/api/v1/messages` | bearer, owner/admin/office | staff reply/send to a customer's thread |
 | POST | `/api/v1/messages/{id}/read` | bearer, owner/admin/office | mark a message read |
@@ -1416,8 +1418,16 @@ decreasing it. `reorder_suggestions` returns every item where
 (search)/update. No delete: a vendor referenced by a historical purchase
 order should never disappear and orphan that PO's `vendor_id` FK, so, same
 as customers and technicians elsewhere in this codebase, vendors are
-deactivated by convention (or simply left unused) rather than deleted —
-there is intentionally no `DELETE /vendors/{id}` route.
+deactivated rather than deleted — there is intentionally no
+`DELETE /vendors/{id}` route. As of Phase 17, "deactivated by convention"
+became a real `is_active` flag: `POST /vendors/{id}/status` archives or
+reactivates a vendor, the default `GET /vendors` list and the reorder-
+suggestions-to-draft-PO flow only ever offer active vendors, and
+`_require_active_vendor` in `app/services/purchase_orders.py` refuses to
+draft a NEW purchase order against an archived one — but `GET
+/vendors/{id}` keeps resolving an archived vendor unconditionally so a
+historical PO can still render who it was actually placed with. See
+"Phase 17" below.
 
 **Purchase orders — state-machine-guarded lifecycle,
 `app/services/purchase_orders.py` + `app/services/state_machines.py`
@@ -1535,11 +1545,6 @@ message rather than a 404 for a logged-in user who simply lacks the role.
   nothing is transmitted to the vendor automatically. A submitted PO is a
   fact the *shop* now needs to act on (call/email the vendor), not
   something the system sends on the shop's behalf yet.
-- **Vendor deletion / archival UI.** Vendors can only be created and
-  updated from the frontend today, matching the "no delete, deactivate by
-  convention" service-layer decision above — there is no archived/inactive
-  flag or filter yet.
-
 ## Accounting & reporting (Phase 14)
 
 Phase 8 shipped AR aging — outstanding balances bucketed by days overdue —
@@ -1839,9 +1844,6 @@ mutation, like every other authenticated mutation in this app, goes through
 
 ### What's intentionally NOT here yet (Phase 15)
 
-- **GPS-based "find my dock" / customer-facing dock-finder view.** The
-  `latitude`/`longitude` columns exist on `slips` for this, but no
-  customer-portal page consumes them yet.
 - **Payment-processing changes beyond line items.** Storage charges flow
   through the existing Stripe Checkout/invoice pipeline unchanged — no new
   payment method or processor integration was added.
@@ -2191,9 +2193,6 @@ just the *what*, consolidated so nothing is scattered or repeated.
   CDN/WAF configuration an operator should apply (`docs/DEPLOYMENT.md`'s
   "CDN / WAF (Cloudflare)"); nothing was actually provisioned, and there is
   no Terraform/API automation for it here.
-- **A per-company/admin-forced "require MFA" policy.** Phase 16 shipped
-  self-service MFA enrollment (see "Enterprise hardening" above); there is
-  no way for an owner/admin to mandate it for their whole team yet.
 - A container registry / tagged-image release process — `docs/DEPLOYMENT.md`'s
   rollback runbook currently assumes redeploying a previous git commit, not
   pulling a previously-pushed image tag.
@@ -2215,9 +2214,6 @@ just the *what*, consolidated so nothing is scattered or repeated.
 - A scheduled runner (Celery beat/cron) for the dunning sweep — the sweep
   itself ships and is callable on demand or in a loop (see "Billing
   operations" above); nothing in this repo calls it automatically yet.
-- Refund webhooks — a refund issued directly from the Stripe Dashboard
-  (rather than through `POST /invoices/{id}/refund`) does not currently
-  reconcile back into `invoices`/`refunds`.
 - CSV/PDF export of the AR aging report — the JSON API and React table
   exist; there is no "download as spreadsheet" button.
 - The React customer-facing pay page's own dedicated UI polish beyond what
@@ -2296,10 +2292,12 @@ for the full rationale):**
   field.
 
 **Auth:**
-- No MFA yet, though `users.mfa_secret_enc` is reserved for it.
-- A revoked session's access token stays valid until it expires
-  (`ACCESS_TOKEN_TTL_MINUTES`, default 15). Stateful access-token revocation
-  (e.g. a denylist checked per-request) remains out of scope.
+- ~~No MFA yet~~ **Shipped in Phase 16** (self-service TOTP enrollment) and
+  **Phase 17** (admin-forced company-wide policy — see "Phase 17" below).
+- ~~A revoked session's access token stays valid until it expires... Stateful
+  access-token revocation remains out of scope~~ **Shipped in Phase 17**:
+  a Redis-backed JTI denylist now rejects a revoked access token
+  immediately, not just after natural expiry — see "Phase 17" below.
 
 **AI dispatch engine (see "AI dispatch engine" above for the full
 rationale):**

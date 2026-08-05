@@ -226,9 +226,12 @@ this is organized from).
 - [ ] **Vendor-side integration** (EDI, vendor catalog/pricing feeds,
       emailing the PO to the vendor) — a submitted PO is a fact the shop
       acts on manually; nothing is transmitted to the vendor automatically.
-- [ ] **Vendor deletion/archival UI** — vendors can be created/updated only;
-      no archived/inactive flag or delete route exists yet, matching the
-      "deactivate by convention" decision above.
+- [x] **Vendor deletion/archival UI** — ~~vendors can be created/updated
+      only; no archived/inactive flag or delete route exists yet~~
+      **shipped in Phase 17** as a real `is_active` flag + archive/
+      reactivate endpoint and a frontend toggle — see the Phase 17 section
+      below. Still intentionally no hard-delete route, consistent with the
+      "deactivate, never orphan a historical FK" decision above.
 
 ## Phase 14 — Accounting & Reporting — **COMPLETE**
 - [x] Simple cash-basis P&L (`GET /reports/pnl`): revenue = succeeded
@@ -342,9 +345,10 @@ this is organized from).
       (`/marina/slips`, `/marina/reservations`, `/marina/slip-map`), gated
       behind `canManageOperations` with the same permission-denied-message
       pattern as `ArAgingRoute`/`TeamRoute`/`PurchaseOrdersRoute`.
-- [ ] **GPS-based "find my dock" / customer-facing dock-finder view** — the
-      `latitude`/`longitude` columns exist on `slips` for this, but no
-      customer-portal page consumes them yet.
+- [x] **GPS-based "find my dock" / customer-facing dock-finder view** —
+      ~~the `latitude`/`longitude` columns exist on `slips` for this, but no
+      customer-portal page consumes them yet~~ **shipped in Phase 17** —
+      see the Phase 17 section below.
 - [ ] **Payment-processing changes beyond line items** — storage charges
       flow through the existing Stripe Checkout/invoice pipeline unchanged;
       no new payment method or processor integration was added.
@@ -395,18 +399,77 @@ this is organized from).
       third party's rate limit, not tenant isolation or security. Documented
       in `docs/DEPLOYMENT.md`'s "Running more than one app instance"
       section along with the concrete steps to actually run N replicas.
-- [ ] **Stateful access-token revocation.** Still deferred, unchanged from
-      Phase 8: a revoked session's *access* token remains valid until it
-      naturally expires (its *refresh* token is revoked immediately); a
-      real fix needs either short-lived access tokens plus a server-side
-      revocation/deny-list check per request (defeating some of the point
-      of a stateless JWT) or a session-version claim bumped on revocation.
-- [ ] **Admin-forced "require MFA" policy.** MFA is opt-in per user; there
-      is no owner/admin control to mandate it company-wide.
+- [x] **Stateful access-token revocation.** ~~Deferred, unchanged from
+      Phase 8~~ **shipped in Phase 17** via a Redis-backed JTI denylist —
+      see the Phase 17 section below.
+- [x] **Admin-forced "require MFA" policy.** ~~MFA is opt-in per user; there
+      is no owner/admin control to mandate it company-wide~~ **shipped in
+      Phase 17** — see the Phase 17 section below.
 - [ ] **True autoscaling/orchestration.** Multiple replicas can now be run
       by hand (e.g. Compose `--scale app=N`) behind a load balancer; there
       is no Kubernetes/ECS-style autoscaler, and Celery workers are a fixed
       pool rather than scaling with queue depth.
+
+## Phase 17 — Security Hardening, Marina/Payments/Vendor Gaps — **COMPLETE**
+- [x] **Stateful access-token revocation.** Redis-backed JTI denylist
+      (`app/core/token_denylist.py`): `logout()` now adds the calling
+      request's own access-token `jti` to the denylist (TTL = the token's
+      remaining lifetime) in addition to its existing refresh-token-family
+      revocation, and `get_current_principal` checks denylist membership on
+      every request. Fails open on Redis errors, the same documented
+      trade-off `app/core/rate_limit.py` already makes (a Redis outage
+      should not become a full auth outage). Closes the gap flagged in both
+      the Auth and Phase 16 sections above.
+- [x] **Admin-forced company-wide MFA policy.** Migration `0017` adds
+      `companies.mfa_required`; an owner/admin-only endpoint toggles it, and
+      login enforcement blocks a user without MFA enrolled from completing
+      login once their company requires it, returning the same
+      `mfa_required`-shaped response the existing per-user MFA challenge
+      flow already uses so the frontend redirect logic is one code path,
+      not two.
+- [x] **Recurring monthly slip billing.** A new daily Celery Beat sweep
+      (`app.tasks.sweep_tasks.slip_storage_billing_sweep_task`) bills
+      confirmed/checked-in slip reservations automatically; idempotency is
+      keyed off an exact billing-period marker embedded in the
+      `job_line_item` description (not `created_at`, which is real
+      wall-clock insert time and would double-bill on a backfill/replay).
+      Closes the Phase 15 gap: "no scheduled job that auto-bills monthly
+      slip rent the way a subscription would."
+- [x] **PDF report exports.** `GET /reports/ar-aging/export.pdf`,
+      `.../pnl/export.pdf`, and a third existing CSV-only report gained a
+      PDF twin, reusing the same PDF-rendering approach already established
+      for invoices (`app/services/invoice_pdf.py`) rather than a new
+      rendering dependency.
+- [x] **GPS-based "find my dock" customer view.** `GET
+      /portal/{token}/dock-locations` (`app/services/portal.py`) returns
+      the calling customer's own confirmed/checked-in slip reservation(s)
+      with GPS coordinates — never another customer's, never the full
+      marina map. `PortalDockLocation.tsx` renders it with the same
+      react-leaflet/OpenStreetMap pattern `DispatchMap.tsx` (Phase 11)
+      established, registered at `/portal/:token/dock`. Closes the Phase 15
+      gap: `slips.latitude`/`longitude` existed but nothing customer-facing
+      consumed them.
+- [x] **Stripe refund webhook reconciliation.** `charge.refunded` is now
+      handled (`app/services/stripe_webhooks.py::_on_charge_refunded` →
+      `app/services/invoices.py::reconcile_refund_from_webhook`), so a
+      refund issued directly from the Stripe Dashboard — bypassing
+      HarborIQ's own `POST /invoices/{id}/refund` — still updates
+      `invoices`/`refunds`. Idempotent per `stripe_refund_id` (migration
+      `0018`'s partial unique index) and walks the full `refunds.data[]`
+      list Stripe re-sends on each successive partial refund against one
+      charge, rather than assuming exactly one refund per event. Closes the
+      gap flagged under Phase 8's Payments deferred list.
+- [x] **Vendor deactivate/archive.** Migration `0019` adds `vendors
+      .is_active`; `POST /vendors/{id}/status` archives or reactivates one.
+      The default `GET /vendors` list (and the reorder-suggestions →
+      draft-PO picker) now only offers active vendors, and
+      `app.services.purchase_orders._require_active_vendor` refuses to
+      draft a NEW purchase order against an archived vendor — but `GET
+      /vendors/{id}` keeps resolving it unconditionally so a historical PO
+      still renders correctly. A "Show archived vendors" toggle plus an
+      Archive/Reactivate button were added to `VendorsPage.tsx` since the
+      existing table made it a small addition. Closes the gap flagged under
+      Phase 13: "no archived/inactive flag or filter yet."
 
 ## Differentiators to preserve/lean into throughout (not incumbents' turf)
 - Fully explainable AI dispatch scoring (factor-by-factor breakdown) vs.
