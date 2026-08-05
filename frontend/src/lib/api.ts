@@ -164,3 +164,59 @@ export const api = {
 // Exported for tests, which need to reset module-level refresh state between
 // cases without re-importing the module.
 export const __testing = { tryRefresh, forceLogout, rawRequest };
+
+/**
+ * Downloads a CSV (or other file) export from an authenticated GET endpoint
+ * and saves it via the browser. Separate from `apiRequest` because CSV
+ * export responses are `text/csv`, not `application/json` -- `rawRequest`
+ * above only ever parses JSON bodies. Reuses the same 401-refresh-retry
+ * policy as `apiRequest` so an expired access token doesn't silently
+ * download an error page as a "csv".
+ */
+export async function downloadFile(
+  path: string,
+  query?: RequestOptions["query"],
+  suggestedFilename?: string,
+): Promise<void> {
+  const doFetch = async (): Promise<Response> => {
+    const token = getAccessToken();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return fetch(buildUrl(path, query), { method: "GET", headers });
+  };
+
+  let resp = await doFetch();
+  if (resp.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      resp = await doFetch();
+    } else {
+      forceLogout();
+      throw new ApiError(401, "Session expired.", null);
+    }
+  }
+
+  if (!resp.ok) {
+    let data: ApiErrorBody | null = null;
+    try {
+      data = await resp.json();
+    } catch {
+      // ignore -- not a JSON error body
+    }
+    throw new ApiError(resp.status, extractErrorMessage(data, `Request failed with status ${resp.status}`), data);
+  }
+
+  const blob = await resp.blob();
+  const disposition = resp.headers.get("content-disposition") ?? "";
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const filename = match?.[1] ?? suggestedFilename ?? "export.csv";
+
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}

@@ -1,8 +1,10 @@
-import { api, apiRequest } from "./api";
+import { api, apiRequest, downloadFile } from "./api";
 import type {
   AcceptInviteInput,
   ArAgingReport,
   AuthResponse,
+  CashFlowReport,
+  PnlReport,
   ConnectOnboardingResponse,
   ConnectStatusResponse,
   CreateInviteInput,
@@ -197,8 +199,28 @@ export const billingApi = {
 
 // --- reports (owner/admin/office) ---
 
+export interface ReportDateRange {
+  start_date?: string;
+  end_date?: string;
+  [key: string]: string | number | boolean | undefined | null;
+}
+
 export const reportsApi = {
   arAging: () => api.get<ArAgingReport>("/reports/ar-aging"),
+  pnl: (range?: ReportDateRange) => api.get<PnlReport>("/reports/pnl", range),
+  cashFlow: (range?: ReportDateRange) => api.get<CashFlowReport>("/reports/cash-flow", range),
+
+  // CSV / QuickBooks Online-style export downloads (Phase 14). Each
+  // triggers a browser file download rather than returning parsed data --
+  // see `downloadFile` in lib/api.ts for why these can't go through the
+  // normal JSON-only `api.get`.
+  exportArAgingCsv: () => downloadFile("/reports/ar-aging/export.csv", undefined, "ar_aging.csv"),
+  exportPnlCsv: (range?: ReportDateRange) =>
+    downloadFile("/reports/pnl/export.csv", range, "pnl.csv"),
+  exportCashFlowCsv: (range?: ReportDateRange) =>
+    downloadFile("/reports/cash-flow/export.csv", range, "cash_flow.csv"),
+  exportTransactionsCsv: (range?: ReportDateRange) =>
+    downloadFile("/reports/transactions/export.csv", range, "transactions_qbo.csv"),
 };
 
 // --- public (unauthenticated) ---

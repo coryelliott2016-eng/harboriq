@@ -77,6 +77,10 @@ class TeamMemberOut(BaseModel):
     #: `app/schemas/dispatch.py`'s comment on the same pattern.
     home_latitude: Decimal | None = None
     home_longitude: Decimal | None = None
+    #: Pay rate (Phase 14, migration 0013) -- admin-only, nullable. Feeds
+    #: `GET /reports/pnl`'s labor-cost line; a technician with no rate set
+    #: here shows as "labor cost unavailable" in that report, never $0.
+    hourly_rate: Decimal | None = None
 
 
 class UserUpdate(BaseModel):
@@ -97,6 +101,9 @@ class UserUpdate(BaseModel):
     address_text: str | None = Field(default=None, max_length=500)
     role: UserRole | None = None
     is_active: bool | None = None
+    #: Admin-only (see ADMIN_ONLY_COLUMNS); a technician may not set their
+    #: own pay rate, matching the existing role/is_active restriction.
+    hourly_rate: Decimal | None = Field(default=None, ge=0)
 
 
 class TokenPair(BaseModel):

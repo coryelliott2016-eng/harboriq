@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { reportsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { Card, ErrorBanner, Spinner, StatCard, money } from "../components/ui";
+import { Button, Card, ErrorBanner, Spinner, StatCard, money } from "../components/ui";
 import type { AgingBuckets } from "../types/api";
 
 const BUCKET_COLUMNS: { key: keyof AgingBuckets; label: string }[] = [
@@ -19,6 +20,16 @@ export function ArAgingPage() {
     queryKey: ["reports", "ar-aging"],
     queryFn: () => reportsApi.arAging(),
   });
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await reportsApi.exportArAgingCsv();
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (query.isLoading) return <Spinner label="Loading AR aging report…" />;
   if (query.isError)
@@ -34,12 +45,17 @@ export function ArAgingPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">AR aging</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Outstanding balances as of {new Date(report.as_of).toLocaleString()}, bucketed by days
-          overdue. Only invoices with a balance still due are included.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">AR aging</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Outstanding balances as of {new Date(report.as_of).toLocaleString()}, bucketed by days
+            overdue. Only invoices with a balance still due are included.
+          </p>
+        </div>
+        <Button onClick={handleExport} disabled={exporting}>
+          {exporting ? "Exporting…" : "Export CSV"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">

@@ -1431,6 +1431,177 @@ message rather than a 404 for a logged-in user who simply lacks the role.
   convention" service-layer decision above — there is no archived/inactive
   flag or filter yet.
 
+## Accounting & reporting (Phase 14)
+
+Phase 8 shipped AR aging — outstanding balances bucketed by days overdue —
+but there was no revenue/cost/profitability view at all: an owner had no way
+to see whether the business was actually making money in a given period.
+This phase adds a pragmatic P&L and cash-flow view computed **honestly from
+data that already exists** (invoices, payments, refunds, purchase orders,
+technician time entries), CSV exports for every report, and a
+QuickBooks-Online-importable transactions journal — deliberately **not** a
+full double-entry general ledger, matching the roadmap's own reasoning that
+building a real GL to compete with DockMaster's accounting suite would be
+disproportionate to the value delivered.
+
+**Migration `0013_accounting_reports`.** One change: a nullable
+`users.hourly_rate NUMERIC(12,2)` column with a `CHECK
+(hourly_rate IS NULL OR hourly_rate >= 0)` constraint. No pay-rate field
+existed anywhere in the schema before this phase — rather than silently
+inventing a labor-cost number from nothing, this phase adds the column and
+makes the P&L report explicit about which technicians don't have a rate set
+yet (see "labor cost, and the unavailable-not-zero rule" below). Verified by
+dropping and recreating the database and reapplying migrations `0001`–`0013`
+from scratch during this phase's work, not just applied incrementally on top
+of already-migrated state. `hourly_rate` joins `ADMIN_ONLY_COLUMNS` in
+`app/services/users.py` — same reasoning as `role`/`is_active`: a technician
+should not be able to set their own pay rate via `PATCH /users/{id}`, only
+an owner/admin can.
+
+**P&L methodology — exactly what "revenue," "cost," and "labor" mean here.**
+`GET /reports/pnl?start_date=&end_date=` (`require_operations`), grouped by
+month plus a totals row:
+
+- **Revenue** is **cash collected**, not accrual-invoiced value: the sum of
+  `payments` rows with `status = 'succeeded'` whose `created_at` falls in
+  the requested period, minus `refunds` whose `created_at` falls in the
+  period. `payments` rows are written once, inside
+  `invoices.mark_paid_from_webhook`, when Stripe confirms a checkout session
+  — so this is genuinely "money that landed," not "invoices sent." An
+  invoice issued in June but paid in July shows as July revenue, which is
+  the correct cash-basis answer but differs from an accrual-basis P&L that
+  would recognize it in June; this report does not attempt accrual
+  recognition.
+- **Parts cost** is `purchase_order_line_items.quantity_received *
+  unit_cost` summed for POs whose `received_at` falls in the period — a
+  reasonable proxy for cost of goods sold given no full GL exists, but note
+  it's tied to when stock was *received*, not when the vendor invoice was
+  *paid* (the schema has no vendor-payment-date field at all; see the cash
+  flow section below for why this matters more there).
+- **Labor cost, and the unavailable-not-zero rule.** For each closed
+  `job_time_entries` row (`clocked_out_at IS NOT NULL`) whose
+  `clocked_in_at` falls in the period, duration × the technician's
+  `users.hourly_rate` is added to that month's labor cost. Open entries
+  (still clocked in, `clocked_out_at IS NULL`) are excluded — there's no
+  final duration to compute yet. **If any technician with time entries in a
+  month has no `hourly_rate` set, that month's `labor_cost_unavailable` flag
+  is `true` and `unrated_technicians` lists them by name (falling back to
+  their id if `full_name` is unset) — the reported `labor_cost` figure is
+  then a known undercount, never silently presented as a complete number
+  with their hours counted as $0.** Both the API response and the frontend
+  P&L page surface this as a visible warning banner, not a footnote.
+- **Net** = revenue − parts cost − labor cost.
+
+**Cash flow methodology, and the "cost incurred" vs. "cash paid" caveat.**
+`GET /reports/cash-flow?start_date=&end_date=` reports cash in (the same
+succeeded-`payments` figure as P&L revenue) against **cost incurred** (the
+same PO-received-line-items figure as P&L parts cost) — deliberately
+labeled `cost_incurred`, not `cash_out`, because **the schema has no vendor
+cash-payment-date field anywhere** — `purchase_orders` tracks `received_at`
+(when stock arrived) but not when the shop actually paid that vendor's
+invoice. Presenting "PO received" as if it were "cash paid to vendor" would
+misrepresent accrual timing as cash timing, so the API response includes an
+explicit `cost_incurred_caveat` string saying so in plain language, and the
+frontend renders it directly under the cash-flow totals rather than only in
+docs a user is unlikely to read. `net_cash` = cash in − refunds out − cost
+incurred, with the same caveat applying to that figure.
+
+**CSV exports and the QuickBooks Online-compatible transactions bridge.**
+Every report now has a CSV export using the same `require_operations` gate
+as its JSON counterpart:
+
+- `GET /reports/ar-aging/export.csv` — extends the Phase 8 AR aging report
+  (which had no export before this phase).
+- `GET /reports/pnl/export.csv`, `GET /reports/cash-flow/export.csv` — one
+  row per month plus a `TOTAL` row, mirroring the JSON shape.
+- `GET /reports/transactions/export.csv` — a **3-column journal** (`Date`,
+  `Description`, `Amount`) covering invoiced revenue collected and PO costs
+  incurred for the period, using the widely-documented standard 3-column
+  layout for spreadsheet/QuickBooks Online-style CSV import (positive
+  amounts for revenue, negative for costs). **This is a CSV export bridge,
+  not a live API integration** — confirm the exact column requirements
+  against QuickBooks Online's own current import tool before relying on it
+  for a real books close, since Intuit has changed its import UI/requirements
+  over time and this was not verified against a live QBO account during this
+  phase's work.
+
+**Future: live QuickBooks/Xero sync.** A real OAuth-based sync (auto-push
+invoices/payments/POs into QuickBooks Online or Xero's ledger, not just a
+CSV a bookkeeper imports by hand) would require, at minimum:
+
+1. Registering a developer app with [Intuit
+   Developer](https://developer.intuit.com/) (for QuickBooks Online) and/or
+   [Xero Developer](https://developer.xero.com/) under **the user's own
+   account** — this cannot be done on the user's behalf from inside this
+   codebase, and both platforms require an app-review/approval process
+   before production API scopes are granted.
+2. Implementing the OAuth2 authorization-code flow for each platform
+   (QuickBooks uses Intuit's OAuth2 + a company-specific `realmId`; Xero
+   uses its own OAuth2 + tenant id), token storage, and refresh-token
+   rotation — a materially larger surface than the API-key-free CSV bridge
+   shipped this phase.
+3. Mapping HarborIQ's simplified P&L (revenue / parts cost / labor cost /
+   net) onto a real chart of accounts (e.g. a specific Income account for
+   service revenue, a COGS account for parts, an Expense account for labor)
+   — a business decision each shop's bookkeeper should make, not something
+   this platform should silently default.
+4. Ongoing reconciliation handling (partial syncs, sync failures, duplicate
+   prevention) that a one-shot CSV export doesn't need to worry about.
+
+This is intentionally **out of scope** for this phase per the phase spec —
+no Intuit/Xero developer app is registered for this product, and building a
+half-working OAuth flow without one would be worse than a clearly-labeled
+CSV bridge that works today.
+
+**Frontend — a new `/reports` section, plus an export button on AR aging.**
+`ReportsPage.tsx` adds a P&L tab (a `recharts` bar chart of monthly net
+revenue/parts cost/labor cost, plus the full monthly table, plus a
+totals-row summary, plus the unrated-technicians warning banner described
+above when applicable) and a Cash Flow tab (a `recharts` line chart of cash
+in/cost incurred/net cash, the monthly table, and the `cost_incurred_caveat`
+rendered verbatim), each with its own date-range picker and an "Export CSV"
+button, plus a page-level "Export QuickBooks CSV" button for the
+transactions journal. `ArAgingPage.tsx` gained an "Export CSV" button using
+the same download helper. No chart library existed in `package.json` before
+this phase (checked first, per the phase spec) — `recharts` was added as a
+lightweight, actively-maintained option (v3). CSV downloads use a new
+`downloadFile` helper in `lib/api.ts`: the existing `apiRequest`/`rawRequest`
+functions only ever parse JSON bodies, so a separate raw-`fetch`-plus-blob
+helper was needed for `text/csv` responses, reusing the same
+401-refresh-and-retry policy as every other authenticated request rather
+than duplicating a second, weaker auth path. `/reports` is registered in
+`App.tsx` and `AppShell`'s nav following the exact `ArAgingRoute`/`TeamRoute`
+pattern: gated behind `canManageOperations(user?.role)`, with a
+permission-denied message rather than a 404 for a logged-in user who simply
+lacks the role.
+
+### What's intentionally NOT here yet (Phase 14)
+
+- **Live QuickBooks/Xero OAuth sync.** Covered in detail above — this phase
+  ships a CSV export bridge, not a connected integration; no Intuit/Xero
+  developer app is registered for this product.
+- **A full double-entry general ledger.** No chart of accounts, no journal
+  entries, no balance sheet — this phase's P&L/cash-flow reports are
+  computed directly from operational tables (invoices, payments, refunds,
+  POs, time entries), not from ledger postings, matching the roadmap's own
+  "pragmatically smarter than building a full GL from scratch" framing.
+- **Accrual-basis P&L.** Revenue is recognized on cash collection
+  (`payments.created_at`), not on invoice issuance — an invoice sent in one
+  month and paid the next shows up as next month's revenue. This is called
+  out explicitly in the methodology above and in the API response shape,
+  not hidden.
+- **Vendor cash-payment tracking.** `purchase_orders` has no
+  vendor-payment-date field, so "cost incurred" (PO received) is reported
+  instead of "cash paid to vendor," with an explicit caveat string returned
+  by the API and rendered in the UI. Adding real accounts-payable tracking
+  (when the shop actually pays each vendor bill) would be a larger, separate
+  feature.
+- **PDF report exports.** Only CSV exports were built this phase — the
+  phase spec's own scope language treats "CSV/PDF" as options and CSV is the
+  one that directly serves the QuickBooks-import use case, which is the
+  higher-value target for a bookkeeper-facing export.
+
+
 ## Project layout
 
 ```

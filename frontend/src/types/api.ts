@@ -545,6 +545,62 @@ export interface ArAgingReport {
   grand_total: string;
 }
 
+// --- P&L and cash-flow reports (Phase 14) ---
+// Mirrors app/schemas/reports.py exactly.
+
+export interface PnlMonth {
+  month: string; // "YYYY-MM"
+  revenue: string;
+  refunds: string;
+  net_revenue: string;
+  parts_cost: string;
+  labor_cost: string;
+  labor_cost_unavailable: boolean;
+  unrated_technicians: string[];
+  net: string;
+}
+
+export interface PnlTotals {
+  revenue: string;
+  refunds: string;
+  net_revenue: string;
+  parts_cost: string;
+  labor_cost: string;
+  labor_cost_unavailable: boolean;
+  unrated_technicians: string[];
+  net: string;
+}
+
+export interface PnlReport {
+  start_date: string;
+  end_date: string;
+  months: PnlMonth[];
+  totals: PnlTotals;
+}
+
+export interface CashFlowMonth {
+  month: string;
+  cash_in: string;
+  refunds_out: string;
+  cost_incurred: string;
+  net_cash: string;
+}
+
+export interface CashFlowTotals {
+  cash_in: string;
+  refunds_out: string;
+  cost_incurred: string;
+  net_cash: string;
+}
+
+export interface CashFlowReport {
+  start_date: string;
+  end_date: string;
+  months: CashFlowMonth[];
+  totals: CashFlowTotals;
+  cost_incurred_caveat: string;
+}
+
 // --- API error shape (see app/api/errors.py) ---
 // FastAPI's default HTTPException body: {"detail": "<message>" | [...]}
 export interface ApiErrorBody {

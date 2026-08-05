@@ -206,6 +206,13 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     current_latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
     current_longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
     location_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    #: Pay rate (migration 0013), used only by the P&L report to turn a
+    #: technician's `job_time_entries` duration into a real labor-cost dollar
+    #: figure. Nullable and NOT defaulted to 0 -- a technician with no rate
+    #: set must show as "labor cost unavailable" in reporting, never as a
+    #: silent $0, so this column is honestly absent until an admin fills it
+    #: in via `PATCH /users/{id}`.
+    hourly_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2))
 
     __table_args__ = (
         Index("uq_users_company_email", "company_id", "email", unique=True),

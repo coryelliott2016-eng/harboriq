@@ -37,7 +37,11 @@ SELF_EDITABLE_COLUMNS = frozenset({"full_name", "skills", "address_text"})
 #: Additional fields only an admin may change, and only for someone else
 #: (or, in principle, themselves — an owner/admin editing their own row via
 #: the admin path is allowed since they already hold that role).
-ADMIN_ONLY_COLUMNS = frozenset({"role", "is_active"})
+#: `hourly_rate` (Phase 14, migration 0013) joins this set rather than
+#: `SELF_EDITABLE_COLUMNS` for the same reason `role` does: a technician
+#: setting their own pay rate would make the P&L labor-cost figure
+#: self-reported and untrustworthy.
+ADMIN_ONLY_COLUMNS = frozenset({"role", "is_active", "hourly_rate"})
 
 #: The full set of columns `PATCH /users/{id}` may ever write. Geocoding
 #: derives `home_latitude`/`home_longitude` server-side from `address_text`

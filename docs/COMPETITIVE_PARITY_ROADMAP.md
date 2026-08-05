@@ -223,11 +223,64 @@ this is organized from).
       no archived/inactive flag or delete route exists yet, matching the
       "deactivate by convention" decision above.
 
-## Phase 14 — Accounting & Reporting
-- Basic AR aging shipped in Phase 8; this phase covers the rest: a simple
-  P&L/cash-flow view, exportable (CSV/PDF) reports including AR aging
-  itself, and QuickBooks/Xero sync — pragmatically smarter than building a
-  full GL from scratch to match DockMaster's accounting suite.
+## Phase 14 — Accounting & Reporting — **COMPLETE**
+- [x] Simple cash-basis P&L (`GET /reports/pnl`): revenue = succeeded
+      `payments` minus `refunds` in-period (cash collected, not accrual-
+      invoiced value); parts cost = received PO line items
+      (`quantity_received * unit_cost`); labor cost = closed
+      `job_time_entries` duration × the technician's new `users.hourly_rate`
+      (migration `0013_accounting_reports`) — with an explicit
+      `labor_cost_unavailable` flag plus a named `unrated_technicians` list
+      whenever a technician with time entries has no rate set, so the figure
+      is a visibly-flagged undercount, never a silent $0. Grouped by month
+      plus a totals row.
+- [x] Cash flow view (`GET /reports/cash-flow`): cash in (same
+      succeeded-payments figure) vs. **cost incurred** (PO received line
+      items) — deliberately not labeled "cash out," since the schema has no
+      vendor-payment-date field; the API returns an explicit
+      `cost_incurred_caveat` string and the frontend renders it directly
+      rather than only documenting the accrual-vs-cash distinction in the
+      README.
+- [x] CSV exports for every report — `GET /reports/{ar-aging,pnl,
+      cash-flow}/export.csv` — plus `GET /reports/transactions/export.csv`,
+      a QuickBooks Online-importable 3-column journal (date, description,
+      amount) covering collected revenue and incurred PO costs, so a
+      bookkeeper can import into QuickBooks/Xero/any spreadsheet today
+      without a live API integration.
+- [x] Frontend `/reports` section: P&L tab (recharts bar chart + monthly
+      table + unrated-technicians warning banner) and Cash Flow tab
+      (recharts line chart + monthly table + the cost-incurred caveat),
+      each with a date-range picker and CSV export button, plus an
+      AR-aging export button added to the existing Phase 8 page and a
+      page-level QuickBooks CSV export button. `recharts` added as the
+      project's first charting dependency (none existed before this phase).
+      Gated behind `canManageOperations`, same pattern as `ArAgingRoute`/
+      `TeamRoute`.
+- [ ] **Live QuickBooks/Xero OAuth sync** — deliberately out of scope per
+      the phase spec: a real integration requires the user to separately
+      register a developer app with Intuit Developer and/or Xero Developer
+      under their own account (app-review process, chart-of-accounts
+      mapping decisions only the shop's bookkeeper should make) — no such
+      app is registered for this product. The CSV export bridge above is
+      the pragmatic today-it-works alternative; see the README's "Future:
+      live QuickBooks/Xero sync" section for exactly what that would
+      require.
+- [ ] **Full double-entry general ledger** — no chart of accounts, no
+      journal postings, no balance sheet; reports are computed directly
+      from operational tables (invoices, payments, refunds, POs, time
+      entries), matching this phase's own "pragmatically smarter than a
+      full GL" framing rather than a gap.
+- [ ] **Accrual-basis P&L** — revenue is recognized on cash collection, not
+      invoice issuance; an invoice sent one month and paid the next is next
+      month's revenue in this report. Called out explicitly rather than
+      silently assumed.
+- [ ] **Vendor cash-payment-date tracking** — `purchase_orders` has no
+      field for when the shop actually paid a vendor invoice, only
+      `received_at`; cash flow reports "cost incurred," not "cash paid,"
+      with that caveat surfaced in both the API response and the UI.
+- [ ] **PDF report exports** — only CSV was built this phase; CSV is the
+      format that directly serves the QuickBooks-import use case, the
+      higher-value target for a bookkeeper-facing export.
 
 ## Phase 15 — Marina/Slip Management (optional — different business model)
 - Visual slip map, reservations, dry-stack scheduling, storage billing —

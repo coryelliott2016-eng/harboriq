@@ -19,6 +19,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { PublicInvoicePage } from "./pages/PublicInvoicePage";
 import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
+import { ReportsPage } from "./pages/ReportsPage";
 import { SignupPage } from "./pages/SignupPage";
 import { TeamPage } from "./pages/TeamPage";
 import { VendorsPage } from "./pages/VendorsPage";
@@ -69,6 +70,19 @@ function ArAgingRoute() {
     );
   }
   return <ArAgingPage />;
+}
+
+function ReportsRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. Reports are limited to owners, admins,
+        and office staff.
+      </div>
+    );
+  }
+  return <ReportsPage />;
 }
 
 function MessagesRoute() {
@@ -166,6 +180,7 @@ export default function App() {
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
           <Route path="/reports/ar-aging" element={<ArAgingRoute />} />
+          <Route path="/reports" element={<ReportsRoute />} />
           <Route path="/messages" element={<MessagesRoute />} />
           <Route path="/settings/billing" element={<BillingSettingsRoute />} />
           <Route path="/team" element={<TeamRoute />} />
