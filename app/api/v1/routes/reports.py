@@ -25,6 +25,7 @@ from app.schemas.reports import (
     PnlReport,
     PnlTotals,
 )
+from app.services import report_pdf
 from app.services import reports as service
 
 router = APIRouter(
@@ -36,6 +37,14 @@ def _csv(content: str, filename: str) -> Response:
     return Response(
         content=content,
         media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _pdf(content: bytes, filename: str) -> Response:
+    return Response(
+        content=content,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -84,6 +93,19 @@ def ar_aging_export_csv(
     return _csv(content, "ar_aging.csv")
 
 
+@router.get("/ar-aging/export.pdf")
+def ar_aging_export_pdf(
+    db: Session = Depends(get_db),
+    company_id: uuid.UUID = Depends(get_current_company_id),
+):
+    """AR aging PDF export (Phase 17) -- the explicitly-named gap in the
+    README's Phase 8 deferred list (CSV shipped in Phase 14, PDF did not).
+    """
+    result = service.ar_aging_report(db, company_id)
+    content = report_pdf.render_ar_aging_pdf(result)
+    return _pdf(content, "ar_aging.pdf")
+
+
 @router.get("/pnl", response_model=PnlReport)
 def pnl(
     start_date: datetime | None = Query(default=None),
@@ -113,6 +135,20 @@ def pnl_export_csv(
 ):
     content = service.pnl_report_csv(db, company_id, start_date, end_date)
     return _csv(content, "pnl.csv")
+
+
+@router.get("/pnl/export.pdf")
+def pnl_export_pdf(
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+    company_id: uuid.UUID = Depends(get_current_company_id),
+):
+    """P&L PDF export (Phase 17) -- README's Phase 14 deferred list named
+    'PDF report exports' as the gap; CSV/QBO exports already existed."""
+    result = service.pnl_report(db, company_id, start_date, end_date)
+    content = report_pdf.render_pnl_pdf(result)
+    return _pdf(content, "pnl.pdf")
 
 
 @router.get("/cash-flow", response_model=CashFlowReport)
@@ -146,6 +182,20 @@ def cash_flow_export_csv(
 ):
     content = service.cash_flow_report_csv(db, company_id, start_date, end_date)
     return _csv(content, "cash_flow.csv")
+
+
+@router.get("/cash-flow/export.pdf")
+def cash_flow_export_pdf(
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+    company_id: uuid.UUID = Depends(get_current_company_id),
+):
+    """Cash-flow PDF export (Phase 17) -- same Phase 14 deferred-list gap as
+    the P&L PDF export above."""
+    result = service.cash_flow_report(db, company_id, start_date, end_date)
+    content = report_pdf.render_cash_flow_pdf(result)
+    return _pdf(content, "cash_flow.pdf")
 
 
 @router.get("/transactions/export.csv")

@@ -78,6 +78,17 @@ celery_app.conf.update(
             "task": "app.tasks.outbox_tasks.dispatch_outbox_task",
             "schedule": 60.0,
         },
+        # Phase 17: recurring monthly slip/dry-stack storage billing. Runs
+        # daily (not just once on the 1st) so a reservation that starts
+        # mid-month, or a run that was missed (worker down on the 1st), is
+        # still billed for the current month on the next day's sweep --
+        # `generate_recurring_monthly_charges_for_company` is idempotent per
+        # (reservation, calendar month), so daily re-checks are safe and
+        # cheap, not a double-billing risk.
+        "slip-storage-billing-daily": {
+            "task": "app.tasks.sweep_tasks.slip_storage_billing_sweep_task",
+            "schedule": crontab(minute=30, hour=1),
+        },
     },
 )
 

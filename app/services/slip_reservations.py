@@ -359,12 +359,187 @@ def generate_storage_charge(
     return line
 
 
+# ---------------------------------------------------------------------------
+# recurring monthly storage billing (Phase 17) — a scheduled counterpart to
+# the staff-triggered `generate_storage_charge` above. `generate_storage_charge`
+# refuses outright once ANY line item exists for a reservation, which is
+# correct for a single stay but wrong for an ongoing monthly rental: a
+# live-aboard/long-term slip tenant should be billed every period they
+# remain checked in, not once ever. Rather than relaxing that guard (which
+# would reopen the door to accidental double-billing of a short stay), this
+# adds a period-scoped variant: one `storage`-kind line item per
+# (reservation, calendar month) pair, found by checking whether a line
+# already exists whose `created_at` falls in `[period_start, period_end)`.
+# That makes a second call for the SAME month a no-op (idempotent, per the
+# spec's explicit requirement) while a NEW month for the same still-active
+# reservation is billed independently.
+# ---------------------------------------------------------------------------
+def _month_bounds(on: date) -> tuple[date, date]:
+    """Return `[first_of_month, first_of_next_month)` containing `on`."""
+    period_start = on.replace(day=1)
+    if period_start.month == 12:
+        period_end = period_start.replace(year=period_start.year + 1, month=1)
+    else:
+        period_end = period_start.replace(month=period_start.month + 1)
+    return period_start, period_end
+
+
+#: Reservation statuses billed by the recurring monthly sweep. `checked_in`
+#: is the obvious case (a boat currently occupying the slip); `confirmed` is
+#: included too so a reservation that spans a monthly rollover but hasn't
+#: had its check-in recorded yet (e.g. staff forgot to click "check in" on
+#: day one) still gets billed for the period rather than silently skipped —
+#: `pending`/`checked_out`/`cancelled` are excluded (never occupied, or no
+#: longer occupying, the slip).
+RECURRING_BILLABLE_STATUSES = ("confirmed", "checked_in")
+
+
+def generate_recurring_monthly_charge(
+    db: Session,
+    company_id: uuid.UUID,
+    reservation_id: uuid.UUID,
+    *,
+    as_of: date,
+) -> Row | None:
+    """Idempotently bill one reservation for the calendar month containing `as_of`.
+
+    Returns the new `job_line_items` row, or `None` if a charge for this
+    reservation + month already exists (already billed — not an error, a
+    scheduled sweep calling this twice for the same period is the expected
+    "idempotent" case) or the reservation is not currently in a billable
+    status / does not span this month at all.
+
+    Rate: the slip's `monthly_rate` (this is the recurring-rent variant of
+    storage billing, as opposed to `generate_storage_charge`'s nightly
+    `daily_rate` default for a short stay) with `quantity=1` (one month's
+    rent), so overriding just the unit price later — e.g. a prorated partial
+    month — stays possible without changing the shape of the line item.
+    """
+    period_start, period_end = _month_bounds(as_of)
+
+    with tenant_context(db, company_id):
+        reservation = db.execute(
+            text("SELECT * FROM slip_reservations WHERE id = :id"), {"id": reservation_id}
+        ).first()
+        if reservation is None:
+            raise NotFound(f"slip reservation {reservation_id} not found")
+
+        if reservation.status not in RECURRING_BILLABLE_STATUSES:
+            return None
+
+        # The reservation must actually span at least one day of this month
+        # -- a reservation that ended last month or starts next month is not
+        # billable for THIS period even if it is nominally "confirmed".
+        if reservation.end_date < period_start or reservation.start_date >= period_end:
+            return None
+
+        # Idempotency key: the exact "<period_start> to <period_end>" marker
+        # embedded in the description below. `created_at` (real insert
+        # wall-clock time) is NOT a safe idempotency signal here -- `as_of`
+        # is caller-supplied and can simulate any calendar month (tests,
+        # backfills, a sweep that runs late), so a charge for "June" could
+        # easily be inserted in real-world August. Matching on the period
+        # marker itself is exact and immune to when the row happened to be
+        # written.
+        period_marker = f"{period_start.isoformat()} to {period_end.isoformat()}"
+        already_billed_this_period = db.execute(
+            text(
+                """
+                SELECT 1 FROM job_line_items
+                 WHERE slip_reservation_id = :id
+                   AND kind = 'storage'
+                   AND description LIKE '%' || :period_marker
+                 LIMIT 1
+                """
+            ),
+            {"id": reservation_id, "period_marker": period_marker},
+        ).first()
+        if already_billed_this_period is not None:
+            return None
+
+        slip_row = db.execute(
+            text("SELECT monthly_rate, identifier FROM slips WHERE id = :id"),
+            {"id": reservation.slip_id},
+        ).first()
+        if slip_row is None:
+            raise NotFound(f"slip {reservation.slip_id} not found")
+
+        description = f"Slip {slip_row.identifier} monthly storage: {period_marker}"
+
+        line = db.execute(
+            text(
+                """
+                INSERT INTO job_line_items
+                    (company_id, slip_reservation_id, kind, description, quantity, unit_price)
+                VALUES
+                    (:company_id, :reservation_id, 'storage', :description, 1, :unit_price)
+                RETURNING *
+                """
+            ),
+            {
+                "company_id": company_id,
+                "reservation_id": reservation_id,
+                "description": description,
+                "unit_price": slip_row.monthly_rate,
+            },
+        ).first()
+        db.commit()
+    return line
+
+
+def generate_recurring_monthly_charges_for_company(
+    db: Session, company_id: uuid.UUID, *, as_of: date
+) -> dict[str, int]:
+    """Enumerate every `confirmed`/`checked_in` reservation for one company
+    that overlaps the calendar month containing `as_of` and bill each one
+    (idempotently — see `generate_recurring_monthly_charge`).
+
+    Returns `{"reservations_considered": N, "charges_created": M}` so the
+    Celery task and its tests can assert on both "did we look at the right
+    rows" and "did we actually (not) double-charge."
+    """
+    period_start, period_end = _month_bounds(as_of)
+    with tenant_context(db, company_id):
+        reservation_ids = [
+            row.id
+            for row in db.execute(
+                text(
+                    """
+                    SELECT id FROM slip_reservations
+                     WHERE company_id = :cid
+                       AND status = ANY(:statuses)
+                       AND start_date < :period_end
+                       AND end_date >= :period_start
+                    """
+                ),
+                {
+                    "cid": company_id,
+                    "statuses": list(RECURRING_BILLABLE_STATUSES),
+                    "period_start": period_start,
+                    "period_end": period_end,
+                },
+            ).all()
+        ]
+
+    created = 0
+    for reservation_id in reservation_ids:
+        line = generate_recurring_monthly_charge(
+            db, company_id, reservation_id, as_of=as_of
+        )
+        if line is not None:
+            created += 1
+
+    return {"reservations_considered": len(reservation_ids), "charges_created": created}
+
+
 __all__ = [
     "cancel",
     "check_in",
     "check_out",
     "confirm",
     "create",
+    "generate_recurring_monthly_charge",
+    "generate_recurring_monthly_charges_for_company",
     "generate_storage_charge",
     "get",
     "list_reservations",
