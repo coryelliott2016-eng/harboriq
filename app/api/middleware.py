@@ -15,6 +15,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.types import ASGIApp
 
+from app.core.config import settings
+
 REQUEST_ID_HEADER = "X-Request-ID"
 
 log = structlog.get_logger()
@@ -81,6 +83,71 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             structlog.contextvars.clear_contextvars()
 
         response.headers[REQUEST_ID_HEADER] = request_id
+        return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Baseline HTTP security response headers (Security Core Prompt v1.0,
+    H-3 fix; OWASP ASVS V14 "HTTP Security Headers").
+
+    This is a pure API backend (the SPA is served separately by nginx, which
+    gets its own copy of these headers — see `frontend/nginx.conf`), so the
+    policy here is deliberately strict and has none of a traditional
+    server-rendered site's inline-script/style needs:
+
+    - `Strict-Transport-Security`: only sent once `app_env` is not
+      `development`, so a local plain-HTTP dev server is never told by the
+      browser to upgrade every future request to HTTPS (which would break
+      it). `includeSubDomains` + a 1-year max-age is the standard
+      preload-eligible baseline; `preload` itself is intentionally left out
+      since submitting to the HSTS preload list is a one-way, cross-team
+      decision that shouldn't be made implicitly by this middleware.
+    - `Content-Security-Policy`: `default-src 'none'` — this origin never
+      serves HTML/JS/images itself (JSON API only), so there is nothing to
+      allow-list. `frame-ancestors 'none'` blocks this API from being
+      framed anywhere (defense-in-depth alongside `X-Frame-Options`).
+    - `X-Content-Type-Options: nosniff` — stops browsers from MIME-sniffing
+      JSON responses (or user-uploaded attachment bytes, see M-3) as HTML.
+    - `X-Frame-Options: DENY` and `Referrer-Policy: strict-origin-when-
+      cross-origin` — standard clickjacking / referrer-leak hardening.
+    - `Permissions-Policy` — explicitly denies browser features this API
+      has no reason to grant.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        super().__init__(app)
+
+    # Swagger UI / ReDoc render actual HTML in the browser and pull their
+    # JS/CSS from a CDN, so the `default-src 'none'` API policy below would
+    # break them outright. They're documentation surfaces, not the JSON API
+    # surface this policy protects, so they get a separate, docs-appropriate
+    # CSP instead of being silently broken.
+    _DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        headers = response.headers
+        headers["X-Content-Type-Options"] = "nosniff"
+        headers["X-Frame-Options"] = "DENY"
+        headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        headers["Permissions-Policy"] = (
+            "geolocation=(), camera=(), microphone=(), payment=()"
+        )
+        if request.url.path in self._DOCS_PATHS:
+            headers["Content-Security-Policy"] = (
+                "default-src 'self'; img-src 'self' data: fastapi.tiangolo.com; "
+                "script-src 'self' cdn.jsdelivr.net 'unsafe-inline'; "
+                "style-src 'self' cdn.jsdelivr.net 'unsafe-inline'; "
+                "frame-ancestors 'none'"
+            )
+        else:
+            headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'"
+            )
+        if settings.app_env != "development":
+            headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
         return response
 
 

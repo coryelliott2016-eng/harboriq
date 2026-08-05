@@ -38,7 +38,7 @@ def approve_estimate(
     the actual approval runs inside tenant_context so RLS applies. The whole
     flow is one transaction — a failed transition does not burn the token.
     """
-    client_ip = request.client.host if request.client else "0.0.0.0"
+    client_ip = request.client.host if request.client else "0.0.0.0"  # noqa: S104 -- audit-log fallback value, not a bind address
     try:
         result = approve_estimate_with_token(
             db,

@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "audit:ci": "audit-ci --config audit-ci.jsonc"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",
@@ -32,6 +33,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "audit-ci": "^7.1.0",
     "autoprefixer": "^10.5.4",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",

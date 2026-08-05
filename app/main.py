@@ -4,7 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from app.api.middleware import PrometheusMiddleware, RequestIDMiddleware
+from app.api.middleware import (
+    PrometheusMiddleware,
+    RequestIDMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import configure_logging
@@ -38,6 +42,9 @@ app.add_middleware(
 # the Prometheus timing and every route handler underneath it.
 app.add_middleware(PrometheusMiddleware)
 app.add_middleware(RequestIDMiddleware)
+# Added last so it wraps everything (including error responses) and is the
+# final thing to touch headers before the response leaves the app.
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(api_router)
 

@@ -154,3 +154,35 @@ def test_a_valid_signature_is_accepted_once_twilio_is_configured(
         headers={"X-Twilio-Signature": signature},
     )
     assert resp.status_code == 200, resp.text
+
+
+def test_unconfigured_signature_in_production_hard_rejects(
+    client, service_db, monkeypatch
+):
+    """Security Core Prompt v1.0 (M-1 fix): outside development, an
+    unconfigured TWILIO_AUTH_TOKEN must never silently allow unverified
+    inbound SMS -- it must hard-reject instead."""
+    monkeypatch.setattr(settings, "twilio_auth_token", "")
+    monkeypatch.setattr(settings, "app_env", "production")
+
+    resp = client.post(
+        "/api/v1/webhooks/sms/inbound",
+        data={"From": "+15559998888", "Body": "should be rejected"},
+    )
+    assert resp.status_code == 503
+
+
+def test_unconfigured_signature_in_development_still_accepts_with_warning(
+    client, service_db, monkeypatch, caplog
+):
+    monkeypatch.setattr(settings, "twilio_auth_token", "")
+    monkeypatch.setattr(settings, "app_env", "development")
+    customer_id = make_customer(client, signup(client))
+    _set_customer_phone(service_db, customer_id, "+15559998888")
+
+    with caplog.at_level("WARNING", logger="harboriq.sms"):
+        resp = client.post(
+            "/api/v1/webhooks/sms/inbound",
+            data={"From": "+15559998888", "Body": "dev only"},
+        )
+    assert resp.status_code == 200, resp.text

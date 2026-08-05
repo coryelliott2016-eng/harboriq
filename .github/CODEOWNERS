@@ -1,0 +1,15 @@
+# Security Core Prompt v1.0, H-6 (partial fix).
+#
+# GitHub branch protection / repository rulesets require a paid plan for
+# private repositories (confirmed 2026-08-05: this repo's plan reports
+# "free", and both the branch-protection and rulesets APIs return 403
+# "Upgrade to GitHub Pro or make this repository public to enable this
+# feature"). CODEOWNERS alone does not block a direct push to master and
+# is *not* a substitute for branch protection -- it only becomes an
+# enforced review gate once "Require review from Code Owners" is turned on
+# under branch protection, which is the part actually blocked by the plan.
+#
+# This file establishes ownership now so enabling that protection later
+# (after a plan upgrade) is a one-setting change with no further repo
+# changes needed.
+* @coryelliott2016-eng

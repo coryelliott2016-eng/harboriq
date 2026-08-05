@@ -1,0 +1,24 @@
+# Gitleaks config (Security Core Prompt v1.0, H-5 fix).
+#
+# Extends gitleaks' default ruleset rather than replacing it, and allowlists
+# only clearly-fake, test-only credential fixtures used across tests/ -- not
+# entire files or directories, so a real secret accidentally pasted into a
+# test file is still caught.
+title = "HarborIQ gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-fake credential fixtures used only in tests/"
+regexes = [
+  # tests/test_stripe_webhook_signature.py, tests/test_sms_inbound_webhook.py:
+  # synthetic Stripe/Twilio webhook secrets used only to compute a valid
+  # HMAC signature against locally-generated payloads in-process; never a
+  # real Stripe/Twilio credential and never sent over the network.
+  '''whsec_(test_secret|attacker_secret)_?[0-9]*''',
+  '''test-auth-token''',
+]
+paths = [
+  '''^tests/''',
+]

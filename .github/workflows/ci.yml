@@ -7,6 +7,20 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Security Core Prompt v1.0, H-5 fix: static secret scanning across full
+  # history diffs on every push/PR, gating the rest of the pipeline.
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -15,6 +29,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff
+      # `ruff.lint.select` in pyproject.toml includes "S" (bandit-derived
+      # security rules) on top of the previous pyflakes/pycodestyle-only
+      # set -- this now doubles as this repo's lightweight SAST gate.
       - run: ruff check app tests
 
   test:
@@ -71,17 +88,15 @@ jobs:
         run: alembic upgrade head
       - name: Run tests
         run: pytest -ra
-      # Advisory only, not gating: pip-audit flags known CVEs in installed
-      # packages, including transitive dependencies this repo does not
-      # control the release cadence of. Failing the whole build on a CVE
-      # with no upstream fix yet would block every future merge until some
-      # third party ships a patch -- `|| true` keeps this a visible signal
-      # in the log without being a hard gate. Revisit once there is a
-      # process for triaging/allowlisting specific advisories.
-      - name: Dependency audit (advisory, non-blocking)
+      # Security Core Prompt v1.0, H-5 fix: blocking dependency-CVE gate.
+      # Was previously `pip-audit || true` (advisory-only, never failed the
+      # build). A genuine no-fix-available CVE should be triaged into an
+      # explicit, reviewed `pip-audit --ignore-vuln <ID>` exception with a
+      # comment here -- not silenced wholesale.
+      - name: Dependency audit (blocking)
         run: |
           pip install pip-audit
-          pip-audit || true
+          pip-audit
 
   frontend:
     runs-on: ubuntu-latest
@@ -99,10 +114,14 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm run test
-      # Advisory only, same reasoning as the backend's pip-audit step above:
-      # a transitive npm CVE with no available fix must not block merges.
-      - name: Dependency audit (advisory, non-blocking)
-        run: npm audit --audit-level=high || true
+      # Security Core Prompt v1.0, H-5 fix: blocking dependency-CVE gate.
+      # Was previously `npm audit --audit-level=high || true`
+      # (advisory-only). audit-ci reads frontend/audit-ci.jsonc, which fails
+      # the build on any unreviewed moderate+ advisory; only advisories
+      # explicitly allowlisted there (each with a written justification and
+      # a review-by date) are permitted through.
+      - name: Dependency audit (blocking)
+        run: npm run audit:ci
 
   docker-build:
     # Real verification of the Dockerfile changes: this sandbox that authored
@@ -110,7 +129,7 @@ jobs:
     # (which does have Docker preinstalled) is the *first* place either
     # image actually gets built. Gated behind lint/test/frontend so a broken
     # Dockerfile never masks a simpler, faster-to-diagnose app-level failure.
-    needs: [lint, test, frontend]
+    needs: [secret-scan, lint, test, frontend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

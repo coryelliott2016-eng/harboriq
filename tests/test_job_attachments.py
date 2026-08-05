@@ -8,6 +8,7 @@ from tests.conftest import auth_headers, invite, signup
 from tests.test_crm_jobs import make_customer, make_job
 
 _TINY_JPEG_B64 = base64.b64encode(b"\xff\xd8\xff\xe0fake-jpeg-bytes").decode()
+_TINY_PNG_B64 = base64.b64encode(b"\x89PNG\r\n\x1a\nfake-png-bytes").decode()
 
 
 def _job(client, actor) -> str:
@@ -38,10 +39,33 @@ def test_a_signature_can_be_attached(client):
     owner = signup(client)
     job = _job(client, owner)
 
-    resp = _attach(client, owner, job, kind="signature", content_type="image/png")
+    resp = _attach(
+        client, owner, job, kind="signature", data=_TINY_PNG_B64, content_type="image/png"
+    )
     assert resp.status_code == 201, resp.text
     assert resp.json()["kind"] == "signature"
     assert resp.json()["content_type"] == "image/png"
+
+
+def test_a_content_type_not_on_the_image_allowlist_is_rejected(client):
+    """Security Core Prompt v1.0, M-3: content_type must be an allowlisted
+    image type, not an arbitrary client-supplied string."""
+    owner = signup(client)
+    job = _job(client, owner)
+
+    resp = _attach(client, owner, job, content_type="text/html")
+    assert resp.status_code == 422, resp.text
+
+
+def test_bytes_that_dont_match_the_declared_content_type_are_rejected(client):
+    """An allowlisted content_type paired with mismatched magic bytes (e.g.
+    an HTML payload mislabeled image/jpeg) must be rejected, not stored."""
+    owner = signup(client)
+    job = _job(client, owner)
+    fake_bytes = base64.b64encode(b"<html><script>alert(1)</script></html>").decode()
+
+    resp = _attach(client, owner, job, data=fake_bytes, content_type="image/jpeg")
+    assert resp.status_code == 422, resp.text
 
 
 def test_a_data_url_prefix_is_stripped(client):

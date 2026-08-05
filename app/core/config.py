@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Obvious placeholder so a real deployment cannot accidentally ship with it.
 # >=32 bytes because HS256 keys shorter than the digest weaken the MAC (RFC 7518 §3.2).
-DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-before-deploying"
+DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-before-deploying"  # noqa: S105 -- documented dev-only placeholder, not a real secret
 MIN_JWT_SECRET_BYTES = 32
 
 # Fixed, obviously-insecure Fernet key used only when APP_ENV=development and

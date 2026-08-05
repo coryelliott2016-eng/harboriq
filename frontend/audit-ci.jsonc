@@ -1,0 +1,27 @@
+{
+  // Blocking dependency-vulnerability gate for the frontend (Security Core
+  // Prompt v1.0, H-5 fix). Replaces the old `npm audit --audit-level=high
+  // || true` advisory-only step: this fails the build on any moderate+
+  // severity advisory that is not explicitly allowlisted below.
+  //
+  // Every allowlist entry here must be reviewed and re-justified before
+  // renewing/removing — see the comment above each GHSA id for why it does
+  // not apply today. Do not add entries without a comment explaining why.
+  "$schema": "https://raw.githubusercontent.com/IBM/audit-ci/main/docs/schema.json",
+  "moderate": true,
+  "allowlist": [
+    // React Router: RSC Mode CSRF Bypass Allows Action Execution Before
+    // 400 Response — https://github.com/advisories/GHSA-qwww-vcr4-c8h2
+    // Only affects apps using React Router's unstable RSC (React Server
+    // Components) APIs. HarborIQ's frontend is a plain Vite SPA using
+    // <BrowserRouter>/useNavigate client-side routing only (verified
+    // 2026-08-05: no `unstable_` RSC imports anywhere in src/), so this is
+    // not exploitable in this codebase today. A real fix requires a major
+    // version migration off the `react-router-dom` package name entirely
+    // (patched only under the renamed `react-router@8.x` package, which
+    // changes import paths across every routed page) — tracked as a
+    // deliberate, separately-tested follow-up rather than rushed into the
+    // same change that makes this scan blocking. Re-review by 2026-11-05.
+    "GHSA-qwww-vcr4-c8h2"
+  ]
+}

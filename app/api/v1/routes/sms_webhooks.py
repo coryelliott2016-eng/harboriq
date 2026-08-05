@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_service_db
@@ -30,20 +30,34 @@ async def inbound_sms(
     """Twilio posts `From`/`Body` (plus other fields we ignore) as standard
     form data on every inbound SMS/MMS.
 
-    Signature verification is enforced only once `TWILIO_AUTH_TOKEN` is
-    configured — with no Twilio account connected in this workspace, hard-
-    failing every request here would make the endpoint untestable and
-    would not protect anything. That is the same shape of trade-off
-    `stripe_webhook` already documents for `Stripe-Signature`.
+    Signature verification is enforced once `TWILIO_AUTH_TOKEN` is
+    configured. When it is *not* configured (Security Core Prompt v1.0,
+    M-1 fix — fail closed by default, mirroring `stripe_webhook`'s
+    `APP_ENV` gate):
+      - in development, we still accept-and-warn so the endpoint is
+        testable without real Twilio credentials;
+      - outside development (staging/production), we hard-reject (503)
+        rather than silently accepting unverified inbound SMS that could
+        be spoofed to inject arbitrary messages into a customer's thread.
     """
     form = await request.form()
     from_number = str(form.get("From", ""))
     body = str(form.get("Body", ""))
 
     if not settings.twilio_auth_token:
+        if settings.app_env != "development":
+            logger.error(
+                "TWILIO_AUTH_TOKEN is not configured in APP_ENV=%r — "
+                "refusing to process any inbound SMS unverified",
+                settings.app_env,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="webhook signature verification is not configured",
+            )
         logger.warning(
             "TWILIO_AUTH_TOKEN not configured — accepting inbound SMS "
-            "without signature verification"
+            "without signature verification (development only)"
         )
     else:
         url = str(request.url)
