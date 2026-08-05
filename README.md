@@ -385,11 +385,116 @@ a transaction) to learn the tenant, and the actual lock+consume+insert all
 happen together on the app-role session.
 
 **Explicitly out of scope for this phase** (see "What's intentionally NOT
-here yet" below for the full, consolidated list): MFA/TOTP enrollment, and
-stateful access-token revocation (a
-revoked session's *access* token — as opposed to its refresh token, which
-*is* revoked immediately — still works until it expires, unchanged from
-before this phase).
+here yet" below for the full, consolidated list): stateful access-token
+revocation (a revoked session's *access* token — as opposed to its refresh
+token, which *is* revoked immediately — still works until it expires,
+unchanged from before this phase). MFA/TOTP enrollment shipped in Phase 16 —
+see below.
+
+## Enterprise hardening: Redis/Celery, httpOnly cookies, MFA, backups, CDN (Phase 16)
+
+Six pieces of production hardening, each closing a gap this README had
+previously and explicitly called "deferred" in an earlier phase:
+
+**1. Redis-backed rate limiting + Celery.** The in-process, per-instance
+rate limiter described under "Auth hardening" above is now backed by Redis
+(`app/core/rate_limit.py`) — a Lua script run via `EVAL` does the
+increment-and-check atomically server-side, so the limit is enforced
+globally across every `app` replica instead of once per replica. It **fails
+open**: if Redis is unreachable, requests are allowed rather than the whole
+app going down over a rate-limiter dependency. The `BackgroundTasks` outbox
+dispatch and the Phase 8 dunning sweep / Phase 10 geocode backfill scripts
+now run as real Celery tasks (`app/tasks/outbox_tasks.py`,
+`app/tasks/sweep_tasks.py`) against the same Redis instance as broker +
+result backend, with Celery Beat driving the periodic sweeps that
+previously needed an external cron caller. Every task is a thin wrapper
+around the same underlying claim-and-process function the old code path
+used (`app.services.outbox.dispatch_pending`, `app.jobs.dunning_sweep.run`,
+`app.jobs.geocode_backfill.run`) — the `FOR UPDATE SKIP LOCKED` claiming
+semantics live in exactly one place, so a Celery worker can never race a
+direct call to the same function with divergent logic. In tests, Celery
+runs in eager mode (see `tests/conftest.py`'s `_celery_eager_mode` autouse
+fixture) so a task executes synchronously in-process rather than needing a
+real worker/broker in CI.
+
+**2. httpOnly-cookie refresh tokens + CSRF.** The refresh token, previously
+returned in the JSON body and stored in the frontend's `localStorage` (an
+explicit Phase 5 MVP trade-off — see "Frontend" below), now travels only as
+an **httpOnly, SameSite=Lax** cookie set directly by the backend
+(`app/api/v1/routes/auth.py`) — frontend JavaScript can no longer read it
+at all, which closes the XSS-can-steal-the-refresh-token risk `tokenStore.ts`
+had flagged. Because a cookie is attached to requests automatically
+regardless of which page triggered them, `app/core/csrf.py` adds a
+standard double-submit-cookie check on top of `SameSite=Lax`: a second,
+NON-httpOnly `csrf_token` cookie is set alongside the refresh cookie, the
+frontend echoes its value back in an `X-CSRF-Token` header on every
+cookie-reliant request, and the backend rejects the request if the two
+don't match — a cross-site attacker can make the browser *send* the
+httpOnly cookie, but same-origin policy stops it from *reading*
+`document.cookie` to forge the matching header. `src/lib/tokenStore.ts` no
+longer stores a refresh token at all; `AuthContext.tsx`'s session-hydration
+effect now gates on the presence of the readable CSRF cookie instead (its
+presence is the only frontend-visible signal that a session might exist).
+
+**3. MFA / TOTP.** Migration `0014` adds `users.mfa_enabled_at` and a new
+`mfa_backup_codes` table (RLS-enabled and forced, same tenant-isolation
+convention as every other table). `app/services/mfa.py` implements
+enroll → confirm → disable, backed by `pyotp` for TOTP generation/
+verification and the existing `app/core/crypto.py` Fernet helpers to
+encrypt the secret at rest in `users.mfa_secret_enc` (never stored
+plaintext). Confirming a pending enrollment issues **10 single-use backup
+codes** (format `XXXX-XXXX`, hashed at rest with the same Argon2id hasher
+already used for passwords) for the case a user loses their authenticator
+device. Login gains a genuine second factor: `POST /auth/login` returns
+`{"mfa_required": true, "pre_auth_token": "..."}` instead of real tokens
+when the account has MFA active — no session is created yet, nothing to
+revoke if the flow is abandoned here — and `POST /auth/login/mfa` exchanges
+that 5-minute-TTL pre-auth token plus a TOTP or backup code for the real
+token pair. The pre-auth token is a JWT with a distinct `typ` claim
+(`mfa_pre_auth`, not `access`), so a real access token can never be replayed
+as a pre-auth token and vice versa — enforced by the JWT decoder rejecting
+a mismatched `typ`, not by convention. Frontend: **Security** in the app
+nav (`/settings/security`) renders the QR code (`qrcode.react`) during
+enrollment and lets a user view remaining backup-code count / disable MFA
+(disable requires re-entering the current password); `LoginPage.tsx` grows
+a second screen for the code prompt when `login()` resolves to a
+`{ preAuthToken }` challenge instead of logging in directly. MFA is
+currently always self-service and always optional — there is no
+admin-forced "require MFA for every user in this company" policy toggle
+yet (see the deferred list).
+
+**4. Off-host S3 backups.** `scripts/backup_db_s3.sh` wraps the existing
+`scripts/backup_db.sh` (unchanged) and adds an `aws s3 cp` push of the
+resulting dump when `BACKUP_S3_BUCKET` is set, and **degrades gracefully to
+an identical local-only backup, exiting 0, when it is not** — the same
+graceful-degrade convention this codebase already used for
+`smtp_host`/`stripe_api_key`/`twilio_account_sid`. See
+`docs/DEPLOYMENT.md`'s "Off-host backups to S3" section for the exact env
+vars and IAM/bucket setup an operator needs to do to activate it — none of
+which this repo can provision itself (no AWS account exists in this
+sandbox to test against; the script's behavior with S3 configured was
+verified only via the graceful-degradation and missing-CLI code paths, not
+an actual S3 upload).
+
+**5. Cloudflare CDN/WAF — documentation only.** No CDN/WAF was actually
+provisioned (same reasoning as #4 — no Cloudflare account exists in this
+sandbox). `docs/DEPLOYMENT.md`'s new "CDN / WAF (Cloudflare)" section
+documents the DNS/proxy-mode, cache-rule (static assets only, **never**
+`/api/*`), and WAF-rule configuration an operator would apply on top of
+the reverse proxy already documented, including the one rule that matters
+most for correctness rather than performance: API responses must never be
+edge-cached, because they are per-tenant and often mutate state as a side
+effect of being called.
+
+**6. Multi-instance readiness audit.** With Redis-backed rate limiting and
+Celery now in place, `app` is close to safe to run as N replicas — this
+phase audited the codebase for any remaining per-instance state and found
+exactly one: `app/services/geocoding.py`'s outbound-request throttle to
+the (rate-limited) third-party geocoding provider, which is deliberately
+left in-process (it throttles *outbound* calls to a third party, not a
+security/tenant-isolation control — see `docs/DEPLOYMENT.md`'s "Running
+more than one app instance" section for the full reasoning and what would
+change to move it to Redis too, if ever needed).
 
 ## CRM and operations
 
@@ -1683,13 +1788,12 @@ npm run dev                # http://localhost:5173
   another without rebuilding (see `frontend/Dockerfile`'s `ARG VITE_API_URL`).
 
 **Auth model:** the access token lives in memory only (a React context); the
-refresh token is persisted to `localStorage`. On any `401`, the API client
+refresh token travels as an **httpOnly cookie** set by the backend (Phase 16 —
+see "Enterprise hardening" above), no longer readable by frontend JavaScript
+at all, with a paired readable CSRF cookie echoed back as an `X-CSRF-Token`
+header on cookie-reliant requests. On any `401`, the API client
 (`src/lib/api.ts`) attempts exactly one silent refresh-and-retry before
-forcing a logout and redirecting to `/login` — it never loops. Storing the
-refresh token in `localStorage` (vs. an httpOnly cookie) is an explicit MVP
-trade-off called out in `src/lib/tokenStore.ts`; it is readable by any script
-on the page, which is acceptable for a pilot but should move to an httpOnly
-cookie before wider exposure.
+forcing a logout and redirecting to `/login` — it never loops.
 
 **Screens covered:** login/signup, an authenticated app shell (sidebar +
 topbar with role-aware nav), a dashboard of job/invoice status counts,
@@ -1836,8 +1940,6 @@ denial), and the new `usersApi.pingLocation`/`technicianLocations` and
   instead used `tsc -b`, `vite build`, `eslint`, the Vitest suite, and
   curl-driven backend end-to-end checks against the dev server; see the
   Phase 5 delivery notes.)
-- **httpOnly-cookie refresh storage.** Noted above — the refresh token is in
-  `localStorage` for now.
 - Optimistic UI updates, offline support, and any kind of design system
   beyond the shared Tailwind components in `src/components/ui.tsx`.
 - **Real-time messaging on the frontend.** `PortalMessages` and
@@ -1923,25 +2025,28 @@ just the *what*, consolidated so nothing is scattered or repeated.
   scrapes `/metrics` and aggregates logs — the code-level hooks exist (see
   "Deployment & observability" above); the infrastructure to consume them
   does not, and deploying it is out of this repo's scope.
-- Managed/off-host backup automation (S3 lifecycle rules, point-in-time
-  recovery via WAL archiving, cross-region replication). `scripts/backup_db.sh`
-  produces a correct local dump on a schedule; getting copies off the host
-  is the operator's responsibility.
-- A CDN and a WAF in front of the frontend/API.
-- Redis and Celery — every place that would normally use them today
-  degrades to an honest, smaller-scale substitute instead: the login/reset
-  rate limiter is in-process and per-instance (not Redis-backed), outbox
-  email dispatch runs via FastAPI `BackgroundTasks` right after a commit
-  rather than a Celery worker (see "Auth hardening" above for both), and the
-  Phase 8 dunning sweep (`app/jobs/dunning_sweep.py`) is a script callable
-  on demand or in a cron/loop, not a Celery beat schedule (see "Billing
-  operations" above).
-- Multi-instance/horizontal scaling generally — the rate limiter and
-  `BackgroundTasks` dispatch above are the two places this would matter
-  first if `app` ever runs as more than one replica.
+- **S3 lifecycle rules, point-in-time recovery via WAL archiving,
+  cross-region replication.** `scripts/backup_db_s3.sh` (Phase 16) pushes a
+  correct dump off-host to S3 when configured — see "Enterprise hardening"
+  above and `docs/DEPLOYMENT.md`'s "Off-host backups to S3" — but does not
+  manage retention/lifecycle policy on the bucket, PITR, or cross-region
+  copies; that is bucket/account configuration outside this repo.
+- **Actual Cloudflare account/zone provisioning.** Phase 16 documented the
+  CDN/WAF configuration an operator should apply (`docs/DEPLOYMENT.md`'s
+  "CDN / WAF (Cloudflare)"); nothing was actually provisioned, and there is
+  no Terraform/API automation for it here.
+- **A per-company/admin-forced "require MFA" policy.** Phase 16 shipped
+  self-service MFA enrollment (see "Enterprise hardening" above); there is
+  no way for an owner/admin to mandate it for their whole team yet.
 - A container registry / tagged-image release process — `docs/DEPLOYMENT.md`'s
   rollback runbook currently assumes redeploying a previous git commit, not
   pulling a previously-pushed image tag.
+- **True horizontal auto-scaling / orchestration (Kubernetes, ECS, etc.).**
+  Phase 16's multi-instance readiness audit (see "Enterprise hardening"
+  above) confirmed running N `app` replicas by hand (e.g. Compose
+  `--scale app=N`) behind a load balancer is now safe; there is no
+  autoscaler, and Celery workers still run as a fixed pool rather than
+  scaling with queue depth.
 
 **Payments:**
 - Destination charges / `application_fee_amount` platform-fee revenue on

@@ -5,7 +5,9 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 13: auth, multi-tenant CRM, invoicing + Stripe Checkout
+Status as of Phase 16: auth (with Redis-backed rate limiting, httpOnly-
+cookie refresh tokens + CSRF, and self-service MFA/TOTP), multi-tenant CRM,
+invoicing + Stripe Checkout
 (single-account and per-tenant Stripe Connect direct charges), refunds,
 PDF/email invoice delivery, dunning, AR aging, a durable magic-link customer
 self-service portal with customer<->staff messaging, self-service + admin
@@ -288,10 +290,57 @@ this is organized from).
   serve fixed-location marinas, not just mobile mechanics — flagged for a
   go/no-go decision rather than assumed in scope.
 
-## Phase 16 — Platform Hardening for Enterprise Scale
-- Redis/Celery, MFA/TOTP, httpOnly-cookie refresh tokens, stateful token
-  revocation, managed off-host backups, CDN/WAF, horizontal scaling —
-  required before this can be marketed as enterprise-grade.
+## Phase 16 — Platform Hardening for Enterprise Scale — **COMPLETE**
+- [x] **Redis-backed rate limiting + Celery.** `app/core/rate_limit.py`'s
+      login/reset limiter moved from an in-process, per-instance dict to a
+      Redis `EVAL` script (atomic INCR+EXPIRE), enforced globally across
+      every `app` replica; fails open if Redis is unreachable. The Phase 8
+      outbox `BackgroundTasks` dispatch and the Phase 8/10
+      dunning-sweep/geocode-backfill cron scripts now run as real Celery
+      tasks against the same Redis instance (broker + result backend), with
+      Celery Beat driving the periodic sweeps — see the README's
+      "Enterprise hardening" section.
+- [x] **httpOnly-cookie refresh tokens + CSRF.** The refresh token no
+      longer round-trips through the JSON body / `localStorage`; it is set
+      as an httpOnly, `SameSite=Lax` cookie directly by the backend, with a
+      double-submit-cookie CSRF check (`app/core/csrf.py`) on top.
+- [x] **MFA/TOTP.** Migration `0014` (`users.mfa_enabled_at`,
+      `mfa_backup_codes`); enroll/confirm/disable endpoints, a genuine
+      second-factor login flow (`mfa_required` → `POST /auth/login/mfa`),
+      10 single-use backup codes per enrollment, and a self-service
+      **Security** page in the frontend with QR-code enrollment
+      (`qrcode.react`). Always opt-in — no admin-forced policy yet (see
+      below).
+- [x] **Managed off-host backups (S3).** `scripts/backup_db_s3.sh` wraps
+      the existing local `pg_dump` script and pushes to S3 when
+      `BACKUP_S3_BUCKET` is set, degrading gracefully (exit 0, local backup
+      still succeeds) when it is not. Not tested against a real bucket —
+      no AWS account exists in the build environment.
+- [x] **CDN/WAF — documented, not provisioned.** `docs/DEPLOYMENT.md` gained
+      a full Cloudflare configuration section (DNS/proxy mode, cache rules
+      that explicitly never cache `/api/*`, managed WAF ruleset, edge rate
+      limiting on login). No Cloudflare account exists in the build
+      environment to actually provision against.
+- [x] **Horizontal scaling readiness.** With rate limiting and background
+      work off in-process state, an audit of the rest of the codebase found
+      exactly one remaining per-instance concern —
+      `app/services/geocoding.py`'s outbound-throttle to the third-party
+      geocoding provider, deliberately left in-process since it protects a
+      third party's rate limit, not tenant isolation or security. Documented
+      in `docs/DEPLOYMENT.md`'s "Running more than one app instance"
+      section along with the concrete steps to actually run N replicas.
+- [ ] **Stateful access-token revocation.** Still deferred, unchanged from
+      Phase 8: a revoked session's *access* token remains valid until it
+      naturally expires (its *refresh* token is revoked immediately); a
+      real fix needs either short-lived access tokens plus a server-side
+      revocation/deny-list check per request (defeating some of the point
+      of a stateless JWT) or a session-version claim bumped on revocation.
+- [ ] **Admin-forced "require MFA" policy.** MFA is opt-in per user; there
+      is no owner/admin control to mandate it company-wide.
+- [ ] **True autoscaling/orchestration.** Multiple replicas can now be run
+      by hand (e.g. Compose `--scale app=N`) behind a load balancer; there
+      is no Kubernetes/ECS-style autoscaler, and Celery workers are a fixed
+      pool rather than scaling with queue depth.
 
 ## Differentiators to preserve/lean into throughout (not incumbents' turf)
 - Fully explainable AI dispatch scoring (factor-by-factor breakdown) vs.
