@@ -120,6 +120,8 @@ class AccessClaims:
     company_id: uuid.UUID
     role: str
     session_id: uuid.UUID
+    jti: str
+    expires_at: datetime
 
 
 def create_access_token(
@@ -148,7 +150,7 @@ def decode_access_token(token: str) -> AccessClaims:
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
             issuer=settings.jwt_issuer,
-            options={"require": ["exp", "iat", "sub", "iss"]},
+            options={"require": ["exp", "iat", "sub", "iss", "jti"]},
         )
     except jwt.PyJWTError as exc:
         raise InvalidToken(str(exc)) from exc
@@ -161,6 +163,8 @@ def decode_access_token(token: str) -> AccessClaims:
             company_id=uuid.UUID(payload["cid"]),
             role=payload["role"],
             session_id=uuid.UUID(payload["sid"]),
+            jti=payload["jti"],
+            expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
         )
     except (KeyError, ValueError) as exc:
         raise InvalidToken("malformed claims") from exc

@@ -68,6 +68,7 @@ from app.schemas.auth import (
     CreateUserRequest,
     InviteOut,
     InvitePreviewOut,
+    LoginMfaEnrollmentRequiredResponse,
     LoginMfaRequest,
     LoginMfaRequiredResponse,
     LoginRequest,
@@ -236,6 +237,8 @@ def login(
         )
     except auth_service.MfaRequired as exc:
         return LoginMfaRequiredResponse(pre_auth_token=exc.pre_auth_token).model_dump()
+    except auth_service.MfaEnrollmentRequired:
+        return LoginMfaEnrollmentRequiredResponse().model_dump()
     except auth_service.AccountLocked as exc:
         raise HTTPException(status.HTTP_423_LOCKED, str(exc)) from exc
     except auth_service.InvalidCredentials as exc:
@@ -360,6 +363,8 @@ def logout(
         user_id=principal.user.id,
         session_id=principal.session_id,
         all_devices=body.all_devices,
+        access_token_jti=principal.token_jti,
+        access_token_expires_at=principal.token_expires_at,
     )
     _clear_refresh_cookie(response)
     return LogoutResponse(revoked_sessions=revoked)

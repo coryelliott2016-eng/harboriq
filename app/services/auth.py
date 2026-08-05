@@ -45,6 +45,7 @@ from app.core.security import (
     password_needs_rehash,
     verify_password,
 )
+from app.core.token_denylist import denylist_token
 from app.db.models import UserRole
 from app.db.tenant import tenant_context
 from app.services import outbox, public_tokens
@@ -87,6 +88,23 @@ class MfaRequired(AuthError):
     def __init__(self, pre_auth_token: str) -> None:
         super().__init__("MFA verification required")
         self.pre_auth_token = pre_auth_token
+
+
+class MfaEnrollmentRequired(AuthError):
+    """Password verified, but the company requires MFA (Phase 17, Area C.2)
+    and this user has not enrolled it yet.
+
+    Deliberately distinct from `MfaRequired`: that one means "prove your
+    second factor right now" (the user already has MFA active and a
+    pre-auth token lets them do so immediately). This one means "you must
+    go enroll MFA before you can log in at all" -- there is no pre-auth
+    token because there is no second factor to verify yet. The caller
+    should be routed to the MFA enrollment flow (`POST /users/me/mfa`)
+    using some other already-authenticated channel, or contact an admin;
+    this deliberately does not itself grant any session so a
+    company-wide MFA mandate cannot be silently bypassed by an unenrolled
+    user just logging in as normal.
+    """
 
 
 class InvalidMfaPreAuthToken(AuthError):
@@ -422,15 +440,22 @@ def _lock_user_row_for_login(app_db: Session, company_id: uuid.UUID, user_id: uu
     """Re-read the user row FOR UPDATE inside tenant_context, for the login
     transaction's lockout bookkeeping. Must be called from inside an already-
     open `tenant_context(app_db, company_id)` block.
+
+    Also joins `companies.mfa_required` (Phase 17, Area C.2) -- the login
+    flow needs both "does THIS user have MFA enabled" and "does the
+    company mandate MFA for everyone" in the same row to decide which of
+    `MfaRequired` / `MfaEnrollmentRequired` (if either) to raise.
     """
     return app_db.execute(
         text(
             """
-            SELECT id, password_hash, role, is_active,
-                   failed_login_attempts, locked_until, mfa_enabled_at
-              FROM users
-             WHERE id = :uid
-             FOR UPDATE
+            SELECT u.id, u.password_hash, u.role, u.is_active,
+                   u.failed_login_attempts, u.locked_until, u.mfa_enabled_at,
+                   c.mfa_required AS company_mfa_required
+              FROM users u
+              JOIN companies c ON c.id = u.company_id
+             WHERE u.id = :uid
+             FOR UPDATE OF u
             """
         ),
         {"uid": user_id},
@@ -561,6 +586,27 @@ def login(
             )
             app_db.commit()
             raise MfaRequired(create_mfa_pre_auth_token(row.id, row.company_id))
+
+        if locked_row.company_mfa_required:
+            # Company-wide MFA mandate (Phase 17, Area C.2), and this user
+            # has not enrolled MFA (the branch above already handled the
+            # "has MFA" case). No tokens, no pre-auth token either -- there
+            # is no second factor to verify yet, only an enrollment gap to
+            # close. See `MfaEnrollmentRequired`'s docstring for the full
+            # rationale for why this is distinct from `MfaRequired`.
+            _audit(
+                app_db,
+                row.company_id,
+                "user.login_mfa_enrollment_required",
+                actor_user_id=row.id,
+                resource_type="user",
+                resource_id=row.id,
+                ip=ip,
+            )
+            app_db.commit()
+            raise MfaEnrollmentRequired(
+                "this company requires MFA; enroll it before logging in"
+            )
 
         user = _to_authenticated_user(_load_user_row(app_db, row.id))
         tokens = _issue_session(
@@ -751,13 +797,26 @@ def logout(
     user_id: uuid.UUID,
     session_id: uuid.UUID,
     all_devices: bool = False,
+    access_token_jti: str | None = None,
+    access_token_expires_at: datetime | None = None,
 ) -> int:
-    """Revoke refresh tokens.
+    """Revoke refresh tokens, and denylist the caller's current access token.
 
-    By default the caller's session family is revoked (this device). The
-    already-issued access token stays valid until it expires — that window is
-    `access_token_ttl_minutes`.
+    By default the caller's session family is revoked (this device). Refresh
+    token revocation alone does not stop an already-issued access token from
+    working -- it is a stateless JWT valid until its own `exp`. Passing
+    `access_token_jti`/`access_token_expires_at` (the claims of the token
+    used to authenticate THIS logout call) additionally adds it to the Redis
+    JTI denylist (`app.core.token_denylist`) so it stops working immediately
+    rather than lingering for up to `access_token_ttl_minutes`. Both
+    parameters are optional so internal/service callers that revoke
+    sessions without an access token in hand (e.g. an admin force-logout of
+    another user) still work -- they simply do not get the immediate-
+    revocation guarantee for a token they never had.
     """
+    if access_token_jti is not None and access_token_expires_at is not None:
+        denylist_token(access_token_jti, access_token_expires_at)
+
     if all_devices:
         revoked = _revoke_all_user_sessions(app_db, company_id, user_id, "logout_all")
     else:

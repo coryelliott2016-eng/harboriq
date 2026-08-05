@@ -203,6 +203,16 @@ class MfaDisableRequest(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class CompanyMfaPolicyUpdate(BaseModel):
+    """Body for `PATCH /companies/me/mfa-policy` (Phase 17, Area C.2)."""
+
+    mfa_required: bool
+
+
+class CompanyMfaPolicyOut(BaseModel):
+    mfa_required: bool
+
+
 class MfaStatusOut(BaseModel):
     """Returned by `GET /users/me/mfa`."""
 
@@ -216,6 +226,18 @@ class LoginMfaRequiredResponse(BaseModel):
 
     mfa_required: bool = True
     pre_auth_token: str
+
+
+class LoginMfaEnrollmentRequiredResponse(BaseModel):
+    """Returned by `POST /auth/login` (Phase 17, Area C.2) INSTEAD OF
+    `AuthResponse` when the company mandates MFA (`companies.mfa_required`)
+    and this user has not enrolled it yet. Deliberately has no
+    `pre_auth_token` — unlike `LoginMfaRequiredResponse`, there is no
+    second factor to verify yet, only an enrollment gap the user (or an
+    admin, on their behalf) must close first."""
+
+    mfa_required: bool = True
+    mfa_enrollment_required: bool = True
 
 
 class LoginMfaRequest(BaseModel):

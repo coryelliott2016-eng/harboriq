@@ -15,12 +15,14 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.security import InvalidToken, decode_access_token
+from app.core.token_denylist import is_denylisted
 from app.db.models import OPERATIONS_ROLES, USER_MANAGEMENT_ROLES, UserRole
 from app.db.session import get_db, get_service_db
 from app.db.tenant import set_tenant
@@ -37,6 +39,8 @@ class Principal:
 
     user: AuthenticatedUser
     session_id: uuid.UUID
+    token_jti: str
+    token_expires_at: datetime
 
 
 def _unauthenticated(detail: str = "not authenticated") -> HTTPException:
@@ -60,12 +64,20 @@ def get_current_principal(
     except InvalidToken as exc:
         raise _unauthenticated(f"invalid access token: {exc}") from exc
 
+    if is_denylisted(claims.jti):
+        raise _unauthenticated("access token has been revoked")
+
     user = load_user(db, claims.company_id, claims.user_id)
     if user is None or not user.is_active:
         raise _unauthenticated("account is not active")
 
     set_tenant(db, user.company_id)
-    return Principal(user=user, session_id=claims.session_id)
+    return Principal(
+        user=user,
+        session_id=claims.session_id,
+        token_jti=claims.jti,
+        token_expires_at=claims.expires_at,
+    )
 
 
 def get_current_user(
