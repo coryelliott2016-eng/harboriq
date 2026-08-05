@@ -46,6 +46,24 @@ def _require_row(db: Session, table: str, row_id: uuid.UUID, label: str) -> None
         raise NotFound(f"{label} {row_id} not found")
 
 
+def _require_active_vendor(db: Session, vendor_id: uuid.UUID) -> None:
+    """A NEW purchase order may only be placed against a vendor currently
+    in use (Phase 17 Area F). An archived vendor is not a 404 -- it exists,
+    it just should not receive new business -- so this is a distinct check
+    from `_require_row`, and callers must run it AFTER confirming the
+    vendor exists so the two failure modes stay distinguishable.
+    """
+    row = db.execute(
+        text("SELECT is_active FROM vendors WHERE id = :id"), {"id": vendor_id}
+    ).first()
+    if row is None:
+        raise NotFound(f"vendor {vendor_id} not found")
+    if not row.is_active:
+        raise ValidationFailed(
+            "vendor is archived and cannot be used for a new purchase order"
+        )
+
+
 # ---------------------------------------------------------------------------
 # create (draft) — with line items in the same transaction
 # ---------------------------------------------------------------------------
@@ -70,7 +88,7 @@ def create_draft(
 
     try:
         with tenant_context(db, company_id):
-            _require_row(db, "vendors", vendor_id, "vendor")
+            _require_active_vendor(db, vendor_id)
             for li in line_items:
                 _require_row(db, "inventory_items", li["inventory_item_id"], "inventory item")
 

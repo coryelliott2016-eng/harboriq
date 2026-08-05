@@ -334,10 +334,13 @@ export const inventoryApi = {
 };
 
 export const vendorsApi = {
-  list: (search?: string) => api.get<Vendor[]>("/vendors", { search }),
+  list: (search?: string, includeInactive?: boolean) =>
+    api.get<Vendor[]>("/vendors", { search, include_inactive: includeInactive }),
   get: (id: string) => api.get<Vendor>(`/vendors/${id}`),
   create: (body: VendorInput) => api.post<Vendor>("/vendors", body),
   update: (id: string, body: Partial<VendorInput>) => api.patch<Vendor>(`/vendors/${id}`, body),
+  setStatus: (id: string, isActive: boolean) =>
+    api.post<Vendor>(`/vendors/${id}/status`, { is_active: isActive }),
 };
 
 export const purchaseOrdersApi = {

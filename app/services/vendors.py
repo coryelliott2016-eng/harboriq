@@ -47,12 +47,23 @@ def get(db: Session, company_id: uuid.UUID, vendor_id: uuid.UUID) -> Row:
 
 
 def list_vendors(
-    db: Session, company_id: uuid.UUID, *, search: str | None = None
+    db: Session,
+    company_id: uuid.UUID,
+    *,
+    search: str | None = None,
+    include_inactive: bool = False,
 ) -> list[Row]:
-    clauses = ""
+    """Default view is active vendors only -- an archived vendor should not
+    show up for "who do I order parts from" workflows. `include_inactive`
+    is for the rare screen that needs to show/manage archived vendors
+    (e.g. an admin "show archived" toggle); it does NOT affect
+    `get()`, which always resolves a vendor by id regardless of
+    `is_active` so historical purchase orders keep rendering correctly.
+    """
+    clauses = "" if include_inactive else " AND is_active = true"
     params: dict[str, Any] = {"cid": company_id}
     if search:
-        clauses = " AND name ILIKE :term"
+        clauses += " AND name ILIKE :term"
         params["term"] = like_term(search)
 
     with tenant_context(db, company_id):
@@ -91,6 +102,36 @@ def update(
     except IntegrityError as exc:
         db.rollback()
         raise Conflict("vendor update violates a database constraint") from exc
+    if row is None:
+        raise NotFound(f"vendor {vendor_id} not found")
+    return row
+
+
+def set_active(
+    db: Session, company_id: uuid.UUID, vendor_id: uuid.UUID, is_active: bool
+) -> Row:
+    """Deactivate ("archive") or reactivate a vendor.
+
+    Deliberately a dedicated action rather than folded into the generic
+    `update()`/`VendorUpdate` PATCH -- same reasoning as
+    `app.services.jobs.set_status`: a status/lifecycle change is a distinct
+    operation from an ordinary field edit, and keeping it separate makes it
+    easy to add e.g. an audit-log entry or "can't reactivate if X" rule
+    later without touching the free-text-field update path.
+    """
+    with tenant_context(db, company_id):
+        row = db.execute(
+            text(
+                """
+                UPDATE vendors
+                   SET is_active = :is_active, updated_at = now()
+                 WHERE id = :id
+                RETURNING *
+                """
+            ),
+            {"id": vendor_id, "is_active": is_active},
+        ).first()
+        db.commit()
     if row is None:
         raise NotFound(f"vendor {vendor_id} not found")
     return row

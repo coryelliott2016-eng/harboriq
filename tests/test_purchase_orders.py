@@ -67,6 +67,26 @@ def test_draft_needs_a_vendor_that_exists_in_this_tenant(client, service_db):
     assert resp.status_code == 404
 
 
+def test_cannot_draft_a_new_po_against_an_archived_vendor(client, service_db):
+    """Phase 17 Area F: an archived vendor still exists (it's not a 404,
+    unlike an unknown vendor id above) but must be refused for NEW business.
+    """
+    owner = signup(client)
+    company_id = uuid.UUID(owner["user"]["company_id"])
+    vendor_id = _vendor_id(client, owner)
+    item_id = str(make_inventory(service_db, company_id, "Gasket", qty=0))
+
+    archived = client.post(
+        f"/api/v1/vendors/{vendor_id}/status",
+        json={"is_active": False},
+        headers=auth_headers(owner),
+    )
+    assert archived.status_code == 200, archived.text
+
+    resp = _draft(client, owner, vendor_id, item_id)
+    assert resp.status_code == 422, resp.text
+
+
 def test_submit_moves_draft_to_submitted(client, service_db):
     owner = signup(client)
     company_id = uuid.UUID(owner["user"]["company_id"])

@@ -47,6 +47,7 @@ const VENDOR: Vendor = {
   contact_email: "orders@acme.example",
   contact_phone: "941-555-0100",
   notes: "Net 30",
+  is_active: true,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
@@ -138,5 +139,50 @@ describe("VendorsPage", () => {
     await waitFor(() =>
       expect(screen.queryByRole("heading", { name: /new vendor/i })).not.toBeInTheDocument(),
     );
+  });
+
+  it("archives a vendor via POST /vendors/{id}/status (Phase 17 Area F)", async () => {
+    installFetchRouter([authMeRoute(), vendorsListRoute([VENDOR])]);
+
+    renderPage();
+    await screen.findByText("Acme Marine Supply");
+
+    const archived: Vendor = { ...VENDOR, is_active: false };
+    installFetchRouter([
+      {
+        match: /\/vendors\/bbbbbbbb-0000-0000-0000-000000000001\/status$/,
+        respond: (options) => {
+          expect(options?.method).toBe("POST");
+          const body = JSON.parse(options?.body as string);
+          expect(body.is_active).toBe(false);
+          return jsonResponse(archived);
+        },
+      },
+      vendorsListRoute([archived]),
+    ]);
+
+    await userEvent.click(screen.getByRole("button", { name: /^archive$/i }));
+
+    expect(await screen.findByText("Archived")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^reactivate$/i })).toBeInTheDocument();
+  });
+
+  it("shows the archived-vendors toggle and requests include_inactive", async () => {
+    installFetchRouter([authMeRoute(), vendorsListRoute([VENDOR])]);
+
+    renderPage();
+    await screen.findByText("Acme Marine Supply");
+
+    const archived: Vendor = { ...VENDOR, id: "archived-id", name: "Old Supplier", is_active: false };
+    installFetchRouter([
+      {
+        match: /\/vendors\?.*include_inactive=true/,
+        respond: () => jsonResponse([VENDOR, archived]),
+      },
+    ]);
+
+    await userEvent.click(screen.getByLabelText(/show archived vendors/i));
+
+    expect(await screen.findByText("Old Supplier")).toBeInTheDocument();
   });
 });

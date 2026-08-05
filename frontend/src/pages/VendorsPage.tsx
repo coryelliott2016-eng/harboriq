@@ -25,10 +25,17 @@ export function VendorsPage() {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Vendor | null>(null);
+  const [includeInactive, setIncludeInactive] = useState(false);
 
   const vendorsQuery = useQuery({
-    queryKey: ["vendors", { search }],
-    queryFn: () => vendorsApi.list(search || undefined),
+    queryKey: ["vendors", { search, includeInactive }],
+    queryFn: () => vendorsApi.list(search || undefined, includeInactive),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      vendorsApi.setStatus(id, isActive),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vendors"] }),
   });
 
   function afterSave() {
@@ -47,12 +54,22 @@ export function VendorsPage() {
         {canWrite && <Button onClick={() => setShowCreate(true)}>New vendor</Button>}
       </div>
 
-      <input
-        className={inputClass}
-        placeholder="Search vendors"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="flex flex-wrap items-center gap-4">
+        <input
+          className={inputClass}
+          placeholder="Search vendors"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={includeInactive}
+            onChange={(e) => setIncludeInactive(e.target.checked)}
+          />
+          Show archived vendors
+        </label>
+      </div>
 
       {vendorsQuery.isLoading && <Spinner label="Loading vendors…" />}
       {vendorsQuery.isError && (
@@ -77,20 +94,35 @@ export function VendorsPage() {
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Notes</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {vendorsQuery.data.map((vendor) => (
-                <tr key={vendor.id}>
+                <tr key={vendor.id} className={vendor.is_active ? undefined : "opacity-60"}>
                   <td className="px-4 py-3 font-medium text-slate-900">{vendor.name}</td>
                   <td className="px-4 py-3 text-slate-600">{vendor.contact_email ?? "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{vendor.contact_phone ?? "—"}</td>
                   <td className="px-4 py-3 max-w-xs truncate text-slate-600">{vendor.notes ?? "—"}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-slate-600">
+                    {vendor.is_active ? "Active" : "Archived"}
+                  </td>
+                  <td className="px-4 py-3 text-right space-x-2">
                     {canWrite && (
                       <Button variant="secondary" onClick={() => setEditing(vendor)}>
                         Edit
+                      </Button>
+                    )}
+                    {canWrite && (
+                      <Button
+                        variant="secondary"
+                        disabled={statusMutation.isPending}
+                        onClick={() =>
+                          statusMutation.mutate({ id: vendor.id, isActive: !vendor.is_active })
+                        }
+                      >
+                        {vendor.is_active ? "Archive" : "Reactivate"}
                       </Button>
                     )}
                   </td>

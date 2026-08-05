@@ -35,5 +35,16 @@ class VendorOut(BaseModel):
     contact_email: str | None
     contact_phone: str | None
     notes: str | None
+    is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class VendorStatusUpdate(BaseModel):
+    """Body for POST /vendors/{vendor_id}/status -- deactivate (archive) or
+    reactivate a vendor. Deliberately its own endpoint/schema rather than a
+    field on `VendorUpdate`: a lifecycle change is a distinct action from an
+    ordinary contact-info edit (same reasoning as job status transitions).
+    """
+
+    is_active: bool

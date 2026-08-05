@@ -597,11 +597,19 @@ class Vendor(UUIDPKMixin, TimestampMixin, Base):
     contact_email: Mapped[Optional[str]] = mapped_column(Text)
     contact_phone: Mapped[Optional[str]] = mapped_column(Text)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    #: Phase 17 Area F. False = archived: hidden from the default vendor
+    #: list and from new-PO vendor pickers, but GET /vendors/{id} still
+    #: resolves it (unconditionally) so historical purchase orders keep
+    #: rendering the vendor they were actually placed with.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (Index("idx_vendors_company", "company_id"),)
+    __table_args__ = (
+        Index("idx_vendors_company", "company_id"),
+        Index("idx_vendors_company_active", "company_id", "is_active"),
+    )
 
 
 class PurchaseOrder(UUIDPKMixin, TimestampMixin, Base):
