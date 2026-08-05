@@ -129,6 +129,96 @@ def create_invoice(
 
 
 # ---------------------------------------------------------------------------
+# create (from a slip reservation) — Phase 15's storage billing, reusing
+# this exact same freeze-the-line-items machinery instead of a parallel one
+# ---------------------------------------------------------------------------
+def create_invoice_from_reservation(
+    db: Session,
+    company_id: uuid.UUID,
+    reservation_id: uuid.UUID,
+    tax_rate: Decimal = Decimal("0"),
+) -> dict[str, Any]:
+    """Invoice every currently-uninvoiced `storage`-kind line on `reservation_id`.
+
+    Identical shape to `create_invoice`, just keyed off
+    `slip_reservation_id` instead of `job_id` -- see migration 0016's header
+    comment and `app.services.slip_reservations.generate_storage_charge` for
+    why a slip reservation's rental charge is a `job_line_items` row (despite
+    the table's name) rather than a separate invoice-line-item table.
+    """
+    with tenant_context(db, company_id):
+        reservation = db.execute(
+            text("SELECT id, customer_id FROM slip_reservations WHERE id = :id"),
+            {"id": reservation_id},
+        ).first()
+        if reservation is None:
+            db.rollback()
+            raise NotFound(f"slip reservation {reservation_id} not found")
+
+        lines = db.execute(
+            text(
+                """
+                SELECT id, line_total, taxable
+                  FROM job_line_items
+                 WHERE slip_reservation_id = :reservation_id AND invoice_id IS NULL
+                 FOR UPDATE
+                """
+            ),
+            {"reservation_id": reservation_id},
+        ).all()
+        if not lines:
+            db.rollback()
+            raise Conflict(f"slip reservation {reservation_id} has no uninvoiced line items")
+
+        subtotal = sum((row.line_total for row in lines), Decimal("0"))
+        taxable_subtotal = sum(
+            (row.line_total for row in lines if row.taxable), Decimal("0")
+        )
+        tax_total = _quantize(taxable_subtotal * tax_rate)
+        total = subtotal + tax_total
+
+        invoice = db.execute(
+            text(
+                """
+                INSERT INTO invoices
+                    (company_id, estimate_id, customer_id, status, subtotal,
+                     tax_total, total, amount_paid, balance_due, tax_rate)
+                VALUES
+                    (:company_id, NULL, :customer_id, 'draft', :subtotal,
+                     :tax_total, :total, 0, :total, :tax_rate)
+                RETURNING *
+                """
+            ),
+            {
+                "company_id": company_id,
+                "customer_id": reservation.customer_id,
+                "subtotal": subtotal,
+                "tax_total": tax_total,
+                "total": total,
+                "tax_rate": tax_rate,
+            },
+        ).first()
+
+        line_ids = [row.id for row in lines]
+        db.execute(
+            text(
+                """
+                UPDATE job_line_items
+                   SET invoice_id = :invoice_id, invoiced_at = now()
+                 WHERE id = ANY(:ids)
+                """
+            ),
+            {"invoice_id": invoice.id, "ids": line_ids},
+        )
+        db.commit()
+
+    return {
+        "invoice": invoice,
+        "line_items": list_invoice_line_items(db, company_id, invoice.id),
+    }
+
+
+# ---------------------------------------------------------------------------
 # reads
 # ---------------------------------------------------------------------------
 def get(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> Row:

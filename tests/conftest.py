@@ -31,7 +31,8 @@ SERVICE_URL = settings.service_database_url
 _TENANT_TABLES = [
     "audit_log", "outbox_events", "public_tokens", "messages", "refunds", "payments",
     "invoices", "estimate_line_items", "estimates", "job_attachments",
-    "job_time_entries", "job_line_items", "jobs",
+    "job_time_entries", "dry_stack_launch_requests", "job_line_items",
+    "slip_reservations", "slips", "jobs",
     "purchase_order_line_items", "purchase_orders", "vendors",
     "inventory_items", "vessels", "customers", "stripe_processed_events",
     "subscriptions", "password_reset_tokens", "mfa_backup_codes",
@@ -274,6 +275,39 @@ def make_purchase_order(
         )
     db.commit()
     return po_id
+
+
+def make_slip(
+    db: Session,
+    company_id: uuid.UUID,
+    identifier: str = "A-1",
+    slip_type: str = "wet_slip",
+    status: str = "available",
+    daily_rate: str = "25.00",
+    monthly_rate: str = "400.00",
+) -> uuid.UUID:
+    row = db.execute(
+        text(
+            """
+            INSERT INTO slips
+                (company_id, identifier, slip_type, status, daily_rate, monthly_rate)
+            VALUES
+                (:cid, :identifier, CAST(:slip_type AS slip_type),
+                 CAST(:status AS slip_status), :daily_rate, :monthly_rate)
+            RETURNING id
+            """
+        ),
+        {
+            "cid": company_id,
+            "identifier": identifier,
+            "slip_type": slip_type,
+            "status": status,
+            "daily_rate": daily_rate,
+            "monthly_rate": monthly_rate,
+        },
+    ).first()
+    db.commit()
+    return uuid.UUID(str(row[0]))
 
 
 def make_estimate(db: Session, company_id: uuid.UUID, status: str = "sent",

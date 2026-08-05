@@ -9,6 +9,13 @@
 -- becomes a no-op.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
+-- Phase 15: btree_gist supplies the GiST-indexable equality opclass the
+-- slip_reservations EXCLUDE constraint needs to combine "same slip" with
+-- "overlapping date range" in one database-enforced invariant. Requires
+-- superuser to install, same as pgcrypto/citext above -- see migration
+-- 0016_marina_slip_management's SQL for why the migration's own
+-- `CREATE EXTENSION IF NOT EXISTS` cannot do this in production/CI, only here.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- Role creation is idempotent so it is safe to re-run on an existing cluster.
 -- Create roles BEFORE granting them schema privileges.

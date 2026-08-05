@@ -16,6 +16,8 @@ from app.api.v1.routes import (
     public,
     purchase_orders,
     reports,
+    slip_reservations,
+    slips,
     sms_webhooks,
     stripe_webhooks,
     users,
@@ -35,6 +37,8 @@ api_router.include_router(dispatch.router)
 api_router.include_router(inventory.router, tags=["inventory"])
 api_router.include_router(vendors.router)
 api_router.include_router(purchase_orders.router)
+api_router.include_router(slips.router)
+api_router.include_router(slip_reservations.router)
 api_router.include_router(invoices.router)
 api_router.include_router(billing.router)
 api_router.include_router(reports.router)

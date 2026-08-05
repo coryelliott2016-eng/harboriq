@@ -1,0 +1,16 @@
+-- HarborIQ v2 — Marina/Slip Management (Phase 15), part 1 of 2.
+-- Executed verbatim by Alembic migration 0015_marina_slip_management.
+--
+-- This migration ONLY adds the new `storage` value to the existing
+-- job_line_item_kind enum. PostgreSQL allows `ALTER TYPE ... ADD VALUE`
+-- inside a transaction (12+) but forbids USING that new value -- even
+-- inside a CHECK constraint expression -- in the SAME transaction it was
+-- added in ("unsafe use of new value"). Migration 0016 (the very next one,
+-- applied immediately after this commits) is where `storage` actually gets
+-- referenced -- in job_line_items' new CHECK constraints and the slips/
+-- slip_reservations/dry_stack_launch_requests tables. Splitting the phase
+-- across two migration files/transactions is the standard, documented
+-- workaround for this Postgres restriction (see migration 0005's
+-- `token_purpose` precedent, which only needed the "add it, don't use it
+-- yet" half and so could stay a single file).
+ALTER TYPE job_line_item_kind ADD VALUE IF NOT EXISTS 'storage';

@@ -117,3 +117,30 @@ class PurchaseOrderSM(StateMachine):
         "received": set(),
         "cancelled": set(),
     }
+
+
+class SlipReservationSM(StateMachine):
+    """Phase 15: pending -> confirmed -> checked_in -> checked_out, matching
+    the Job/PurchaseOrder discipline of loading the row FOR UPDATE before
+    asserting a transition.
+
+    Cancellation is allowed from `pending` or `confirmed` -- a customer or
+    marina can back out of a booking before it turns into a boat actually
+    occupying the slip. It is NOT allowed from `checked_in`: the boat is
+    physically in the slip by then (real occupancy, not just a paperwork
+    state), so the only way out is `checked_out`, mirroring
+    `PurchaseOrderSM`'s "no undo once inventory really moved" rule.
+    `checked_out` and `cancelled` are both terminal. Double-booking itself is
+    guarded independently at the database level (see `SlipReservation`'s
+    docstring for the `btree_gist` EXCLUDE constraint) -- this state machine
+    only governs the *lifecycle* of one reservation, not whether two
+    reservations may coexist.
+    """
+
+    transitions = {
+        "pending": {"confirmed", "cancelled"},
+        "confirmed": {"checked_in", "cancelled"},
+        "checked_in": {"checked_out"},
+        "checked_out": set(),
+        "cancelled": set(),
+    }

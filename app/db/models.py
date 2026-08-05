@@ -6,7 +6,7 @@ Quantities are Integer. Status columns use the DB enums.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Optional
@@ -15,6 +15,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -26,6 +27,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, INET, JSONB
+from sqlalchemy.dialects.postgresql import DATERANGE
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -70,11 +72,59 @@ class JobPriority(StrEnum):
 
 
 class JobLineItemKind(StrEnum):
-    """Mirrors the `job_line_item_kind` PostgreSQL enum (migration 0003)."""
+    """Mirrors the `job_line_item_kind` PostgreSQL enum (migration 0003, with
+    `STORAGE` added by migration 0015 for Phase 15 slip-reservation billing).
+    """
 
     LABOR = "labor"
     PART = "part"
     FEE = "fee"
+    STORAGE = "storage"
+
+
+class SlipType(StrEnum):
+    """Mirrors the `slip_type` PostgreSQL enum (migration 0016, Phase 15).
+
+    One `slips` table serves all three -- see `Slip`'s docstring for why a
+    separate `dry_stack_spaces` table was rejected.
+    """
+
+    WET_SLIP = "wet_slip"
+    DRY_STACK = "dry_stack"
+    MOORING = "mooring"
+
+
+class SlipStatus(StrEnum):
+    """Mirrors the `slip_status` PostgreSQL enum (migration 0016, Phase 15)."""
+
+    AVAILABLE = "available"
+    OCCUPIED = "occupied"
+    RESERVED = "reserved"
+    MAINTENANCE = "maintenance"
+
+
+class SlipReservationStatus(StrEnum):
+    """Mirrors the `slip_reservation_status` PostgreSQL enum (migration 0016).
+
+    Legal transitions live in
+    `app.services.state_machines.SlipReservationSM` -- never write `status`
+    directly, same discipline as `JobStatus`/`PurchaseOrderStatus`.
+    """
+
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CHECKED_IN = "checked_in"
+    CHECKED_OUT = "checked_out"
+    CANCELLED = "cancelled"
+
+
+class DryStackLaunchStatus(StrEnum):
+    """Mirrors the `dry_stack_launch_status` PostgreSQL enum (migration 0016)."""
+
+    REQUESTED = "requested"
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
 
 
 class PurchaseOrderStatus(StrEnum):
@@ -736,8 +786,17 @@ class JobLineItem(UUIDPKMixin, TimestampMixin, Base):
     company_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
     )
-    job_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False
+    # NULLABLE as of migration 0016 (Phase 15) -- a `storage`-kind line item
+    # belongs to a slip reservation instead, never both. See
+    # `ck_job_line_items_exactly_one_source`; not re-declared here, same
+    # convention as other migration-added composite constraints in this file.
+    job_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("jobs.id")
+    )
+    #: Phase 15: set instead of `job_id` for a `storage`-kind line item billing
+    #: a slip reservation's rental period. Mutually exclusive with `job_id`.
+    slip_reservation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("slip_reservations.id")
     )
     kind: Mapped[str] = mapped_column(
         Enum(
@@ -770,7 +829,7 @@ class JobLineItem(UUIDPKMixin, TimestampMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    job: Mapped[Job] = relationship(back_populates="line_items")
+    job: Mapped[Optional[Job]] = relationship(back_populates="line_items")
     # line_total is GENERATED ALWAYS AS (quantity * unit_price) STORED in the DB.
 
     __table_args__ = (
@@ -789,12 +848,24 @@ class JobLineItem(UUIDPKMixin, TimestampMixin, Base):
             "(invoice_id IS NULL) = (invoiced_at IS NULL)",
             name="ck_job_line_items_invoiced_together",
         ),
+        # Phase 15 additions (migration 0016) -- mirrored here for ORM parity,
+        # DDL is the source of truth same as elsewhere in this file:
+        #   ck_job_line_items_exactly_one_source: exactly one of job_id /
+        #     slip_reservation_id is set.
+        #   ck_job_line_items_storage_has_reservation: slip_reservation_id set
+        #     implies kind = 'storage'.
         Index("idx_job_line_items_job", "company_id", "job_id"),
         Index(
             "idx_job_line_items_uninvoiced",
             "company_id",
             "job_id",
             postgresql_where="invoice_id IS NULL",
+        ),
+        Index(
+            "idx_job_line_items_slip_reservation",
+            "company_id",
+            "slip_reservation_id",
+            postgresql_where="slip_reservation_id IS NOT NULL",
         ),
     )
 
@@ -1148,4 +1219,188 @@ class AuditLog(Base):
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Slip(UUIDPKMixin, TimestampMixin, Base):
+    """A rentable marina space -- wet slip, dry-stack rack space, or mooring
+    (Phase 15).
+
+    Design choice: one table with a `slip_type` discriminator rather than a
+    separate `dry_stack_spaces` table. A wet slip and a dry-stack rack space
+    share every field that the slip map, availability search, and billing
+    generation need to query across ("all rentable spaces, filtered by
+    status") -- splitting them would mean every one of those queries UNIONs
+    two tables for a handful of type-specific columns
+    (`depth_ft` vs. `rack_level`/`rack_position`). `ck_slips_depth_only_wet_or_mooring`
+    and `ck_slips_rack_only_dry_stack` (migration 0016) keep those
+    type-specific columns from being set on the wrong `slip_type`, so the
+    single-table choice does not silently allow nonsense data.
+    """
+
+    __tablename__ = "slips"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    identifier: Mapped[str] = mapped_column(Text, nullable=False)
+    slip_type: Mapped[str] = mapped_column(
+        Enum(SlipType, name="slip_type", values_callable=lambda e: [m.value for m in e]),
+        default=SlipType.WET_SLIP, server_default=SlipType.WET_SLIP.value,
+    )
+    status: Mapped[str] = mapped_column(
+        Enum(SlipStatus, name="slip_status", values_callable=lambda e: [m.value for m in e]),
+        default=SlipStatus.AVAILABLE, server_default=SlipStatus.AVAILABLE.value,
+    )
+    length_ft: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2))
+    width_ft: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2))
+    #: Wet slip/mooring only -- water depth at low tide. NULL for dry stack.
+    depth_ft: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2))
+    #: Dry stack only -- which rack level/bay a forklift needs to reach this
+    #: space. NULL for wet slips/moorings.
+    rack_level: Mapped[Optional[int]] = mapped_column(Integer)
+    rack_position: Mapped[Optional[str]] = mapped_column(Text)
+    #: Optional GPS coordinates for a customer-facing "find my dock" view --
+    #: NOT used by the staff slip map, which is a CSS grid keyed on
+    #: `identifier` (see README's Phase 15 section for why).
+    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    monthly_rate: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
+    daily_rate: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Migration 0016 also adds `uq_slips_company_id UNIQUE (company_id, id)`
+    # (the target of slip_reservations'/dry_stack_launch_requests' composite
+    # FKs) and a per-tenant unique index on (company_id, identifier) -- not
+    # re-declared here, same convention as `uq_jobs_company_id` elsewhere in
+    # this file.
+    __table_args__ = (
+        CheckConstraint(
+            "depth_ft IS NULL OR slip_type IN ('wet_slip', 'mooring')",
+            name="ck_slips_depth_only_wet_or_mooring",
+        ),
+        CheckConstraint(
+            "(rack_level IS NULL AND rack_position IS NULL) OR slip_type = 'dry_stack'",
+            name="ck_slips_rack_only_dry_stack",
+        ),
+        CheckConstraint(
+            "(latitude IS NULL) = (longitude IS NULL)", name="ck_slips_latlng_pair"
+        ),
+        Index("idx_slips_company_status", "company_id", "status"),
+    )
+
+
+class SlipReservation(UUIDPKMixin, TimestampMixin, Base):
+    """A customer's booking of a slip for a date range (Phase 15).
+
+    `status` is driven exclusively by
+    `app.services.state_machines.SlipReservationSM`; the service layer loads
+    the current value under `FOR UPDATE` before asserting a transition,
+    matching `Job`/`PurchaseOrder`. Double-booking is prevented at the
+    DATABASE level, not just in the service layer: migration 0016 adds
+    `ex_slip_reservations_no_overlap`, a `btree_gist` EXCLUDE constraint on
+    `(slip_id, stay_range)` for every non-cancelled reservation, so a
+    concurrent INSERT that overlaps an existing booking's dates for the same
+    slip fails with an IntegrityError no matter how the application-level
+    availability check raced.
+    """
+
+    __tablename__ = "slip_reservations"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    slip_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("slips.id"), nullable=False
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False
+    )
+    #: Nullable -- a reservation can be taken before the specific boat is
+    #: known (e.g. a phone booking) and filled in at check-in.
+    vessel_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("vessels.id")
+    )
+    status: Mapped[str] = mapped_column(
+        Enum(
+            SlipReservationStatus,
+            name="slip_reservation_status",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=SlipReservationStatus.PENDING, server_default=SlipReservationStatus.PENDING.value,
+    )
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # stay_range is GENERATED ALWAYS AS (daterange(start_date, end_date, '[]'))
+    # STORED in the DB -- declared here read-only for ORM parity; never
+    # written to directly, same posture as job_line_items.line_total.
+    stay_range: Mapped[Optional[str]] = mapped_column(DATERANGE)
+    checked_in_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    checked_out_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Migration 0016 also adds `uq_slip_reservations_company_id UNIQUE
+    # (company_id, id)` and the `ex_slip_reservations_no_overlap` EXCLUDE
+    # constraint described above -- not re-declared here (raw SQL migration
+    # is the source of truth for constraints SQLAlchemy's Python DDL cannot
+    # express as cleanly, same convention as elsewhere in this file).
+    __table_args__ = (
+        CheckConstraint("end_date >= start_date", name="ck_slip_reservations_dates"),
+        Index("idx_slip_reservations_company_slip", "company_id", "slip_id"),
+        Index("idx_slip_reservations_company_customer", "company_id", "customer_id"),
+        Index("idx_slip_reservations_company_status", "company_id", "status"),
+    )
+
+
+class DryStackLaunchRequest(UUIDPKMixin, TimestampMixin, Base):
+    """A lightweight "get my boat back in the water by X" request tied to a
+    dry-stack reservation (Phase 15).
+
+    Explicitly NOT a crane/forklift dispatch system -- no equipment
+    inventory, no operator assignment, no IoT integration. Staff mark a
+    request `scheduled` (with a `scheduled_for` time) and then `completed`;
+    see README's "What's intentionally NOT here yet" for the full deferred
+    list.
+    """
+
+    __tablename__ = "dry_stack_launch_requests"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    slip_reservation_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("slip_reservations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requested_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum(
+            DryStackLaunchStatus,
+            name="dry_stack_launch_status",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=DryStackLaunchStatus.REQUESTED, server_default=DryStackLaunchStatus.REQUESTED.value,
+    )
+    scheduled_for: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "idx_dry_stack_launch_company_reservation",
+            "company_id",
+            "slip_reservation_id",
+        ),
+        Index("idx_dry_stack_launch_company_status", "company_id", "status"),
     )

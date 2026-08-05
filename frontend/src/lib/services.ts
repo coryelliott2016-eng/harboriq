@@ -60,6 +60,13 @@ import type {
   User,
   UserRole,
   UserUpdateInput,
+  Slip,
+  SlipInput,
+  SlipReservation,
+  SlipReservationInput,
+  SlipAvailability,
+  GenerateStorageChargeInput,
+  StorageCharge,
   Vendor,
   VendorInput,
   Vessel,
@@ -336,4 +343,34 @@ export const purchaseOrdersApi = {
   receive: (id: string, body: ReceivePurchaseOrderInput) =>
     api.post<PurchaseOrder>(`/purchase-orders/${id}/receive`, body),
   cancel: (id: string) => api.post<PurchaseOrder>(`/purchase-orders/${id}/cancel`, {}),
+};
+
+export const slipsApi = {
+  list: (params?: { slip_type?: string; status?: string; search?: string }) =>
+    api.get<Slip[]>("/slips", params),
+  get: (id: string) => api.get<Slip>(`/slips/${id}`),
+  create: (body: SlipInput) => api.post<Slip>("/slips", body),
+  update: (id: string, body: Partial<SlipInput>) => api.patch<Slip>(`/slips/${id}`, body),
+};
+
+export const slipReservationsApi = {
+  list: (params?: { slip_id?: string; customer_id?: string; status?: string }) =>
+    api.get<SlipReservation[]>("/slip-reservations", params),
+  get: (id: string) => api.get<SlipReservation>(`/slip-reservations/${id}`),
+  create: (body: SlipReservationInput) =>
+    api.post<SlipReservation>("/slip-reservations", body),
+  availability: (slip_id: string, start_date: string, end_date: string) =>
+    api.get<SlipAvailability>("/slip-reservations/availability", {
+      slip_id,
+      start_date,
+      end_date,
+    }),
+  confirm: (id: string) => api.post<SlipReservation>(`/slip-reservations/${id}/confirm`, {}),
+  checkIn: (id: string) => api.post<SlipReservation>(`/slip-reservations/${id}/check-in`, {}),
+  checkOut: (id: string) => api.post<SlipReservation>(`/slip-reservations/${id}/check-out`, {}),
+  cancel: (id: string) => api.post<SlipReservation>(`/slip-reservations/${id}/cancel`, {}),
+  generateStorageCharge: (id: string, body: GenerateStorageChargeInput = {}) =>
+    api.post<StorageCharge>(`/slip-reservations/${id}/generate-storage-charge`, body),
+  generateInvoice: (id: string, tax_rate: string = "0") =>
+    api.post<InvoiceDetail>(`/slip-reservations/${id}/generate-invoice`, { tax_rate }),
 };

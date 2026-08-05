@@ -774,3 +774,107 @@ export interface ReceiptLineInput {
 export interface ReceivePurchaseOrderInput {
   receipts: ReceiptLineInput[];
 }
+
+// ---------------------------------------------------------------------------
+// Marina / slip management (Phase 15)
+// ---------------------------------------------------------------------------
+export type SlipType = "wet_slip" | "dry_stack" | "mooring";
+export type SlipStatus = "available" | "occupied" | "reserved" | "maintenance";
+
+export interface Slip {
+  id: string;
+  company_id: string;
+  identifier: string;
+  slip_type: SlipType;
+  status: SlipStatus;
+  length_ft: string | null;
+  width_ft: string | null;
+  depth_ft: string | null;
+  rack_level: number | null;
+  rack_position: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  monthly_rate: string;
+  daily_rate: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SlipInput {
+  identifier: string;
+  slip_type: SlipType;
+  status?: SlipStatus;
+  length_ft?: string | null;
+  width_ft?: string | null;
+  depth_ft?: string | null;
+  rack_level?: number | null;
+  rack_position?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  monthly_rate?: string;
+  daily_rate?: string;
+  notes?: string | null;
+}
+
+export type SlipReservationStatus =
+  | "pending"
+  | "confirmed"
+  | "checked_in"
+  | "checked_out"
+  | "cancelled";
+
+export interface SlipReservation {
+  id: string;
+  company_id: string;
+  slip_id: string;
+  customer_id: string;
+  vessel_id: string | null;
+  status: SlipReservationStatus;
+  start_date: string;
+  end_date: string;
+  checked_in_at: string | null;
+  checked_out_at: string | null;
+  cancelled_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SlipReservationInput {
+  slip_id: string;
+  customer_id: string;
+  vessel_id?: string | null;
+  start_date: string;
+  end_date: string;
+  notes?: string | null;
+}
+
+export interface SlipAvailability {
+  slip_id: string;
+  start_date: string;
+  end_date: string;
+  available: boolean;
+}
+
+export interface GenerateStorageChargeInput {
+  rate?: string | null;
+  quantity?: string | null;
+  description?: string | null;
+}
+
+export interface StorageCharge {
+  id: string;
+  job_id: string | null;
+  slip_reservation_id: string | null;
+  kind: string;
+  description: string;
+  quantity: string;
+  unit_price: string;
+  line_total: string;
+  taxable: boolean;
+  invoice_id: string | null;
+  invoiced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

@@ -27,7 +27,12 @@ a draft/submit/receive purchase-order lifecycle with correctly guarded
 *draft* PO generation (a human still has to submit — deliberately not
 unattended auto-reordering), and the AI dispatch engine's parts-availability
 factor wired up to that real inventory data instead of its former permanent
-no-op. 526 backend tests, 90 frontend tests, CI green.
+no-op, and now marina/slip management (Phase 15) for fixed-location
+marinas/boatyards — a one-table slip discriminator design, a
+`SlipReservationSM` state machine, DB-level (`btree_gist EXCLUDE`)
+double-booking prevention proven under genuine concurrency, storage billing
+that reuses the existing job-invoicing pipeline, and a CSS-grid slip map.
+629 backend tests, 116 frontend tests, CI green.
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
@@ -284,11 +289,72 @@ this is organized from).
       format that directly serves the QuickBooks-import use case, the
       higher-value target for a bookkeeper-facing export.
 
-## Phase 15 — Marina/Slip Management (optional — different business model)
-- Visual slip map, reservations, dry-stack scheduling, storage billing —
-  DockMaster's core turf. Only worth building if HarborIQ intends to also
-  serve fixed-location marinas, not just mobile mechanics — flagged for a
-  go/no-go decision rather than assumed in scope.
+## Phase 15 — Marina/Slip Management — **COMPLETE**
+- [x] **One-table discriminator design for slips.** A single `slips` table
+      (`slip_type`: `wet_slip` / `dry_stack` / `mooring`) rather than a
+      separate `dry_stack_spaces` table, so "all rentable spaces" queries
+      (slip map, availability search, storage billing) never have to UNION
+      two tables. Type-specific columns (`depth_ft` for wet/mooring,
+      `rack_level`/`rack_position` for dry stack) are nullable and enforced
+      by `ck_slips_depth_only_wet_or_mooring` / `ck_slips_rack_only_dry_stack`
+      CHECK constraints rather than left to convention. `dry_stack_launch_requests`
+      is a separate table (scheduling a forklift pull, not a rental itself).
+- [x] **`SlipReservationSM` state machine** (`pending → confirmed →
+      checked_in → checked_out`, plus `cancelled` from `pending`/`confirmed`/
+      `checked_in`) following the same `SELECT ... FOR UPDATE`-before-
+      `assert_transition()` discipline as the existing Job/PurchaseOrder
+      state machines — no reservation transition is decided from a stale
+      in-memory read.
+- [x] **DB-level double-booking prevention**, not just an application-side
+      check. `app/services/slip_reservations.create` does check availability
+      before inserting, but that check-then-insert is not atomic across
+      sessions. The real guarantee is `ex_slip_reservations_no_overlap`, a
+      `btree_gist` `EXCLUDE` constraint on `slip_reservations(slip_id,
+      stay_range)` (migration `0016`) — verified with a genuinely concurrent
+      test (`tests/test_slip_reservation_overlap.py`, separate
+      threads/connections attempting to double-book the same slip and dates,
+      modeled on the existing inventory-concurrency test) asserting exactly
+      one attempt wins and the other gets a clean `Conflict`, not a race.
+- [x] **Storage billing reuses the existing job-invoicing pipeline**, not a
+      parallel one. `job_line_items.job_id` became nullable and a new
+      nullable `slip_reservation_id` FK was added, with
+      `ck_job_line_items_exactly_one_source` enforcing exactly one of
+      `job_id`/`slip_reservation_id` is set per line item. A new `storage`
+      value on `job_line_item_kind` (migration `0015`, its own transaction —
+      see "migration split" below) marks these charges. `generate-storage-
+      charge` and `generate-invoice` on a reservation reuse
+      `app/services/invoices.py`'s existing invoice-creation path
+      (`create_invoice_from_reservation`) instead of a second billing
+      implementation to keep in sync with the first.
+- [x] **CSS-grid slip map**, not another Leaflet map. Phase 11's Leaflet/
+      OpenStreetMap map answers "where is this technician right now"; a
+      marina's slip map answers "which of my fixed, known-layout slips are
+      free," which a CSS grid keyed on each slip's `identifier` answers
+      without a mapping-library dependency or real GPS data. Optional
+      `latitude`/`longitude` columns exist on `slips` for a possible future
+      customer-facing "find my dock" view, but are not required by (or
+      rendered on) the staff slip map itself.
+- [x] **Backend**: `app/api/v1/routes/{slips,slip_reservations}.py`,
+      `app/schemas/{slips,slip_reservations}.py`,
+      `app/services/{slips,slip_reservations}.py`, all `require_operations`-
+      gated like the rest of the operations surface.
+- [x] **Frontend**: `SlipsPage`, `SlipReservationsPage`, and `SlipMapPage`
+      (`/marina/slips`, `/marina/reservations`, `/marina/slip-map`), gated
+      behind `canManageOperations` with the same permission-denied-message
+      pattern as `ArAgingRoute`/`TeamRoute`/`PurchaseOrdersRoute`.
+- [ ] **GPS-based "find my dock" / customer-facing dock-finder view** — the
+      `latitude`/`longitude` columns exist on `slips` for this, but no
+      customer-portal page consumes them yet.
+- [ ] **Payment-processing changes beyond line items** — storage charges
+      flow through the existing Stripe Checkout/invoice pipeline unchanged;
+      no new payment method or processor integration was added.
+- [ ] **Crane/forklift IoT integration** — dry-stack launch/retrieval
+      requests are logged and scheduled (`dry_stack_launch_requests`), not
+      dispatched to or tracked by any physical equipment.
+- [ ] **Recurring/automatic monthly storage billing** — `generate-storage-
+      charge` and `generate-invoice` are explicit, staff-triggered actions
+      per reservation; there is no scheduled job that auto-bills monthly
+      slip rent the way a subscription would.
 
 ## Phase 16 — Platform Hardening for Enterprise Scale — **COMPLETE**
 - [x] **Redis-backed rate limiting + Celery.** `app/core/rate_limit.py`'s

@@ -24,11 +24,17 @@ class InvoiceCreate(BaseModel):
 
 
 class InvoiceLineItemOut(BaseModel):
-    """A `job_line_items` row as it appears frozen onto an invoice."""
+    """A `job_line_items` row as it appears frozen onto an invoice.
+
+    `job_id` is nullable as of Phase 15: a `storage`-kind line billing a
+    slip reservation has `job_id IS NULL` and `slip_reservation_id` set
+    instead -- see migration 0016's `ck_job_line_items_exactly_one_source`.
+    """
 
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
-    job_id: uuid.UUID
+    job_id: uuid.UUID | None = None
+    slip_reservation_id: uuid.UUID | None = None
     kind: JobLineItemKind
     description: str
     quantity: Decimal

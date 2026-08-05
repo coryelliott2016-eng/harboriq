@@ -126,6 +126,10 @@ tests/test_location_ping.py             # POST /users/me/location-ping validatio
 tests/test_sms_service.py               # console-fallback vs real Twilio REST send, is_configured(), httpx failure never raises
 tests/test_dispatch_board_assignment.py # board drag-and-drop reuses POST /jobs/{id}/assign; assignment queues a job-confirmation SMS
 tests/test_sms_inbound_webhook.py       # inbound SMS -> messages(channel='sms'), staff-reply channel routing, unmatched-number drop, signature verification
+tests/test_slips.py                     # slip CRUD, per-tenant identifier uniqueness, type/status CHECK constraints
+tests/test_slip_reservations.py         # reservation lifecycle (SlipReservationSM), availability search, RBAC + tenant isolation
+tests/test_slip_reservation_overlap.py  # genuinely concurrent double-booking attempt -> exactly one winner (btree_gist EXCLUDE)
+tests/test_slip_storage_billing.py      # generate-storage-charge / generate-invoice reuse of the job_line_items -> invoices pipeline
 ```
 
 ## API surface
@@ -1707,6 +1711,149 @@ lacks the role.
   higher-value target for a bookkeeper-facing export.
 
 
+## Marina/slip management (Phase 15)
+
+Every prior phase targeted the mobile-marine-mechanic wedge — a technician
+who drives to a boat. This phase adds the other half of the marine-services
+market DockMaster owns: fixed-location marinas and boatyards that rent wet
+slips, dry-stack storage, and moorings. It is an explicitly approved
+business-model fork, not scope creep — a marina customer is still a
+`Customer` (Phase 2) and a boat in a slip is still a `Vessel` (Phase 2),
+so nothing here duplicates either table.
+
+**Migrations `0015_marina_slip_management` and
+`0016_marina_slip_management` — a two-part split, same reason as migration
+`0005`.** This phase adds a new `storage` value to the existing
+`job_line_item_kind` enum, then uses that value in a CHECK constraint in the
+same phase's work. PostgreSQL allows `ALTER TYPE ... ADD VALUE` inside a
+transaction (12+) but forbids *using* that new value — even inside a CHECK
+constraint expression — in the same transaction it was added in ("unsafe
+use of new value"), the identical restriction migration `0005` documented
+for `token_purpose`'s `user_invite` value. `0005` only ever needed the
+"add it, don't use it yet" half, so it stayed one file; this phase's CHECK
+constraint genuinely needs the new value in the same piece of work, so it is
+split across two migrations/transactions instead: `0015` only adds
+`job_line_item_kind`'s `storage` value, and `0016` — applied immediately
+after, in its own transaction — is where `storage` actually gets referenced,
+in `job_line_items`' new `ck_job_line_items_exactly_one_source` constraint
+and the new `slips`/`slip_reservations`/`dry_stack_launch_requests` tables.
+Verified by dropping and recreating the database and reapplying migrations
+`0001`–`0016` from scratch during this phase's work, not just applied
+incrementally on top of already-migrated state.
+
+**One `slips` table, not one per space type.** A wet slip and a dry-stack
+rack space need the same core fields — identifier, dimensions, status, a
+rental rate — and diverge only on a handful of columns (dry stack needs
+`rack_level`/`rack_position` for forklift retrieval; a wet slip's `depth_ft`
+is meaningless for a rack space stacked in a shed). A `slip_type`
+discriminator (`wet_slip` / `dry_stack` / `mooring`) on one table keeps every
+query that wants "all rentable spaces" (the slip map, availability search,
+storage billing) single and simple instead of forcing a UNION across two
+near-identical tables, at the minor cost of `depth_ft`/`rack_level` being
+mutually meaningless depending on `slip_type` — enforced by
+`ck_slips_depth_only_wet_or_mooring` and `ck_slips_rack_only_dry_stack` CHECK
+constraints, not left to convention. `dry_stack_launch_requests` is its own
+table (scheduling a forklift pull to launch/retrieve a boat is a distinct
+event from the rental itself, and can span, precede, or outlive a given
+reservation).
+
+**`SlipReservationSM` — the same `FOR UPDATE`-before-`assert_transition()`
+discipline as every other state machine in this codebase.**
+`pending → confirmed → checked_in → checked_out`, with `cancelled` reachable
+from `pending`, `confirmed`, or `checked_in`. `app/services/slip_reservations.py`
+loads the reservation row with `SELECT status ... FOR UPDATE` before handing
+the current and target status to `SlipReservationSM.assert_transition()`,
+the identical pattern `JobSM`/`PurchaseOrderSM`/`InvoiceSM` already use — no
+reservation transition is ever decided from a stale in-memory read.
+
+**Double-booking is prevented at the database level, not just in
+application code.** `slip_reservations.create` does check availability
+before inserting, but that check-then-insert is not atomic across sessions
+— two concurrent callers can both pass the check before either commits. The
+real guarantee is `ex_slip_reservations_no_overlap`, a `btree_gist`
+`EXCLUDE` constraint on `slip_reservations(slip_id, stay_range)` (migration
+`0016`; `stay_range` is a generated `DATERANGE` column derived from
+`start_date`/`end_date`). Postgres has no native way to express "no two rows
+with the same `slip_id` may have overlapping date ranges" as a CHECK
+constraint (CHECK constraints cannot see other rows); an `EXCLUDE`
+constraint can, but needs a GiST operator class for every column it
+compares, and there is no default GiST opclass for plain equality on a UUID
+column — `btree_gist` supplies one, the standard, documented way to combine
+"equal on this column" with "overlaps on this range" in a single exclusion
+constraint. `docker-entrypoint-initdb.d/00_roles.sql` installs the
+extension (superuser-only, same pattern as `pgcrypto`/`citext`) before this
+migration runs. This is verified with a genuinely concurrent test —
+`tests/test_slip_reservation_overlap.py` fires create attempts from separate
+threads and separate database connections/sessions (the same pattern
+`test_inventory_concurrency.py` uses for `use_inventory_part_atomic`) at the
+exact same slip and overlapping dates, and asserts exactly one attempt wins
+while the other gets a clean `Conflict`, never a silent double-booking or an
+unhandled database error.
+
+**Storage billing reuses the existing job-invoicing pipeline instead of a
+second one.** `job_line_items.job_id` became nullable and a new nullable
+`slip_reservation_id` FK was added, with `ck_job_line_items_exactly_one_source`
+enforcing that exactly one of `job_id`/`slip_reservation_id` is set per line
+item — a storage charge is a line item exactly the way a labor or parts
+charge is, just sourced from a reservation instead of a job.
+`POST /slip-reservations/{id}/generate-storage-charge` creates a `storage`-
+kind line item priced from the slip's `daily_rate`/`monthly_rate` (or an
+explicit override), and `POST /slip-reservations/{id}/generate-invoice`
+calls a new `create_invoice_from_reservation()` in `app/services/invoices.py`
+that reuses the exact same subtotal/tax/total math and line-freezing
+behavior `create_invoice()` already established for job-sourced invoices,
+rather than a parallel, easy-to-drift-out-of-sync implementation.
+
+**A CSS-grid slip map, not a second Leaflet map.** Phase 11's Leaflet/
+OpenStreetMap map answers "where is this technician right now" — a
+continuously moving point on a real-world map. A marina's slip map answers a
+different question, "which of my fixed, already-known-layout slips are free
+right now," which a CSS grid keyed on each slip's `identifier` answers
+directly, with color-coded status, without a mapping-library dependency or
+requiring real GPS coordinates for every slip. `slips.latitude`/`longitude`
+are optional columns kept for a possible future customer-facing "find my
+dock" view, but the staff `SlipMapPage` itself neither requires nor renders
+them.
+
+**Backend**: `app/api/v1/routes/{slips,slip_reservations}.py`,
+`app/schemas/{slips,slip_reservations}.py`,
+`app/services/{slips,slip_reservations}.py` — all gated behind
+`require_operations`, the same permission tier as inventory, vendors, and
+purchase orders.
+
+**Frontend**: three new pages — `SlipsPage` (`/marina/slips`),
+`SlipReservationsPage` (`/marina/reservations`), and `SlipMapPage`
+(`/marina/slip-map`) — registered in `App.tsx` and `AppShell`'s nav
+following the exact `ArAgingRoute`/`TeamRoute`/`PurchaseOrdersRoute` pattern:
+gated behind `canManageOperations(user?.role)`, with a permission-denied
+message rather than a 404 for a logged-in user who simply lacks the role.
+`slipsApi`/`slipReservationsApi` in `lib/services.ts` call
+`api.get`/`api.post`/`api.patch`, the same centralized, Bearer-token-
+authenticated request helpers every other page uses — no per-page auth
+handling was needed here, including no CSRF header on the
+reservation-creation mutation: Phase 16's CSRF check is scoped entirely to
+`POST /auth/refresh` (the one endpoint that relies on the httpOnly refresh
+cookie instead of the `Authorization: Bearer` header), and `SlipMapPage`'s
+mutation, like every other authenticated mutation in this app, goes through
+`api.post` unchanged.
+
+### What's intentionally NOT here yet (Phase 15)
+
+- **GPS-based "find my dock" / customer-facing dock-finder view.** The
+  `latitude`/`longitude` columns exist on `slips` for this, but no
+  customer-portal page consumes them yet.
+- **Payment-processing changes beyond line items.** Storage charges flow
+  through the existing Stripe Checkout/invoice pipeline unchanged — no new
+  payment method or processor integration was added.
+- **Crane/forklift IoT integration.** Dry-stack launch/retrieval requests
+  are logged and scheduled (`dry_stack_launch_requests`), not dispatched to
+  or tracked by any physical equipment.
+- **Recurring/automatic monthly storage billing.** `generate-storage-charge`
+  and `generate-invoice` are explicit, staff-triggered actions per
+  reservation; there is no scheduled job that auto-bills monthly slip rent
+  the way a subscription would.
+
+
 ## Project layout
 
 ```
@@ -1991,7 +2138,16 @@ and offline surfaces an error; `refresh()` re-fetches) and
 drawn, Pointer Event-driven drawing enabling Save and exporting a data URL,
 Clear, Cancel, and the `saving` disabled state). The IndexedDB-backed tests
 use `fake-indexeddb` (added as a devDependency and wired into
-`src/test/setup.ts`) since jsdom has no real IndexedDB implementation.
+`src/test/setup.ts`) since jsdom has no real IndexedDB implementation. Phase
+15 added component-level tests for the three new marina pages
+(`src/pages/SlipsPage.test.tsx`, `src/pages/SlipReservationsPage.test.tsx`,
+`src/pages/SlipMapPage.test.tsx`) covering list/create/update flows,
+availability checking before a reservation is submitted, and the
+reservation-lifecycle action buttons (confirm/check-in/check-out/cancel) —
+using the same `setCsrfCookie`-plus-`setAccessToken` session-hydration setup
+Phase 16 introduced for every other authenticated page test, since
+`AuthProvider` now gates its `GET /auth/me` hydration call on the readable
+CSRF cookie rather than a frontend-visible refresh token.
 
 ## Deployment & observability
 

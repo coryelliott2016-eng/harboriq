@@ -22,6 +22,9 @@ import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { SecuritySettingsPage } from "./pages/SecuritySettingsPage";
 import { SignupPage } from "./pages/SignupPage";
+import { SlipMapPage } from "./pages/SlipMapPage";
+import { SlipReservationsPage } from "./pages/SlipReservationsPage";
+import { SlipsPage } from "./pages/SlipsPage";
 import { TeamPage } from "./pages/TeamPage";
 import { VendorsPage } from "./pages/VendorsPage";
 import { PortalHome } from "./portal/PortalHome";
@@ -128,6 +131,47 @@ function VendorsRoute() {
   return <VendorsPage />;
 }
 
+// Phase 15: marina/slip management is require_operations-gated to match
+// its backend routes (app/api/v1/routes/{slips,slip_reservations}.py).
+function SlipMapRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. The slip map is limited to
+        owners, admins, and office staff.
+      </div>
+    );
+  }
+  return <SlipMapPage />;
+}
+
+function SlipsRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. Slip management is limited to
+        owners, admins, and office staff.
+      </div>
+    );
+  }
+  return <SlipsPage />;
+}
+
+function SlipReservationsRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        You don't have permission to view this page. Slip reservations are limited to
+        owners, admins, and office staff.
+      </div>
+    );
+  }
+  return <SlipReservationsPage />;
+}
+
 function PurchaseOrdersRoute() {
   const { user } = useAuth();
   if (!canManageOperations(user?.role)) {
@@ -189,6 +233,9 @@ export default function App() {
           <Route path="/inventory" element={<InventoryRoute />} />
           <Route path="/vendors" element={<VendorsRoute />} />
           <Route path="/purchase-orders" element={<PurchaseOrdersRoute />} />
+          <Route path="/marina/slip-map" element={<SlipMapRoute />} />
+          <Route path="/marina/slips" element={<SlipsRoute />} />
+          <Route path="/marina/reservations" element={<SlipReservationsRoute />} />
         </Route>
       </Route>
 
