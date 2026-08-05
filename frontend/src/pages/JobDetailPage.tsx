@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { dispatchApi, invoicesApi, jobsApi } from "../lib/services";
+import { dispatchApi, fieldApi, invoicesApi, jobsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
 import { useAuth, canManageOperations } from "../context/AuthContext";
 import {
@@ -190,6 +190,8 @@ export function JobDetailPage() {
       </Card>
 
       {canWrite && <DispatchSuggestions jobId={id} technicianId={job.technician_id} />}
+
+      <FieldAppActivity jobId={id} />
 
       {invoiceError && <ErrorBanner message={invoiceError} />}
 
@@ -452,6 +454,109 @@ function DispatchSuggestions({
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+/**
+ * Staff-side visibility (Phase 12 spec requirement) into what the field app
+ * has captured for this job: photos/signatures uploaded by technicians and
+ * their clock in/out history. Read-only here -- capture only happens from
+ * the field app itself (see FieldPage.tsx).
+ */
+function FieldAppActivity({ jobId }: { jobId: string }) {
+  const attachmentsQuery = useQuery({
+    queryKey: ["jobs", jobId, "attachments"],
+    queryFn: () => fieldApi.attachments(jobId),
+  });
+  const timeEntriesQuery = useQuery({
+    queryKey: ["jobs", jobId, "time-entries"],
+    queryFn: () => fieldApi.timeEntries(jobId),
+  });
+
+  // Lazy useState initializer (runs once at mount, not on every render) --
+  // calling Date.now() directly in the component body is flagged as an
+  // impure render by the react-hooks/purity rule. "Still clocked in"
+  // durations are therefore accurate as of when this card first mounted,
+  // not live-ticking -- acceptable for a staff-side summary view.
+  const [renderedAt] = useState(() => Date.now());
+
+  function formatDuration(clockedInAt: string, clockedOutAt: string | null): string {
+    const start = new Date(clockedInAt).getTime();
+    const end = clockedOutAt ? new Date(clockedOutAt).getTime() : renderedAt;
+    const minutes = Math.max(0, Math.round((end - start) / 60000));
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  }
+
+  return (
+    <Card className="flex flex-col gap-4 p-4">
+      <h2 className="text-lg font-semibold text-slate-900">Field app activity</h2>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Photos &amp; signatures
+        </h3>
+        {attachmentsQuery.isLoading && <Spinner label="Loading attachments…" />}
+        {attachmentsQuery.isSuccess && attachmentsQuery.data.length === 0 && (
+          <p className="mt-2 text-sm text-slate-400">No attachments captured yet.</p>
+        )}
+        {attachmentsQuery.isSuccess && attachmentsQuery.data.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-3">
+            {attachmentsQuery.data.map((att) => (
+              <div key={att.id} className="flex flex-col items-center gap-1">
+                {att.data ? (
+                  <img
+                    src={`data:${att.content_type};base64,${att.data}`}
+                    alt={att.kind}
+                    className="h-24 w-24 rounded-md border border-slate-200 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-24 w-24 items-center justify-center rounded-md border border-slate-200 text-xs text-slate-400">
+                    No preview
+                  </div>
+                )}
+                <Badge tone={att.kind === "signature" ? "blue" : "slate"}>{att.kind}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Time clock</h3>
+        {timeEntriesQuery.isLoading && <Spinner label="Loading time entries…" />}
+        {timeEntriesQuery.isSuccess && timeEntriesQuery.data.length === 0 && (
+          <p className="mt-2 text-sm text-slate-400">No time entries recorded yet.</p>
+        )}
+        {timeEntriesQuery.isSuccess && timeEntriesQuery.data.length > 0 && (
+          <table className="mt-2 w-full text-sm">
+            <thead className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+              <tr>
+                <th className="py-1.5 pr-4">Clocked in</th>
+                <th className="py-1.5 pr-4">Clocked out</th>
+                <th className="py-1.5">Duration</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {timeEntriesQuery.data.map((entry) => (
+                <tr key={entry.id}>
+                  <td className="py-1.5 pr-4">{new Date(entry.clocked_in_at).toLocaleString()}</td>
+                  <td className="py-1.5 pr-4">
+                    {entry.clocked_out_at ? (
+                      new Date(entry.clocked_out_at).toLocaleString()
+                    ) : (
+                      <Badge tone="blue">Still clocked in</Badge>
+                    )}
+                  </td>
+                  <td className="py-1.5">{formatDuration(entry.clocked_in_at, entry.clocked_out_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </Card>
   );
 }

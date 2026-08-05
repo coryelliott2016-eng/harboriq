@@ -550,3 +550,39 @@ export interface ArAgingReport {
 export interface ApiErrorBody {
   detail?: string | { msg: string; loc?: (string | number)[] }[];
 }
+
+// --- Field app: attachments + time clock (Phase 12) ---
+// Mirrors app/schemas/field_app.py exactly.
+
+export type JobAttachmentKind = "photo" | "signature" | "other";
+
+export interface JobAttachment {
+  id: string;
+  job_id: string;
+  kind: JobAttachmentKind;
+  content_type: string;
+  uploaded_by: string;
+  created_at: string;
+  data: string | null;
+}
+
+export interface JobAttachmentInput {
+  kind: JobAttachmentKind;
+  data: string;
+  content_type?: string;
+  idempotency_key?: string | null;
+}
+
+export interface JobTimeEntry {
+  id: string;
+  job_id: string;
+  technician_id: string;
+  clocked_in_at: string;
+  clocked_out_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClockActionInput {
+  idempotency_key?: string | null;
+}

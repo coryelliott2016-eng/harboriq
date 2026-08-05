@@ -5,6 +5,7 @@ from app.api.v1.routes import (
     billing,
     customers,
     dispatch,
+    field_app,
     geocode_admin,
     health,
     inventory,
@@ -27,6 +28,7 @@ api_router.include_router(users.router)
 api_router.include_router(customers.router)
 api_router.include_router(vessels.router)
 api_router.include_router(jobs.router)
+api_router.include_router(field_app.router)
 api_router.include_router(dispatch.router)
 api_router.include_router(inventory.router, tags=["inventory"])
 api_router.include_router(invoices.router)

@@ -11,6 +11,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DispatchBoardPage } from "./pages/DispatchBoardPage";
 import { InvoiceDetailPage } from "./pages/InvoiceDetailPage";
 import { InvoicesPage } from "./pages/InvoicesPage";
+import { FieldPage } from "./pages/FieldPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
 import { JobsPage } from "./pages/JobsPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -97,6 +98,16 @@ export default function App() {
       <Route path="/portal/:token/invoices" element={<PortalInvoices />} />
       <Route path="/portal/:token/estimates" element={<PortalEstimates />} />
       <Route path="/portal/:token/messages" element={<PortalMessages />} />
+
+      {/* Phase 12: technician field app -- offline-first, single-column,
+          deliberately outside <AppShell /> (no admin sidebar/nav; see
+          FieldPage.tsx for why this is not a responsive reflow of the
+          admin job board). Still gated by <ProtectedRoute /> since it
+          needs an authenticated technician/staff session. */}
+      <Route element={<ProtectedRoute />}>
+        <Route path="/field" element={<FieldPage />} />
+        <Route path="/field/:id" element={<FieldPage />} />
+      </Route>
 
       {/* Authenticated app shell */}
       <Route element={<ProtectedRoute />}>

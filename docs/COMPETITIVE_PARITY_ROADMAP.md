@@ -5,7 +5,7 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 11: auth, multi-tenant CRM, invoicing + Stripe Checkout
+Status as of Phase 12: auth, multi-tenant CRM, invoicing + Stripe Checkout
 (single-account and per-tenant Stripe Connect direct charges), refunds,
 PDF/email invoice delivery, dunning, AR aging, a durable magic-link customer
 self-service portal with customer<->staff messaging, self-service + admin
@@ -13,10 +13,13 @@ team profile editing with a team roster page, real OpenStreetMap Nominatim
 geocoding for user and customer addresses (with a documented Google
 Maps/Mapbox swap point) feeding the AI dispatch engine's distance factor,
 React frontend, a rule-based explainable AI dispatch engine, production
-deployment/observability hooks, and a visual drag-and-drop dispatch board
+deployment/observability hooks, a visual drag-and-drop dispatch board
 with a live Leaflet/OpenStreetMap map and two-way SMS (console-fallback
-graceful degradation until a real Twilio account is connected). 462 backend
-tests, 63 frontend tests, CI green.
+graceful degradation until a real Twilio account is connected), and now an
+installable offline-first PWA field app for technicians (job queue, offline
+action queue with idempotent sync-on-reconnect, photo/signature capture,
+time clock) installable on iPhone via Safari with no App Store account.
+483 backend tests, 81 frontend tests, CI green.
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
@@ -112,11 +115,49 @@ this is organized from).
       map & SMS (Phase 11)" section for the full write-up and deferred
       items (per-tenant Twilio-number routing, true background tracking).
 
-## Phase 12 — Offline-Capable Mobile Field App
-- The single most important gap for a mobile-mechanic-first wedge: an
-  offline-first PWA/mobile app for technicians — job queue, photo/video/
-  voice-note capture, digital signatures, time clock — works without
-  signal in marinas/boatyards and syncs later, matching DockMaster Mobile.
+## Phase 12 — Offline-Capable Mobile Field App — **COMPLETE (PWA, not native)**
+- [x] Installable PWA (`vite-plugin-pwa`: manifest + Workbox service worker,
+      app-shell precached for offline load) with honest iPhone install
+      instructions (Safari → Share → Add to Home Screen — no App Store
+      account needed). A true native App Store/Play Store app is a
+      **separate, user-initiated path** requiring the operator's own Apple
+      Developer/Google Play accounts and was deliberately **not attempted**
+      here — see the README's "Offline-first mobile field app (Phase 12)"
+      section for the full rationale on why PWA-first is the right call for
+      this wedge and what that trade-off costs versus native (no true
+      OS-level background task, no push notifications without iOS 16.4+ and
+      an already-installed PWA).
+- [x] Dedicated technician field view (`/field`, `/field/:id`) — separate
+      from the office `AppShell` — listing the signed-in technician's own
+      upcoming jobs, backed by an IndexedDB job cache that falls back
+      automatically (with an honest "showing cached data" indicator) when
+      the network fetch fails.
+- [x] Offline action queue (outbox pattern, client-side): clock-in/out and
+      photo/signature attachments are written to IndexedDB first and
+      replayed in order once connectivity returns, halting at the first
+      failure so events can never be delivered out of order. Client-
+      generated idempotency keys plus new backend unique partial indexes
+      (migration `0011`, `job_attachments`/`job_time_entries`) make replay
+      of an uncertain-outcome action safe to retry blindly — matching
+      DockMaster Mobile/ServiceTitan/Jobber's baseline field-app capability
+      of "works without signal in marinas/boatyards and syncs later."
+- [x] Field capture wired through that same offline queue: photo capture
+      (rear camera via `<input capture="environment">`), canvas-based
+      digital signature (Pointer Events, no external library), and a time
+      clock (clock in/out, with a one-open-entry-per-technician-per-job
+      backend constraint).
+- [ ] **Video/voice-note capture** — mentioned in this stub's original
+      scope note, but the actual Phase 12 spec that was implemented called
+      for photo + signature + time clock specifically, not richer media;
+      deliberately not built. Would be a natural follow-up alongside the
+      base64-in-Postgres → object-storage migration already staged via the
+      unused `storage_path` column.
+- [ ] **True background/mobile location tracking** from the field app —
+      the PWA shell now exists to eventually host it, but Phase 11's
+      foreground-tab-only `useLocationPing` was not wired into `/field`
+      this phase. Still open.
+- [ ] **Push notifications** — needs a VAPID keypair and a backend
+      subscription/send path; not implemented this phase.
 
 ## Phase 13 — Inventory, Parts & Vendor Integration
 - Barcode/ticket scanning, purchase orders, low-stock auto-reorder, vendor

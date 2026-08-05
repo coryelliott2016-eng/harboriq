@@ -16,13 +16,17 @@ import type {
   InboxMessage,
   InviteOut,
   InvitePreview,
+  ClockActionInput,
   Job,
+  JobAttachment,
+  JobAttachmentInput,
   JobDetail,
   JobDispatchScore,
   JobInput,
   JobLineItem,
   JobLineItemInput,
   JobStatus,
+  JobTimeEntry,
   LocationPingInput,
   LocationPingOut,
   Message,
@@ -233,4 +237,17 @@ export const messagesApi = {
   reply: (body: StaffMessageCreate) => api.post<Message>("/messages", body),
   markRead: (id: string) => api.post<Message>(`/messages/${id}/read`, {}),
   byJob: (jobId: string) => api.get<Message[]>(`/messages/by-job/${jobId}`),
+};
+
+// --- field app: attachments + time clock (Phase 12) ---
+
+export const fieldApi = {
+  attachments: (jobId: string) => api.get<JobAttachment[]>(`/jobs/${jobId}/attachments`),
+  addAttachment: (jobId: string, body: JobAttachmentInput) =>
+    api.post<JobAttachment>(`/jobs/${jobId}/attachments`, body),
+  clockIn: (jobId: string, body: ClockActionInput = {}) =>
+    api.post<JobTimeEntry>(`/jobs/${jobId}/clock-in`, body),
+  clockOut: (jobId: string, body: ClockActionInput = {}) =>
+    api.post<JobTimeEntry>(`/jobs/${jobId}/clock-out`, body),
+  timeEntries: (jobId: string) => api.get<JobTimeEntry[]>(`/jobs/${jobId}/time-entries`),
 };

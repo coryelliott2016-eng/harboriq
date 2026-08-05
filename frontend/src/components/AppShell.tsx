@@ -9,6 +9,11 @@ const navItems = [
   { to: "/invoices", label: "Invoices" },
 ];
 
+// Phase 12: link out to the standalone field app -- it deliberately isn't
+// rendered inside <AppShell /> (see FieldPage.tsx), so this is a plain
+// full navigation link rather than a <NavLink> route match.
+const FIELD_APP_HREF = "/field";
+
 export function AppShell() {
   const { user, logout } = useAuth();
 
@@ -19,6 +24,12 @@ export function AppShell() {
           <span className="text-lg font-bold tracking-tight text-slate-900">HarborIQ</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3">
+          <NavLink
+            to={FIELD_APP_HREF}
+            className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          >
+            Field app
+          </NavLink>
           {navItems.map((item) => (
             <NavLink
               key={item.to}

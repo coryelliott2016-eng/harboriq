@@ -1042,6 +1042,193 @@ for this phase.
 See `docs/COMPETITIVE_PARITY_ROADMAP.md`'s Phase 11 entry for how this maps
 to ServiceTitan's dispatch board as the competitive parity target.
 
+## Offline-first mobile field app (Phase 12)
+
+Phase 11 explicitly deferred true offline/background field capability to
+"whichever comes first: a native app or a PWA with a service worker." This
+phase picks the PWA path and closes that gap: technicians get an
+installable, offline-first mobile experience without anyone needing an
+Apple Developer account, App Store review, or a Google Play listing.
+
+**Why a PWA and not a native app.** A true native iOS/Android app is
+explicitly **out of scope** for this phase and was not attempted — it
+requires the operator's own Apple Developer Program membership ($99/yr) and
+Google Play Console account, plus app-store review cycles, neither of which
+this workspace has or can provision on someone else's behalf. A PWA gets
+real offline capability, a home-screen icon, and a standalone (no browser
+chrome) full-screen window on iPhone via Safari's "Add to Home Screen" —
+with zero app-store dependency. The trade-off, honestly stated: iOS Safari's
+PWA support is real but constrained versus native (background sync only
+fires on the `online` event while the app has been opened recently, not a
+true OS-level background task; push notifications on iOS PWAs need iOS
+16.4+ and the user must have already added the app to their home screen).
+That trade-off is acceptable for this phase's scope — offline job caching,
+an offline action queue, photo/signature capture, and time clock — none of
+which need a true background task, only "works while the app is open,
+survives a dropped connection, and syncs when connectivity returns."
+
+**Installable app shell — `vite-plugin-pwa`.** `frontend/vite.config.ts`
+adds the plugin in `generateSW` mode: it emits a web app manifest
+(`manifest.webmanifest` — name, theme color `#7e14ff`, `display:
+"standalone"`, `start_url: "/field"`) and a Workbox-generated service worker
+(`sw.js`) that precaches the app shell (JS/CSS/HTML — 17 entries, ~600 KiB)
+so the app itself loads offline, not just previously-viewed data.
+Critically, **API responses are never cached by the service worker** — the
+runtime caching rule for any `/api/` path is `NetworkOnly`, on purpose:
+IndexedDB (below), not the HTTP cache, is the single source of truth for
+offline job data, so there is exactly one place a contributor needs to look
+for "what does the technician see when offline," not two caches that can
+disagree. `index.html` adds the three meta/link tags iOS Safari actually
+reads (`apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`,
+`apple-touch-icon`) — the web app manifest alone is largely ignored by iOS.
+
+**IndexedDB job cache — `frontend/src/lib/offlineDb.ts`.** A small,
+dependency-free wrapper around the browser's IndexedDB (no `idb`/`dexie`
+dependency added — the schema is two stores and does not need a query
+layer): `cached_jobs` (keyed by job id) and `pending_actions` (keyed by
+idempotency key, see below). `frontend/src/hooks/useFieldJobs.ts` fetches
+the technician's jobs from the network, writes a fresh copy to
+`cached_jobs` on every successful load, and — this is the offline path —
+falls back to whatever is already cached when the network fetch fails,
+surfacing a `fromCache: true` flag the UI uses to show an honest
+"showing cached data" banner rather than silently presenting stale data as
+live.
+
+**Offline action queue (outbox) — `frontend/src/lib/offlineQueue.ts`.**
+Every field action a technician takes while potentially offline (clock in,
+clock out, add a photo/signature attachment) is first written to the
+`pending_actions` IndexedDB store, then replayed against the real API as
+soon as a send succeeds. This deliberately mirrors the backend's own outbox
+pattern already used for email/SMS dispatch (see "Auth hardening" and
+"Live dispatch board, map & SMS" above) — same idea, client-side: never
+lose an action to a dropped connection, and make retrying safe. Replay is
+strictly in-order (oldest action first) and **halts at the first failure**
+rather than skipping ahead — a clock-out must never reach the server before
+an earlier clock-in that is still stuck offline, since the backend's
+one-open-entry-per-technician-per-job constraint (migration `0011`'s
+`uq_job_time_entries_one_open_per_tech_job`) depends on entries arriving in
+the order they actually happened. `frontend/src/hooks/useOfflineQueue.ts`
+is the React binding: it auto-replays on mount and again on the browser's
+`online` event, exposing `pendingCount` so the UI can show "3 actions
+waiting to sync."
+
+**Idempotency keys — the mechanism that makes retries safe.** Every queued
+action carries a client-generated `idempotencyKey` (`crypto.randomUUID()`,
+minted once at enqueue time and never regenerated on retry —
+`newIdempotencyKey()` in `offlineQueue.ts`). The backend's migration `0011`
+adds unique partial indexes on `(company_id, idempotency_key)` for both
+`job_attachments` and `job_time_entries`; `app/services/field_app.py`'s
+`add_attachment`/`clock_in`/`clock_out` all check for an existing row with
+that key first and **return the existing row instead of erroring or
+inserting a duplicate**. That is what makes it safe for the client to blindly
+resend an action it is unsure actually landed (e.g. the request succeeded
+server-side but the response was lost before the client saw it, a common
+real-world case on a flaky marine-yard Wi-Fi connection): the same key
+always resolves to the same row, however many times it is sent.
+
+**Field view — `/field` and `/field/:id` (`frontend/src/pages/FieldPage.tsx`).**
+A separate, deliberately minimal route tree from the main `AppShell` admin
+UI (added as its own top-level `ProtectedRoute` block in `App.tsx`, not
+nested inside `AppShell`) — this is the view a technician actually uses in
+the field, not the office/admin dashboard shrunk down. `/field` lists the
+signed-in technician's own upcoming jobs (`technician_id` filtered
+client-side against the already-fetched job list — no new backend endpoint
+was needed), sorted by scheduled time, excluding completed/canceled jobs.
+`/field/:id` is the per-job action screen: clock in/out buttons, a photo
+capture input (`<input type="file" accept="image/*" capture="environment">`,
+which opens the rear camera directly on a phone rather than a generic file
+picker), and a signature pad. Every one of those three actions is enqueued
+through `useOfflineQueue` — there is no code path in the field view that
+calls the API directly, so "works offline" is not a special case bolted on,
+it is the only way these actions are ever sent.
+
+**Signature capture — `frontend/src/components/SignaturePad.tsx`.** A plain
+HTML5 `<canvas>` (no signature-pad library dependency), using Pointer Events
+(not separate mouse/touch handlers) so the same code path handles a
+technician's finger on an iPhone and a mouse in a desktop browser. "Save"
+is disabled until at least one stroke has been drawn, and exports
+`canvas.toDataURL("image/png")` — a base64 PNG data URL — which is enqueued
+as a `kind: "signature"` attachment.
+
+**Storage — base64-in-Postgres, honestly an MVP choice.** Both photo and
+signature attachments are stored as base64-encoded bytes directly in the
+`job_attachments` table (migration `0011`), not in S3/object storage. This
+was the pragmatic choice for this phase's scope (no object-storage
+credentials exist in this workspace, and the volume of attachments a single
+marine service company generates does not yet justify the added
+infrastructure), but it does not paint the schema into a corner: the table
+already carries an unused `storage_path` column reserved for a future
+migration-free cutover to S3/R2/GCS — the day it is needed, a backfill job
+can move existing rows out of Postgres and populate `storage_path`, and new
+writes can switch to it, without an ALTER TABLE. This is the same
+"documented, not hidden" MVP-storage trade-off pattern already used
+elsewhere in this repo (e.g. the in-process rate limiter ahead of a future
+Redis-backed one — see "Auth hardening" above).
+
+**Install prompt — `frontend/src/components/InstallAppBanner.tsx` and
+`frontend/src/hooks/useInstallPrompt.ts`.** A dismissible banner (dismissal
+remembered in `localStorage`) that adapts to the browser: Chrome/Android
+fires a real `beforeinstallprompt` event the hook listens for, so the
+banner can show a one-tap "Install" button; iOS Safari fires no such event
+(there is no programmatic install API on iOS), so the banner instead shows
+the manual steps — see "Installing on an iPhone" below.
+
+**Installing on an iPhone (no App Store account needed):**
+1. Open the HarborIQ web app URL in **Safari** (must be Safari — Chrome/
+   Firefox on iOS cannot install PWAs to the home screen because they are
+   required by Apple to use Safari's underlying WebKit but not its
+   install UI).
+2. Tap the **Share** icon (square with an arrow pointing up) in Safari's
+   toolbar.
+3. Scroll down and tap **"Add to Home Screen."**
+4. Confirm the name ("HarborIQ") and tap **"Add."**
+5. The HarborIQ icon now appears on the home screen like any other app; 
+   opening it launches in a standalone window (no Safari address bar/tabs),
+   starting on the technician's `/field` job list.
+
+**Deferred, on purpose (this phase):**
+- **A true native App Store / Play Store app.** Requires the operator's own
+  Apple Developer Program and Google Play Console accounts — not something
+  obtainable inside this workspace on the user's behalf. The PWA above is
+  the full extent of "installable mobile app" for this phase.
+- **True background location tracking from the field app.** Phase 11's
+  README already flagged this as the reason Phase 12 exists; this phase
+  shipped the PWA shell, offline queue, and field-capture features, but did
+  **not** wire `useLocationPing` into the new `/field` view or add a
+  service-worker background-sync-based location beacon. The existing
+  foreground-tab location ping (Phase 11) still only works from the main
+  staff web app. Revisit as a follow-up now that the PWA shell exists to
+  host it.
+- **Push notifications.** iOS 16.4+ supports web push for installed PWAs,
+  but it requires a VAPID keypair, a push subscription endpoint, and a
+  notification-sending path on the backend — none of which were in this
+  phase's scope. The install banner and offline-sync UI are the only
+  "the app got your attention" mechanisms today.
+- **Video/voice-note attachments.** Only photo (via `<input
+  capture="environment">`) and canvas-drawn signature attachments are
+  implemented, matching this phase's actual spec — an earlier roadmap stub
+  mentioned richer media capture, but photo + signature + time clock is the
+  scope that was actually built and tested here.
+- **True live-ticking "still clocked in" duration.** `JobDetailPage`'s
+  admin-side time-entry table computes the elapsed duration for an open
+  (not-yet-clocked-out) entry once, at render/mount time, rather than
+  ticking a live clock — a deliberate simplicity trade-off (calling
+  `Date.now()` on every render is flagged by React's render-purity rules
+  and would need a `setInterval`-driven re-render to tick live, which is
+  more machinery than a staff-side summary table needs).
+- **Conflict resolution beyond "first write wins."** If the same job is
+  edited from both the admin UI and updated in a technician's stale
+  IndexedDB cache while offline, the queued action is simply replayed once
+  connectivity returns with no diff/merge step — acceptable for this
+  phase's action types (clock events and attachments are append-only, not
+  edits to a shared mutable field, so there is no real conflict to resolve
+  yet), but would need real thought if a future phase adds an offline-
+  editable mutable field.
+
+See `docs/COMPETITIVE_PARITY_ROADMAP.md`'s Phase 12 entry for how this maps
+to ServiceTitan/Jobber's native mobile technician apps as the competitive
+parity target.
+
 ## Project layout
 
 ```
@@ -1317,7 +1504,19 @@ drag-and-drop interaction that triggers the assign call) and the
 `useLocationPing` hook (`src/hooks/useLocationPing.test.ts` —
 non-technician no-op, unsupported-browser detection, a successful ping, and
 permission denial), for the same branching-coverage reason as every prior
-phase's component tests.
+phase's component tests. Phase 12 added the highest-value tests of this
+phase — `src/lib/offlineQueue.test.ts` (enqueue/list/remove, in-order
+replay, halt-on-first-failure, attempt-count/lastError tracking on
+failure, and an explicit idempotent-duplicate-replay test simulating a
+response lost after the server already processed the request) — plus
+`src/hooks/useFieldJobs.test.ts` (network-success caches to IndexedDB;
+network-failure falls back to the cache with `fromCache: true`; no cache
+and offline surfaces an error; `refresh()` re-fetches) and
+`src/components/SignaturePad.test.tsx` (Save disabled until a stroke is
+drawn, Pointer Event-driven drawing enabling Save and exporting a data URL,
+Clear, Cancel, and the `saving` disabled state). The IndexedDB-backed tests
+use `fake-indexeddb` (added as a devDependency and wired into
+`src/test/setup.ts`) since jsdom has no real IndexedDB implementation.
 
 ## Deployment & observability
 
@@ -1396,8 +1595,11 @@ just the *what*, consolidated so nothing is scattered or repeated.
   sandbox's OS image, an environment limitation rather than a scope
   decision.
 - httpOnly-cookie refresh-token storage (currently `localStorage`).
-- Optimistic UI updates, offline support, a design system beyond the
-  shared Tailwind components.
+- Optimistic UI updates, a design system beyond the shared Tailwind
+  components. (Offline support shipped in Phase 12 for the `/field`
+  technician view specifically — see below; the main admin `AppShell` is
+  still online-only by design, since office staff are not the audience with
+  a spotty-connectivity problem.)
 - Real-time messaging (`PortalMessages`/`MessagesPage` rely on `react-query`
   refetch, not a socket) — see "Customer portal / messaging" below.
 
@@ -1438,6 +1640,26 @@ for the full rationale):**
 - **Real-time board/map updates (WebSockets/SSE).** The board and map
   refetch on an interval and on manual actions via `react-query`, the same
   trade-off already made for the customer portal's messaging.
+
+**Offline-first mobile field app (see "Offline-first mobile field app
+(Phase 12)" above for the full rationale):**
+- **A true native App Store/Play Store app.** Requires the operator's own
+  Apple Developer/Google Play accounts; the installable PWA is the full
+  extent of this phase's "mobile app."
+- **True background/mobile location tracking from the field app.** The PWA
+  shell now exists to eventually host it, but `useLocationPing` was not
+  wired into `/field` this phase — foreground-tab-only location ping from
+  Phase 11 is still the only location signal.
+- **Push notifications**, requiring a VAPID keypair and backend
+  subscription/send path — not implemented.
+- **Video/voice-note attachments** — only photo and canvas-signature
+  attachments were in this phase's actual scope.
+- **Live-ticking "still clocked in" duration** in the admin `JobDetailPage`
+  view — computed once at render/mount, not on a ticking interval.
+- **Offline conflict resolution beyond append-only actions** — acceptable
+  today since clock events/attachments never conflict with each other, but
+  would need real design work for any future offline-editable mutable
+  field.
 
 **Auth:**
 - No MFA yet, though `users.mfa_secret_enc` is reserved for it.

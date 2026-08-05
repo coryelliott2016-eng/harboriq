@@ -867,6 +867,99 @@ class Message(UUIDPKMixin, Base):
     )
 
 
+class JobAttachmentKind(StrEnum):
+    """Mirrors the `job_attachment_kind` PostgreSQL enum (migration 0011)."""
+
+    PHOTO = "photo"
+    SIGNATURE = "signature"
+    OTHER = "other"
+
+
+class JobAttachment(UUIDPKMixin, Base):
+    """A photo or digital signature captured against a job (Phase 12).
+
+    `data` holds base64-encoded bytes — see the migration-0011 SQL comment for
+    why this MVP fallback was chosen over introducing object storage.
+    `idempotency_key` lets the offline-sync queue safely replay an upload
+    without creating a duplicate row.
+    """
+
+    __tablename__ = "job_attachments"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(
+        Enum(
+            JobAttachmentKind,
+            name="job_attachment_kind",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+    )
+    data: Mapped[Optional[str]] = mapped_column(Text)
+    storage_path: Mapped[Optional[str]] = mapped_column(Text)
+    content_type: Mapped[str] = mapped_column(
+        Text, nullable=False, default="image/jpeg", server_default="image/jpeg"
+    )
+    idempotency_key: Mapped[Optional[str]] = mapped_column(Text)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "data IS NOT NULL OR storage_path IS NOT NULL",
+            name="ck_job_attachments_has_payload",
+        ),
+        Index("idx_job_attachments_job", "company_id", "job_id"),
+    )
+
+
+class JobTimeEntry(UUIDPKMixin, Base):
+    """A technician's clock-in/clock-out window against a job (Phase 12).
+
+    At most one OPEN entry (`clocked_out_at IS NULL`) may exist per
+    (job, technician) — enforced by a partial unique index
+    (`uq_job_time_entries_one_open_per_tech_job`), not just the service layer.
+    """
+
+    __tablename__ = "job_time_entries"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=False
+    )
+    technician_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    clocked_in_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    clocked_out_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "clocked_out_at IS NULL OR clocked_out_at >= clocked_in_at",
+            name="ck_job_time_entries_clockout_after_clockin",
+        ),
+        Index("idx_job_time_entries_job", "company_id", "job_id"),
+    )
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

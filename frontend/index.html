@@ -3,7 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#7e14ff" />
+    <!-- iOS Safari ignores most of the web app manifest, so these three tags
+         are what actually make "Add to Home Screen" behave like an app
+         (standalone window, no browser chrome, correct icon) on iPhone. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="HarborIQ" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>HarborIQ</title>
   </head>
   <body>
