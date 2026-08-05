@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setAccessToken, setRefreshToken } from "./tokenStore";
+import { setAccessToken } from "./tokenStore";
 import { billingApi, invoicesApi, reportsApi } from "./services";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -16,7 +16,6 @@ describe("Phase 8 API client additions", () => {
   beforeEach(() => {
     localStorage.clear();
     setAccessToken("access-token");
-    setRefreshToken("refresh-token");
     vi.stubGlobal("fetch", vi.fn());
   });
 

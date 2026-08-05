@@ -20,10 +20,6 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str = Field(min_length=1)
-
-
 class LogoutRequest(BaseModel):
     all_devices: bool = False
 
@@ -107,8 +103,18 @@ class UserUpdate(BaseModel):
 
 
 class TokenPair(BaseModel):
+    """Access-token half of a session (Phase 16).
+
+    `refresh_token` was removed from this JSON body -- the refresh token is
+    now set as an httpOnly cookie by the backend (see
+    `app/api/v1/routes/auth.py`'s `_set_refresh_cookie`) and is never visible
+    to frontend JavaScript, so it has no reason to also appear here. Every
+    signup/login/refresh/accept-invite response still returns exactly one
+    access token in this shape; only its transport for the refresh token
+    changed.
+    """
+
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
 
@@ -163,3 +169,55 @@ class InvitePreviewOut(BaseModel):
 class AcceptInviteRequest(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
     full_name: str | None = Field(default=None, max_length=200)
+
+
+# ---------------------------------------------------------------------------
+# MFA / TOTP (Phase 16)
+# ---------------------------------------------------------------------------
+class MfaEnrollResponse(BaseModel):
+    """Returned by `POST /users/me/mfa/enroll`.
+
+    `otpauth_uri` is what `qrcode.react` renders into a scannable QR code;
+    `secret` is the same value in plain base32 for manual entry when
+    scanning isn't possible. Neither is retrievable again after this call —
+    only the encrypted form (`users.mfa_secret_enc`) persists server-side.
+    """
+
+    otpauth_uri: str
+    secret: str
+
+
+class MfaConfirmRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=64)
+
+
+class MfaConfirmResponse(BaseModel):
+    """Returned by `POST /users/me/mfa/confirm`. `backup_codes` is shown
+    exactly once — the client should prompt the user to save/print them."""
+
+    mfa_enabled: bool = True
+    backup_codes: list[str]
+
+
+class MfaDisableRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class MfaStatusOut(BaseModel):
+    """Returned by `GET /users/me/mfa`."""
+
+    mfa_enabled: bool
+    remaining_backup_codes: int
+
+
+class LoginMfaRequiredResponse(BaseModel):
+    """Returned by `POST /auth/login` INSTEAD OF `AuthResponse` when the
+    account has MFA active — no access/refresh tokens are issued yet."""
+
+    mfa_required: bool = True
+    pre_auth_token: str
+
+
+class LoginMfaRequest(BaseModel):
+    pre_auth_token: str = Field(min_length=1)
+    code: str = Field(min_length=6, max_length=64)

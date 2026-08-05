@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -25,12 +25,21 @@ from app.api.deps import (
     require_operations,
 )
 from app.api.errors import http_errors
-from app.schemas.auth import TeamMemberOut, UserUpdate
+from app.schemas.auth import (
+    MfaConfirmRequest,
+    MfaConfirmResponse,
+    MfaDisableRequest,
+    MfaEnrollResponse,
+    MfaStatusOut,
+    TeamMemberOut,
+    UserUpdate,
+)
 from app.schemas.dispatch_board import (
     LocationPing,
     LocationPingOut,
     TechnicianLocationOut,
 )
+from app.services import mfa as mfa_service
 from app.services import users as users_service
 from app.services.auth import AuthenticatedUser
 from app.services.users import FieldNotPermitted
@@ -134,3 +143,77 @@ def list_technician_locations(
     """
     rows = users_service.list_technician_locations(db, company_id)
     return [TechnicianLocationOut.model_validate(row) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# MFA / TOTP (Phase 16) — see app/services/mfa.py for the full flow writeup.
+# ---------------------------------------------------------------------------
+@router.get("/me/mfa", response_model=MfaStatusOut)
+def mfa_status(
+    actor: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Whether the caller has MFA active, and how many backup codes remain."""
+    enabled = mfa_service.is_mfa_active(db, company_id=actor.company_id, user_id=actor.id)
+    remaining = (
+        mfa_service.remaining_backup_code_count(
+            db, company_id=actor.company_id, user_id=actor.id
+        )
+        if enabled
+        else 0
+    )
+    return MfaStatusOut(mfa_enabled=enabled, remaining_backup_codes=remaining)
+
+
+@router.post("/me/mfa/enroll", response_model=MfaEnrollResponse)
+def mfa_enroll(
+    actor: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Start (or restart) TOTP enrollment. Does NOT activate MFA yet — see
+    `POST /users/me/mfa/confirm`."""
+    try:
+        result = mfa_service.enroll(db, company_id=actor.company_id, user_id=actor.id)
+    except mfa_service.MfaAlreadyEnabled as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return MfaEnrollResponse(otpauth_uri=result.otpauth_uri, secret=result.secret)
+
+
+@router.post("/me/mfa/confirm", response_model=MfaConfirmResponse)
+def mfa_confirm(
+    body: MfaConfirmRequest,
+    actor: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Verify a live TOTP code and activate MFA. Returns one-time backup codes."""
+    try:
+        codes = mfa_service.confirm(
+            db, company_id=actor.company_id, user_id=actor.id, code=body.code
+        )
+    except mfa_service.MfaAlreadyEnabled as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except mfa_service.MfaNotPending as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except mfa_service.InvalidMfaCode as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    return MfaConfirmResponse(backup_codes=codes)
+
+
+@router.post("/me/mfa/disable", status_code=status.HTTP_204_NO_CONTENT)
+def mfa_disable(
+    body: MfaDisableRequest,
+    actor: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Disable MFA. Requires the caller's current password (see
+    `app/services/mfa.py::disable` for why a live session alone is not
+    enough for this particular downgrade)."""
+    try:
+        mfa_service.disable(
+            db, company_id=actor.company_id, user_id=actor.id, password=body.password
+        )
+    except mfa_service.InvalidPassword as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    except mfa_service.MfaNotEnabled as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { setAccessToken, setRefreshToken } from "../lib/tokenStore";
+import { setAccessToken } from "../lib/tokenStore";
 import { ArAgingPage } from "./ArAgingPage";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -24,7 +24,6 @@ describe("ArAgingPage", () => {
   beforeEach(() => {
     localStorage.clear();
     setAccessToken("access-token");
-    setRefreshToken("refresh-token");
     vi.stubGlobal("fetch", vi.fn());
   });
 

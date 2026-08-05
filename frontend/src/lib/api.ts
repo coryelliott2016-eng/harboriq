@@ -1,11 +1,5 @@
 import type { ApiErrorBody, AuthResponse } from "../types/api";
-import {
-  clearSession,
-  getAccessToken,
-  getRefreshToken,
-  setAccessToken,
-  setRefreshToken,
-} from "./tokenStore";
+import { clearSession, getAccessToken, getCsrfToken, setAccessToken } from "./tokenStore";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const API_BASE = `${API_URL.replace(/\/$/, "")}/api/v1`;
@@ -42,27 +36,36 @@ function forceLogout(): void {
 
 let refreshInFlight: Promise<boolean> | null = null;
 
-/** Exchange the stored refresh token for a new pair. Returns true on success.
- * Concurrent callers share one in-flight refresh so a burst of 401s from
- * parallel requests does not each independently rotate the refresh token
- * (which would invalidate the others, per the backend's single-use
- * rotation). */
+/** Exchange the httpOnly refresh cookie for a new access token. Returns
+ * true on success. Concurrent callers share one in-flight refresh so a
+ * burst of 401s from parallel requests does not each independently rotate
+ * the refresh token (which would invalidate the others, per the backend's
+ * single-use rotation).
+ *
+ * Phase 16: no request body -- the refresh token itself lives in an
+ * httpOnly cookie this code can't read (the whole point). `credentials:
+ * "include"` is what makes the browser attach that cookie to a
+ * cross-origin request (frontend and API are separate origins in every
+ * deployment topology this app documents). The `X-CSRF-Token` header is
+ * the double-submit CSRF check the backend requires for this endpoint --
+ * see `app/core/csrf.py`. A missing CSRF cookie (no prior session) means
+ * there is nothing to refresh, so this short-circuits to false rather than
+ * making a request that would 403. */
 async function tryRefresh(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) return false;
+    const csrfToken = getCsrfToken();
+    if (!csrfToken) return false;
     try {
       const resp = await fetch(`${API_BASE}/auth/refresh`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken },
       });
       if (!resp.ok) return false;
       const data: AuthResponse = await resp.json();
       setAccessToken(data.tokens.access_token);
-      setRefreshToken(data.tokens.refresh_token);
       return true;
     } catch {
       return false;
@@ -106,6 +109,7 @@ async function rawRequest<T>(path: string, options: RequestOptions): Promise<T> 
   const resp = await fetch(buildUrl(path, options.query), {
     method: options.method ?? "GET",
     headers,
+    credentials: "include",
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
 
@@ -182,7 +186,7 @@ export async function downloadFile(
     const token = getAccessToken();
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    return fetch(buildUrl(path, query), { method: "GET", headers });
+    return fetch(buildUrl(path, query), { method: "GET", headers, credentials: "include" });
   };
 
   let resp = await doFetch();

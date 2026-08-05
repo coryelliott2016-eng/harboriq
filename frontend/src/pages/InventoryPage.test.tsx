@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "../context/AuthContext";
-import { setAccessToken, setRefreshToken } from "../lib/tokenStore";
+import { setAccessToken } from "../lib/tokenStore";
 import { InventoryPage } from "./InventoryPage";
 import type { InventoryItem, TeamMember, Vendor } from "../types/api";
 
@@ -12,6 +12,19 @@ function jsonResponse(body: unknown, status = 200) {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/** Phase 16: AuthProvider's session-hydration effect gates on the readable
+ * CSRF cookie (there is no frontend-visible refresh token anymore -- see
+ * src/lib/tokenStore.ts::getCsrfToken). Setting it here is what makes the
+ * provider actually call the mocked `authMeRoute()` below and populate
+ * `user`. */
+function setCsrfCookie(value: string | null) {
+  if (value) {
+    document.cookie = `csrf_token=${value}; path=/`;
+  } else {
+    document.cookie = "csrf_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  }
 }
 
 const OWNER: TeamMember = {
@@ -95,11 +108,12 @@ describe("InventoryPage", () => {
   beforeEach(() => {
     localStorage.clear();
     setAccessToken("access-token");
-    setRefreshToken("refresh-token");
+    setCsrfCookie("test-csrf-token");
     vi.stubGlobal("fetch", vi.fn());
   });
 
   afterEach(() => {
+    setCsrfCookie(null);
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

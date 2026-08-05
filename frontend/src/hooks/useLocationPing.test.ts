@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { setAccessToken, setRefreshToken } from "../lib/tokenStore";
+import { setAccessToken } from "../lib/tokenStore";
 import { useLocationPing } from "./useLocationPing";
 import type { User } from "../types/api";
 
@@ -26,7 +26,6 @@ describe("useLocationPing", () => {
   beforeEach(() => {
     localStorage.clear();
     setAccessToken("access-token");
-    setRefreshToken("refresh-token");
     vi.stubGlobal("fetch", vi.fn());
   });
 

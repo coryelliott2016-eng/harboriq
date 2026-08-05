@@ -164,6 +164,13 @@ class User(UUIDPKMixin, TimestampMixin, Base):
         server_default=UserRole.TECHNICIAN.value,
     )
     mfa_secret_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    #: Set only once a TOTP code has actually been verified against
+    #: `mfa_secret_enc` (migration 0014) -- distinguishes "enrollment in
+    #: progress" (secret written, never confirmed) from "MFA active"; the
+    #: login flow (`app/services/auth.py::login`) gates its second-factor
+    #: requirement on THIS column, never on `mfa_secret_enc` alone, so an
+    #: abandoned enrollment can never lock a user out.
+    mfa_enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -255,6 +262,38 @@ class UserSession(UUIDPKMixin, Base):
     __table_args__ = (
         Index("idx_user_sessions_family", "family_id"),
         Index("idx_user_sessions_user", "company_id", "user_id"),
+    )
+
+
+class MfaBackupCode(UUIDPKMixin, Base):
+    """A single-use MFA recovery code (migration 0014).
+
+    Generated once, in a batch, at `POST /users/me/mfa/confirm` time (see
+    `app/services/mfa.py`). `code_hash` uses the exact same Argon2id
+    `PasswordHasher` as `app/core/security.py::hash_password` -- a backup
+    code is functionally a one-time-use short password, so it gets the same
+    treatment rather than a bespoke hashing scheme. `used_at` is claimed via
+    a conditional `UPDATE ... WHERE used_at IS NULL`, mirroring the
+    claim-not-check-then-act discipline `user_sessions` rotation already
+    uses, so two concurrent redemption attempts of the same code can never
+    both succeed.
+    """
+
+    __tablename__ = "mfa_backup_codes"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    code_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_mfa_backup_codes_user", "company_id", "user_id"),
     )
 
 

@@ -17,7 +17,11 @@ def test_signup_creates_tenant_and_owner(client, service_db):
     assert body["user"]["is_active"] is True
     assert body["tokens"]["token_type"] == "bearer"
     assert body["tokens"]["expires_in"] == settings.access_token_ttl_minutes * 60
-    assert body["tokens"]["access_token"] and body["tokens"]["refresh_token"]
+    assert body["tokens"]["access_token"]
+    # Phase 16: no `refresh_token` field in the JSON body anymore -- it's an
+    # httpOnly cookie instead (see tests/test_auth_cookie_refresh.py for
+    # cookie-specific coverage).
+    assert "refresh_token" not in body["tokens"]
 
     company_id = body["user"]["company_id"]
     row = service_db.execute(
@@ -99,6 +103,7 @@ def test_signup_rejects_a_weak_password(client, password):
 def test_login_succeeds_and_issues_a_fresh_session(client, service_db):
     email = unique_email()
     created = signup(client, email=email)
+    signup_refresh_cookie = client.cookies["refresh_token"]
 
     resp = client.post(
         "/api/v1/auth/login", json={"email": email, "password": DEFAULT_PASSWORD}
@@ -106,7 +111,9 @@ def test_login_succeeds_and_issues_a_fresh_session(client, service_db):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["user"]["id"] == created["user"]["id"]
-    assert body["tokens"]["refresh_token"] != created["tokens"]["refresh_token"]
+    # Phase 16: refresh token is a cookie, not a JSON field -- but a fresh
+    # login must still issue a distinct session cookie from signup's.
+    assert resp.cookies["refresh_token"] != signup_refresh_cookie
 
     sessions = service_db.execute(
         text("SELECT count(*) FROM user_sessions WHERE user_id = :uid"),

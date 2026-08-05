@@ -5,13 +5,16 @@
 // it readable in localStorage/sessionStorage if the page is compromised via
 // XSS.
 //
-// Refresh token: stored in localStorage. This is an accepted MVP shortcut,
-// NOT a production-hardened choice — a refresh token readable by any script
-// on the page is a real XSS blast-radius concern. The hardening item for
-// later is moving refresh-token storage to an httpOnly, Secure, SameSite
-// cookie set by the backend, which JS can never read. See README "Frontend"
-// section, "Deferred", for tracking.
-const REFRESH_TOKEN_KEY = "harboriq.refresh_token";
+// Refresh token: Phase 16 -- moved OFF the frontend entirely. The backend
+// now sets it as an httpOnly, Secure (outside local dev), SameSite=Lax
+// cookie (see `app/api/v1/routes/auth.py::_set_refresh_cookie`), which this
+// module -- or any other JavaScript on the page -- can never read or write.
+// There is deliberately no `getRefreshToken`/`setRefreshToken` here anymore;
+// the browser attaches the cookie automatically on requests to the API
+// origin with `credentials: "include"` (see `src/lib/api.ts`). The matching
+// CSRF cookie (`csrf_token`) IS readable by design -- see
+// `getCsrfToken` below and `app/core/csrf.py`'s docstring for why.
+const CSRF_COOKIE_NAME = "csrf_token";
 
 let accessToken: string | null = null;
 
@@ -23,19 +26,20 @@ export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
-}
-
-export function setRefreshToken(token: string | null): void {
-  if (token) {
-    localStorage.setItem(REFRESH_TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-  }
+/** Reads the non-httpOnly double-submit CSRF cookie set alongside the
+ * refresh-token cookie, so it can be echoed back as the `X-CSRF-Token`
+ * header on `/auth/refresh`. Returns null if the cookie isn't set (no
+ * session yet, or the cookie already expired). */
+export function getCsrfToken(): string | null {
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${CSRF_COOKIE_NAME}=`));
+  return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : null;
 }
 
 export function clearSession(): void {
   setAccessToken(null);
-  setRefreshToken(null);
+  // The httpOnly refresh cookie itself can only be cleared by the backend
+  // (POST /auth/logout, or the server clearing it on a failed refresh) --
+  // there is nothing for client JS to remove for that one.
 }

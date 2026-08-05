@@ -4,6 +4,10 @@ import type {
   ArAgingReport,
   AuthResponse,
   CashFlowReport,
+  LoginMfaRequiredResponse,
+  MfaConfirmResponse,
+  MfaEnrollResponse,
+  MfaStatus,
   PnlReport,
   ConnectOnboardingResponse,
   ConnectStatusResponse,
@@ -74,7 +78,15 @@ export const authApi = {
   }) => apiRequest<AuthResponse>("/auth/signup", { method: "POST", body, anonymous: true }),
 
   login: (body: { email: string; password: string }) =>
-    apiRequest<AuthResponse>("/auth/login", { method: "POST", body, anonymous: true }),
+    apiRequest<AuthResponse | LoginMfaRequiredResponse>("/auth/login", {
+      method: "POST",
+      body,
+      anonymous: true,
+    }),
+
+  // Second step of a login that came back with `mfa_required: true` above.
+  loginMfa: (body: { pre_auth_token: string; code: string }) =>
+    apiRequest<AuthResponse>("/auth/login/mfa", { method: "POST", body, anonymous: true }),
 
   me: () => api.get<User>("/auth/me"),
 
@@ -99,6 +111,17 @@ export const authApi = {
       body,
       anonymous: true,
     }),
+};
+
+// --- self-service MFA / TOTP (Phase 16) ---
+// Prefix mirrors app/api/v1/routes/users.py's `/users/me/mfa/*` endpoints.
+export const mfaApi = {
+  status: () => api.get<MfaStatus>("/users/me/mfa"),
+  enroll: () => api.post<MfaEnrollResponse>("/users/me/mfa/enroll", {}),
+  confirm: (code: string) =>
+    api.post<MfaConfirmResponse>("/users/me/mfa/confirm", { code }),
+  disable: (password: string) =>
+    api.post<void>("/users/me/mfa/disable", { password }),
 };
 
 // --- team roster + self-service/admin profile editing (Phase 10) ---

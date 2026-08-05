@@ -33,9 +33,11 @@ export interface UserUpdateInput {
   is_active?: boolean | null;
 }
 
+// Phase 16: `refresh_token` removed -- it now travels as an httpOnly cookie
+// set by the backend (see app/api/v1/routes/auth.py), never in this JSON
+// body. Mirrors app/schemas/auth.py::TokenPair exactly.
 export interface TokenPair {
   access_token: string;
-  refresh_token: string;
   token_type: string;
   expires_in: number;
 }
@@ -43,6 +45,32 @@ export interface TokenPair {
 export interface AuthResponse {
   user: User;
   tokens: TokenPair;
+}
+
+// --- MFA / TOTP (Phase 16) ---
+// See app/schemas/auth.py for the mirrored Pydantic models.
+
+// POST /auth/login returns EITHER this shape OR AuthResponse -- there is no
+// shared discriminant field named the same in both, so callers narrow on
+// `"mfa_required" in body` (see lib/services.ts::authApi.login).
+export interface LoginMfaRequiredResponse {
+  mfa_required: true;
+  pre_auth_token: string;
+}
+
+export interface MfaStatus {
+  mfa_enabled: boolean;
+  remaining_backup_codes: number;
+}
+
+export interface MfaEnrollResponse {
+  otpauth_uri: string;
+  secret: string;
+}
+
+export interface MfaConfirmResponse {
+  mfa_enabled: true;
+  backup_codes: string[];
 }
 
 // --- Invite-link user provisioning ---

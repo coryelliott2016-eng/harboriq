@@ -117,9 +117,11 @@ describe("AcceptInvitePage", () => {
             role: "technician",
             is_active: true,
           },
+          // Phase 16: no `refresh_token` field -- it's set as an httpOnly
+          // cookie by the backend, invisible to this JSON body and to this
+          // test.
           tokens: {
             access_token: "tok",
-            refresh_token: "refresh",
             token_type: "bearer",
             expires_in: 900,
           },

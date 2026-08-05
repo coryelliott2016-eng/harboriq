@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { setAccessToken, setRefreshToken } from "../lib/tokenStore";
+import { setAccessToken } from "../lib/tokenStore";
 import { ReportsPage } from "./ReportsPage";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -79,7 +79,6 @@ describe("ReportsPage", () => {
   beforeEach(() => {
     localStorage.clear();
     setAccessToken("access-token");
-    setRefreshToken("refresh-token");
     vi.stubGlobal("fetch", vi.fn());
     URL.createObjectURL = vi.fn(() => "blob:mock");
     URL.revokeObjectURL = vi.fn();

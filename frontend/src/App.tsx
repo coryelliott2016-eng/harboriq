@@ -20,6 +20,7 @@ import { MessagesPage } from "./pages/MessagesPage";
 import { PublicInvoicePage } from "./pages/PublicInvoicePage";
 import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { SecuritySettingsPage } from "./pages/SecuritySettingsPage";
 import { SignupPage } from "./pages/SignupPage";
 import { TeamPage } from "./pages/TeamPage";
 import { VendorsPage } from "./pages/VendorsPage";
@@ -183,6 +184,7 @@ export default function App() {
           <Route path="/reports" element={<ReportsRoute />} />
           <Route path="/messages" element={<MessagesRoute />} />
           <Route path="/settings/billing" element={<BillingSettingsRoute />} />
+          <Route path="/settings/security" element={<SecuritySettingsPage />} />
           <Route path="/team" element={<TeamRoute />} />
           <Route path="/inventory" element={<InventoryRoute />} />
           <Route path="/vendors" element={<VendorsRoute />} />

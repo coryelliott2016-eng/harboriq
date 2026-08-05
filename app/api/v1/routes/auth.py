@@ -2,6 +2,27 @@
 
 Unauthenticated: signup, login, refresh, password-reset request/confirm.
 Authenticated:   me, logout, users (owner/admin only).
+
+Phase 16 -- refresh-token transport: the refresh token is now set as an
+httpOnly cookie (`REFRESH_COOKIE_NAME`) rather than returned in the JSON
+response body / stored in frontend localStorage. Every endpoint that used to
+return a `refresh_token` field now calls `_set_refresh_cookie` instead; only
+the access token still travels in the JSON body (`TokenPair.access_token`),
+unchanged. `POST /auth/refresh` reads the cookie via `request.cookies`, not
+a request body -- there is no `RefreshRequest` schema anymore.
+
+Cookie attributes: `httponly=True` (never readable by frontend JS -- the
+whole point), `samesite="lax"` (NOT `"strict"`: this app's frontend and API
+are configured as separate origins in every deployment topology documented
+in README/DEPLOYMENT.md -- e.g. a Vite dev server on :5173 talking to the
+API on :8000, or a static frontend host talking to a separately-hosted API
+in production -- and `SameSite=Strict` would silently drop the cookie on
+the very first cross-site request after a fresh navigation, breaking
+`AuthContext`'s session-hydration-on-load flow; `Lax` still blocks the
+classic cross-site POST forgery case), `secure=True` outside local plain-HTTP
+development (see `_cookie_is_secure`). CSRF: `app/core/csrf.py` adds a
+double-submit token on top of SameSite=Lax as defense-in-depth -- see that
+module's docstring for why SameSite alone was not considered sufficient.
 """
 from __future__ import annotations
 
@@ -17,6 +38,7 @@ from fastapi import (
     Response,
     status,
 )
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -26,6 +48,13 @@ from app.api.deps import (
     get_db,
     get_service_db,
     require_user_manager,
+)
+from app.core.config import settings
+from app.core.csrf import (
+    clear_csrf_cookie,
+    new_csrf_token,
+    set_csrf_cookie,
+    verify_csrf,
 )
 from app.core.rate_limit import (
     enforce_login_rate_limit,
@@ -39,21 +68,62 @@ from app.schemas.auth import (
     CreateUserRequest,
     InviteOut,
     InvitePreviewOut,
+    LoginMfaRequest,
+    LoginMfaRequiredResponse,
     LoginRequest,
     LogoutRequest,
     LogoutResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
-    RefreshRequest,
     SignupRequest,
     TokenPair,
     UserOut,
 )
 from app.services import auth as auth_service
+from app.services import mfa as mfa_service
 from app.services.auth import AuthenticatedUser
 from app.services.outbox_dispatch import dispatch_outbox_soon
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+#: Name of the httpOnly cookie carrying the opaque refresh token. Distinct
+#: from `app.core.csrf.CSRF_COOKIE_NAME`, which is intentionally readable.
+REFRESH_COOKIE_NAME = "refresh_token"
+REFRESH_COOKIE_PATH = "/api/v1/auth"
+
+
+def _cookie_is_secure() -> bool:
+    """Whether to set the `Secure` cookie attribute.
+
+    `Secure` cookies are only ever sent over HTTPS -- correct and required
+    in any real deployment, but it also means the cookie is silently
+    dropped by a browser talking to a plain-HTTP `localhost` dev server,
+    which would break local development entirely. Gated on `app_env`, the
+    same signal `config.py` already uses to distinguish "a real deployment"
+    from "someone's laptop" (see `_require_strong_jwt_secret_outside_development`).
+    """
+    return settings.app_env != "development"
+
+
+def _set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=raw_refresh_token,
+        httponly=True,
+        secure=_cookie_is_secure(),
+        samesite="lax",
+        path=REFRESH_COOKIE_PATH,
+        max_age=settings.refresh_token_ttl_days * 24 * 60 * 60,
+    )
+    # Paired double-submit CSRF cookie -- see app/core/csrf.py. Scoped to the
+    # same path as the refresh cookie it protects; the wider app does not
+    # need to read it.
+    set_csrf_cookie(response, new_csrf_token(), secure=_cookie_is_secure())
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(key=REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH)
+    clear_csrf_cookie(response)
 
 
 def _dispatch_outbox_soon(background_tasks: BackgroundTasks) -> None:
@@ -78,8 +148,15 @@ def _client_ip(request: Request) -> str | None:
 
 
 def _auth_response(
-    user: AuthenticatedUser, tokens: auth_service.IssuedTokens
+    response: Response, user: AuthenticatedUser, tokens: auth_service.IssuedTokens
 ) -> AuthResponse:
+    """Build the JSON body AND set the refresh/CSRF cookies on `response`.
+
+    Every caller passes the `Response` FastAPI injected into the route
+    handler (not a freshly-constructed one) so the `Set-Cookie` headers this
+    adds land on the actual outgoing response rather than being discarded.
+    """
+    _set_refresh_cookie(response, tokens.refresh_token)
     return AuthResponse(
         user=UserOut(
             id=str(user.id),
@@ -91,7 +168,6 @@ def _auth_response(
         ),
         tokens=TokenPair(
             access_token=tokens.access_token,
-            refresh_token=tokens.refresh_token,
             expires_in=tokens.expires_in,
         ),
     )
@@ -101,6 +177,7 @@ def _auth_response(
 def signup(
     body: SignupRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     service_db: Session = Depends(get_service_db),
     user_agent: str | None = Header(default=None, alias="User-Agent"),
@@ -122,17 +199,28 @@ def signup(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except (auth_service.EmailAlreadyRegistered, auth_service.CompanySlugTaken) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    return _auth_response(user, tokens)
+    return _auth_response(response, user, tokens)
 
 
-@router.post("/login", response_model=AuthResponse)
+@router.post("/login", response_model=None)
 def login(
     body: LoginRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     service_db: Session = Depends(get_service_db),
     user_agent: str | None = Header(default=None, alias="User-Agent"),
 ):
+    """Password login. Returns `LoginMfaRequiredResponse` (still HTTP 200,
+    but a different JSON shape — see `mfa_required` field) instead of
+    `AuthResponse` when the account has MFA active; the client must then
+    call `POST /auth/login/mfa` with the returned `pre_auth_token` plus a
+    TOTP/backup code before it gets real tokens. Modeled as a 200 with a
+    distinct body rather than a 4xx because nothing about the request was
+    wrong — the password WAS correct — so a 2xx accurately reflects that,
+    while `response_model` is left off this branch (returned as a plain
+    dict) so FastAPI does not try to coerce it into `AuthResponse`.
+    """
     # In-process, per-IP fixed-window limit (see app/core/rate_limit.py) —
     # a speed bump ahead of the real security control, which is the
     # per-account lockout inside auth_service.login itself.
@@ -146,6 +234,8 @@ def login(
             ip=_client_ip(request),
             user_agent=user_agent,
         )
+    except auth_service.MfaRequired as exc:
+        return LoginMfaRequiredResponse(pre_auth_token=exc.pre_auth_token).model_dump()
     except auth_service.AccountLocked as exc:
         raise HTTPException(status.HTTP_423_LOCKED, str(exc)) from exc
     except auth_service.InvalidCredentials as exc:
@@ -154,38 +244,112 @@ def login(
             "invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
-    return _auth_response(user, tokens)
+    return _auth_response(response, user, tokens).model_dump()
+
+
+@router.post("/login/mfa", response_model=AuthResponse)
+def login_mfa(
+    body: LoginMfaRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user_agent: str | None = Header(default=None, alias="User-Agent"),
+):
+    """Second step of an MFA login: pre-auth token + TOTP/backup code -> real tokens.
+
+    Reuses the SAME per-IP login rate limit as `POST /auth/login` — this
+    endpoint is just as attackable (guessing a 6-digit TOTP code, or brute-
+    forcing a backup code) as a password, so it gets the same speed bump.
+    """
+    enforce_login_rate_limit(request)
+    try:
+        user, tokens = auth_service.login_mfa(
+            db,
+            pre_auth_token=body.pre_auth_token,
+            code=body.code,
+            ip=_client_ip(request),
+            user_agent=user_agent,
+        )
+    except auth_service.InvalidMfaPreAuthToken as exc:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "invalid or expired MFA session; please log in again",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    except mfa_service.InvalidMfaCode as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    except mfa_service.MfaNotEnabled as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except auth_service.InvalidCredentials as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    return _auth_response(response, user, tokens)
+
+
+def _unauthorized_and_clear_cookies(response: Response, detail: str) -> JSONResponse:
+    """401 response that also clears the refresh/CSRF cookies.
+
+    Building the `JSONResponse` directly (copying over cookies already
+    queued on the injected `response`, if any, plus the WWW-Authenticate
+    header) is what makes clearing survive -- see the `refresh` docstring.
+    """
+    _clear_refresh_cookie(response)
+    out = JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": detail},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    for key, value in response.raw_headers:
+        if key.decode("latin-1").lower() == "set-cookie":
+            out.raw_headers.append((key, value))
+    return out
 
 
 @router.post("/refresh", response_model=AuthResponse)
 def refresh(
-    body: RefreshRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     service_db: Session = Depends(get_service_db),
     user_agent: str | None = Header(default=None, alias="User-Agent"),
 ):
-    """Exchange a refresh token for a new pair. The old token is invalidated."""
+    """Exchange a refresh token for a new pair. The old token is invalidated.
+
+    Phase 16: the refresh token is read from the httpOnly cookie
+    (`REFRESH_COOKIE_NAME`), never from the request body -- there is nothing
+    for frontend JS to send explicitly, which is the point of an httpOnly
+    cookie. `verify_csrf` enforces the double-submit CSRF check first (see
+    `app/core/csrf.py`) since this endpoint's whole job is "do something
+    because a cookie says so", exactly the shape CSRF protection exists for.
+
+    On failure this returns a `JSONResponse` directly (rather than raising
+    `HTTPException`) so the `_clear_refresh_cookie` mutation actually reaches
+    the client: FastAPI's exception handling builds a brand-new response for
+    a raised `HTTPException`, discarding whatever headers were already set
+    on the dependency-injected `Response` object -- returning a response
+    explicitly is the only way to guarantee a Set-Cookie header survives a
+    401 here.
+    """
+    verify_csrf(request)
+    raw_refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not raw_refresh_token:
+        return _unauthorized_and_clear_cookies(response, "no refresh token cookie")
     try:
         user, tokens = auth_service.refresh(
             db,
             service_db,
-            raw_refresh_token=body.refresh_token,
+            raw_refresh_token=raw_refresh_token,
             ip=_client_ip(request),
             user_agent=user_agent,
         )
-    except auth_service.InvalidRefreshToken as exc:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            "invalid refresh token",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
-    return _auth_response(user, tokens)
+    except auth_service.InvalidRefreshToken:
+        return _unauthorized_and_clear_cookies(response, "invalid refresh token")
+    return _auth_response(response, user, tokens)
 
 
 @router.post("/logout", response_model=LogoutResponse)
 def logout(
     body: LogoutRequest,
+    response: Response,
     principal: Principal = Depends(get_current_principal),
     db: Session = Depends(get_db),
 ):
@@ -197,6 +361,7 @@ def logout(
         session_id=principal.session_id,
         all_devices=body.all_devices,
     )
+    _clear_refresh_cookie(response)
     return LogoutResponse(revoked_sessions=revoked)
 
 
@@ -348,6 +513,7 @@ def accept_invite(
     token: str,
     body: AcceptInviteRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     service_db: Session = Depends(get_service_db),
     user_agent: str | None = Header(default=None, alias="User-Agent"),
@@ -369,4 +535,4 @@ def accept_invite(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except auth_service.EmailAlreadyRegistered as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    return _auth_response(user, tokens)
+    return _auth_response(response, user, tokens)

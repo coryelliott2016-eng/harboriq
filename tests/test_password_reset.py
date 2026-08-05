@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from tests.conftest import DEFAULT_PASSWORD, signup, unique_email
+from tests.test_auth_refresh import _refresh, _session_cookies
 
 NEW_PASSWORD = "a-brand-new-passphrase"
 
@@ -92,10 +93,20 @@ def test_confirm_sets_the_new_password_and_retires_the_old_one(client, service_d
 
 def test_confirm_revokes_every_existing_session(client, service_db):
     email = unique_email()
-    created = signup(client, email=email)
-    other = client.post(
+    client.cookies.clear()
+    created_resp = client.post(
+        "/api/v1/auth/signup",
+        json={"company_name": "Acme Marine", "email": email, "password": DEFAULT_PASSWORD},
+    )
+    assert created_resp.status_code == 201, created_resp.text
+    created = created_resp.json()
+    created_cookies = _session_cookies(created_resp)
+
+    client.cookies.clear()
+    other_resp = client.post(
         "/api/v1/auth/login", json={"email": email, "password": DEFAULT_PASSWORD}
-    ).json()
+    )
+    other_cookies = _session_cookies(other_resp)
 
     _request_reset(client, email)
     token = _reset_token(service_db, created["user"]["company_id"])
@@ -104,11 +115,11 @@ def test_confirm_revokes_every_existing_session(client, service_db):
         json={"token": token, "new_password": NEW_PASSWORD},
     )
 
-    for tokens in (created, other):
-        assert client.post(
-            "/api/v1/auth/refresh",
-            json={"refresh_token": tokens["tokens"]["refresh_token"]},
-        ).status_code == 401
+    # Phase 16: refresh tokens are httpOnly cookies now, so each session's
+    # pair is exercised explicitly (see tests/test_auth_refresh.py's
+    # _refresh/_session_cookies helpers) rather than read from JSON.
+    for cookies in (created_cookies, other_cookies):
+        assert _refresh(client, cookies).status_code == 401
 
     reasons = service_db.execute(
         text("SELECT DISTINCT revoked_reason FROM user_sessions WHERE user_id = :uid"),

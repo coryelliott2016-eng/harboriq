@@ -33,7 +33,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import (
+    InvalidToken as InvalidJwt,
+)
+from app.core.security import (
     create_access_token,
+    create_mfa_pre_auth_token,
+    decode_mfa_pre_auth_token,
     hash_opaque_token,
     hash_password,
     new_opaque_token,
@@ -68,6 +73,24 @@ class AccountLocked(AuthError):
 
 class InvalidRefreshToken(AuthError):
     """Refresh token unknown, expired, revoked, or already rotated."""
+
+
+class MfaRequired(AuthError):
+    """Password verified, but this account has MFA active (Phase 16).
+
+    Carries the pre-auth token the caller must present to `POST
+    /auth/login/mfa` together with a TOTP/backup code -- raised INSTEAD of
+    `login` returning real tokens, so a caller cannot accidentally skip the
+    second factor by ignoring a response field.
+    """
+
+    def __init__(self, pre_auth_token: str) -> None:
+        super().__init__("MFA verification required")
+        self.pre_auth_token = pre_auth_token
+
+
+class InvalidMfaPreAuthToken(AuthError):
+    """Pre-auth token missing, malformed, expired, or of the wrong type."""
 
 
 class InvalidResetToken(AuthError):
@@ -404,7 +427,7 @@ def _lock_user_row_for_login(app_db: Session, company_id: uuid.UUID, user_id: uu
         text(
             """
             SELECT id, password_hash, role, is_active,
-                   failed_login_attempts, locked_until
+                   failed_login_attempts, locked_until, mfa_enabled_at
               FROM users
              WHERE id = :uid
              FOR UPDATE
@@ -519,6 +542,26 @@ def login(
                 text("UPDATE users SET password_hash = :hash WHERE id = :uid"),
                 {"hash": hash_password(password), "uid": row.id},
             )
+        if locked_row.mfa_enabled_at is not None:
+            # MFA active: this password check succeeded, but no real tokens
+            # are issued yet. A short-lived pre-auth token is returned via
+            # MfaRequired instead -- see app/api/v1/routes/auth.py's
+            # POST /auth/login/mfa, which is the only place real tokens get
+            # issued from here. No `user_sessions` row exists yet for this
+            # attempt (`_issue_session` has not been called), so a login
+            # that stops here for good leaves nothing behind to revoke.
+            _audit(
+                app_db,
+                row.company_id,
+                "user.login_mfa_required",
+                actor_user_id=row.id,
+                resource_type="user",
+                resource_id=row.id,
+                ip=ip,
+            )
+            app_db.commit()
+            raise MfaRequired(create_mfa_pre_auth_token(row.id, row.company_id))
+
         user = _to_authenticated_user(_load_user_row(app_db, row.id))
         tokens = _issue_session(
             app_db,
@@ -535,6 +578,62 @@ def login(
             actor_user_id=row.id,
             resource_type="user",
             resource_id=row.id,
+            ip=ip,
+        )
+        app_db.commit()
+
+    return user, tokens
+
+
+def login_mfa(
+    app_db: Session,
+    *,
+    pre_auth_token: str,
+    code: str,
+    ip: str | None = None,
+    user_agent: str | None = None,
+) -> tuple[AuthenticatedUser, IssuedTokens]:
+    """Second step of an MFA login: exchange a pre-auth token + code for real tokens.
+
+    `code` may be either a live TOTP code or an unused backup code -- see
+    `app/services/mfa.py::verify_second_factor`, which tries TOTP first and
+    only falls back to the backup-code table if that fails. Raises
+    `InvalidMfaPreAuthToken` for an invalid/expired/wrong-type token (mapped
+    to 401 by the route layer, same as any other login failure) and
+    `app.services.mfa.InvalidMfaCode` for a wrong code.
+    """
+    from app.services import mfa as mfa_service
+
+    try:
+        claims = decode_mfa_pre_auth_token(pre_auth_token)
+    except InvalidJwt as exc:
+        raise InvalidMfaPreAuthToken(str(exc)) from exc
+
+    mfa_service.verify_second_factor(
+        app_db, company_id=claims.company_id, user_id=claims.user_id, code=code
+    )
+
+    with tenant_context(app_db, claims.company_id):
+        user_row = _load_user_row(app_db, claims.user_id)
+        if user_row is None or not user_row.is_active:
+            raise InvalidCredentials("account is not active")
+
+        user = _to_authenticated_user(user_row)
+        tokens = _issue_session(
+            app_db,
+            company_id=claims.company_id,
+            user_id=user.id,
+            role=user.role,
+            ip=ip,
+            user_agent=user_agent,
+        )
+        _audit(
+            app_db,
+            claims.company_id,
+            "user.login_mfa_verified",
+            actor_user_id=user.id,
+            resource_type="user",
+            resource_id=user.id,
             ip=ip,
         )
         app_db.commit()

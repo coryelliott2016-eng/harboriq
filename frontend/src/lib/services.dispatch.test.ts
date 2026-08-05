@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setAccessToken, setRefreshToken } from "./tokenStore";
+import { setAccessToken } from "./tokenStore";
 import { dispatchApi, jobsApi } from "./services";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -13,7 +13,6 @@ describe("dispatch API client", () => {
   beforeEach(() => {
     localStorage.clear();
     setAccessToken("access-token");
-    setRefreshToken("refresh-token");
     vi.stubGlobal("fetch", vi.fn());
   });
 
