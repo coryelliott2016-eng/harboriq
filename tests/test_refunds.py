@@ -56,13 +56,19 @@ def _pay(client, service_db, owner, invoice, cents, session_suffix="a"):
     service_db.commit()
 
 
-def _mock_refund(monkeypatch, refund_id="re_test_123"):
+def _mock_refund(monkeypatch, refund_id=None):
+    """Mocks `stripe_billing.create_refund`. Real Stripe refunds always get
+    a distinct id; when the caller doesn't pin one, generate a fresh one per
+    call so tests that issue MULTIPLE refunds in one flow (e.g. two
+    successive partial refunds) don't collide against `refunds
+    .stripe_refund_id`'s uniqueness (migration 0018, Phase 17 Area E)."""
     calls = []
-    monkeypatch.setattr(
-        stripe_billing,
-        "create_refund",
-        lambda **kwargs: calls.append(kwargs) or {"id": refund_id},
-    )
+
+    def _fake_create_refund(**kwargs):
+        calls.append(kwargs)
+        return {"id": refund_id or f"re_test_{uuid.uuid4().hex[:12]}"}
+
+    monkeypatch.setattr(stripe_billing, "create_refund", _fake_create_refund)
     return calls
 
 
@@ -70,7 +76,7 @@ def test_full_refund_of_a_paid_invoice(client, service_db, monkeypatch):
     owner = signup(client)
     _job_id, invoice = _invoiced_job(client, owner, unit_price="100.00")
     _pay(client, service_db, owner, invoice, 10000)
-    calls = _mock_refund(monkeypatch)
+    calls = _mock_refund(monkeypatch, refund_id="re_test_123")
 
     resp = client.post(
         f"/api/v1/invoices/{invoice['id']}/refund",

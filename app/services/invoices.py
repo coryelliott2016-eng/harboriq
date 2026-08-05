@@ -728,3 +728,144 @@ def refund_invoice(
         db.commit()
 
     return {"invoice": invoice, "refund": refund}
+
+
+# ---------------------------------------------------------------------------
+# refund webhook reconciliation (Phase 17, Area E)
+# ---------------------------------------------------------------------------
+def reconcile_refund_from_webhook(
+    db: Session,
+    company_id: uuid.UUID,
+    *,
+    stripe_refund_id: str,
+    stripe_payment_intent_id: str | None,
+    stripe_charge_id: str | None,
+    amount_refunded_cents: int,
+    reason: str | None = None,
+) -> dict[str, Any] | None:
+    """Reconcile a refund issued OUTSIDE HarborIQ (directly in the Stripe
+    Dashboard, or via Stripe's API by someone bypassing `POST
+    /invoices/{id}/refund`) against the local `invoices`/`refunds` tables.
+
+    Triggered by the `charge.refunded` webhook event. Distinct from
+    `refund_invoice` above: that function is the OUTBOUND path (HarborIQ
+    calls Stripe to create the refund); this is the INBOUND reconciliation
+    path (Stripe already performed the refund -- possibly with zero
+    involvement from HarborIQ -- and this just needs to catch the local
+    books up). It never calls `stripe_billing.create_refund` and never hits
+    the Stripe API at all.
+
+    Resolves the invoice by `stripe_payment_intent_id` first (the strong,
+    already-indexed identifier `mark_paid_from_webhook` also keys off of),
+    falling back to `stripe_charge_id` if present, matching how Stripe's
+    `charge.refunded` payload carries both `payment_intent` and the charge
+    id. Returns None (a no-op, logged by the caller) if no invoice can be
+    resolved -- e.g. a charge that has nothing to do with a HarborIQ
+    invoice, such as the platform's own Stripe Billing subscription charge.
+
+    Idempotent on `stripe_refund_id`: `charge.refunded` fires once per
+    refund object, but Stripe may still redeliver the same event, and a
+    charge can have MULTIPLE `refunds.data[]` entries (successive partial
+    refunds against one charge all raise the same event type again with a
+    growing `refunds.data` array) -- so this is called once per refund id
+    the caller has not seen before, not once per event.
+    """
+    with tenant_context(db, company_id):
+        where_clauses = []
+        params: dict[str, Any] = {}
+        if stripe_payment_intent_id:
+            where_clauses.append("stripe_payment_intent_id = :pi")
+            params["pi"] = stripe_payment_intent_id
+        if stripe_charge_id:
+            where_clauses.append("stripe_payment_intent_id = :charge_as_pi")
+            params["charge_as_pi"] = stripe_charge_id
+        if not where_clauses:
+            return None
+
+        current = db.execute(
+            text(
+                f"""
+                SELECT id, status, amount_paid, total
+                  FROM invoices
+                 WHERE {" OR ".join(where_clauses)}
+                 FOR UPDATE
+                """
+            ),
+            params,
+        ).first()
+        if current is None:
+            # Not a HarborIQ invoice charge (e.g. the platform's own Stripe
+            # Billing subscription) -- nothing to reconcile.
+            return None
+
+        # Idempotency: a refund id we've already recorded (either from our
+        # own `refund_invoice` outbound call, or a prior delivery of this
+        # same webhook) is a no-op, not a duplicate refund row.
+        existing = db.execute(
+            text("SELECT id FROM refunds WHERE stripe_refund_id = :rid"),
+            {"rid": stripe_refund_id},
+        ).first()
+        if existing is not None:
+            return None
+
+        already_refunded = db.execute(
+            text(
+                "SELECT COALESCE(SUM(amount), 0) AS total FROM refunds WHERE invoice_id = :id"
+            ),
+            {"id": current.id},
+        ).first().total
+
+        refund_amount = _quantize(Decimal(amount_refunded_cents) / Decimal(100))
+        remaining_refundable = current.amount_paid - already_refunded
+        # Unlike `refund_invoice`, this reconciles a refund that ALREADY
+        # happened in Stripe -- clamp rather than reject, since the money
+        # has already moved regardless of what our local ledger expected.
+        was_paid_in_full = current.amount_paid == current.total
+        target_status = (
+            "refunded"
+            if was_paid_in_full and refund_amount >= remaining_refundable
+            else "partially_refunded"
+        )
+
+        try:
+            InvoiceSM.assert_transition(current.status, target_status)
+        except Exception:
+            db.rollback()
+            raise
+
+        invoice = db.execute(
+            text(
+                """
+                UPDATE invoices
+                   SET status = CAST(:status AS invoice_status)
+                 WHERE id = :id
+                RETURNING *
+                """
+            ),
+            {"status": target_status, "id": current.id},
+        ).first()
+
+        refund = db.execute(
+            text(
+                """
+                INSERT INTO refunds
+                    (company_id, invoice_id, amount, reason, stripe_refund_id)
+                VALUES
+                    (:cid, :invoice_id, :amount, :reason, :stripe_refund_id)
+                ON CONFLICT (stripe_refund_id) WHERE stripe_refund_id IS NOT NULL
+                DO NOTHING
+                RETURNING *
+                """
+            ),
+            {
+                "cid": company_id,
+                "invoice_id": current.id,
+                "amount": refund_amount,
+                "reason": reason or "Refunded via Stripe Dashboard",
+                "stripe_refund_id": stripe_refund_id,
+            },
+        ).first()
+
+        db.commit()
+
+    return {"invoice": invoice, "refund": refund}

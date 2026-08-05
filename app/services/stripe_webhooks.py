@@ -67,6 +67,23 @@ def resolve_company_from_event(db: Session, payload: dict[str, Any]) -> uuid.UUI
         if row:
             return uuid.UUID(str(row[0]))
 
+    # Option D (Phase 17, Area E): a `charge.refunded` event's charge object
+    # normally carries an EMPTY `metadata` -- Stripe does not automatically
+    # copy Checkout Session metadata onto the Charge it produces -- so
+    # Option A almost never resolves for this event type. Fall back to the
+    # invoice this charge/payment_intent is already tied to (stamped by
+    # `mark_paid_from_webhook` when the original payment was processed).
+    payment_intent_id = obj.get("payment_intent") or (
+        obj.get("id") if obj.get("object") == "payment_intent" else None
+    )
+    if payment_intent_id:
+        row = db.execute(
+            text("SELECT company_id FROM invoices WHERE stripe_payment_intent_id = :pi"),
+            {"pi": payment_intent_id},
+        ).first()
+        if row:
+            return uuid.UUID(str(row[0]))
+
     raise ValueError("Cannot resolve company_id from Stripe event")
 
 
@@ -121,6 +138,11 @@ def _apply_side_effect(db: Session, event_type: str, payload: dict, company_id: 
     A `checkout.session.completed` event with no such metadata (or a
     `subscription` field) is the pre-existing subscription-checkout flow and
     still routes to `_on_subscription_checkout_completed`.
+
+    `charge.refunded` (Phase 17, Area E) is a THIRD, independent path from
+    the two "invoice" concepts above: it reconciles a refund that happened
+    directly in Stripe (Dashboard or API) outside HarborIQ's own
+    `POST /invoices/{id}/refund` flow -- see `_on_charge_refunded`.
     """
     obj = payload.get("data", {}).get("object", {})
 
@@ -140,6 +162,8 @@ def _apply_side_effect(db: Session, event_type: str, payload: dict, company_id: 
         meta = obj.get("metadata", {}) or {}
         if meta.get("kind") == "invoice_payment":
             _on_invoice_payment_completed(db, company_id, obj)
+    elif event_type == "charge.refunded":
+        _on_charge_refunded(db, company_id, obj)
     # ... other event types as needed
 
 
@@ -215,3 +239,42 @@ def _on_invoice_payment_completed(db: Session, company_id: uuid.UUID, obj: dict)
         "invoice.paid",
         {"invoice_metadata": (obj.get("metadata") or {}).get("invoice_id")},
     )
+
+
+def _on_charge_refunded(db: Session, company_id: uuid.UUID, obj: dict) -> None:
+    """A `charge` object's refund state changed (Phase 17, Area E) -- most
+    commonly because staff issued a full or partial refund directly in the
+    Stripe Dashboard, entirely outside HarborIQ's own
+    `POST /invoices/{id}/refund` flow. Reconciles the local `invoices`/
+    `refunds` tables so the books stay correct regardless of where the
+    refund was initiated.
+
+    A `charge.refunded` event's `refunds` field is a list object
+    (`obj["refunds"]["data"]`), not a single refund -- Stripe re-fires this
+    same event type with a growing list every time ANOTHER refund is issued
+    against the same charge, so this walks the whole list and lets
+    `invoices.reconcile_refund_from_webhook`'s per-`stripe_refund_id`
+    idempotency check (backed by migration 0018's unique index) skip
+    whichever ones were already applied on a prior delivery.
+    """
+    payment_intent_id = obj.get("payment_intent")
+    charge_id = obj.get("id") if obj.get("object") == "charge" else None
+    refund_list = (obj.get("refunds") or {}).get("data") or []
+
+    for refund_obj in refund_list:
+        # Only a `succeeded` refund actually moved money; `pending`/`failed`
+        # entries in the same list must not touch the local ledger.
+        if refund_obj.get("status") not in (None, "succeeded"):
+            continue
+        refund_id = refund_obj.get("id")
+        if not refund_id:
+            continue
+        invoices.reconcile_refund_from_webhook(
+            db,
+            company_id,
+            stripe_refund_id=refund_id,
+            stripe_payment_intent_id=payment_intent_id,
+            stripe_charge_id=charge_id,
+            amount_refunded_cents=refund_obj.get("amount") or 0,
+            reason=refund_obj.get("reason"),
+        )
