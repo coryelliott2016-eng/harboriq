@@ -392,10 +392,11 @@ happen together on the app-role session.
 
 **Explicitly out of scope for this phase** (see "What's intentionally NOT
 here yet" below for the full, consolidated list): stateful access-token
-revocation (a revoked session's *access* token — as opposed to its refresh
-token, which *is* revoked immediately — still works until it expires,
-unchanged from before this phase). MFA/TOTP enrollment shipped in Phase 16 —
-see below.
+revocation was still absent at this point (a revoked session's *access*
+token — as opposed to its refresh token, which *is* revoked immediately —
+still worked until it expired). It shipped in [Phase 17 — Backlog
+Completion](#phase-17--backlog-completion). MFA/TOTP enrollment shipped in
+Phase 16 — see below.
 
 ## Enterprise hardening: Redis/Celery, httpOnly cookies, MFA, backups, CDN (Phase 16)
 
@@ -464,10 +465,10 @@ nav (`/settings/security`) renders the QR code (`qrcode.react`) during
 enrollment and lets a user view remaining backup-code count / disable MFA
 (disable requires re-entering the current password); `LoginPage.tsx` grows
 a second screen for the code prompt when `login()` resolves to a
-`{ preAuthToken }` challenge instead of logging in directly. MFA is
-currently always self-service and always optional — there is no
-admin-forced "require MFA for every user in this company" policy toggle
-yet (see the deferred list).
+`{ preAuthToken }` challenge instead of logging in directly. MFA was
+initially always self-service and optional; [Phase 17 — Backlog
+Completion](#phase-17--backlog-completion) adds the company-wide,
+admin-forced policy described there.
 
 **4. Off-host S3 backups.** `scripts/backup_db_s3.sh` wraps the existing
 `scripts/backup_db.sh` (unchanged) and adds an `aws s3 cp` push of the
@@ -832,8 +833,8 @@ it by hand.
   now handles this as a third, independent, idempotent path alongside the
   synchronous `POST /invoices/{id}/refund` flow.
 - PDF export of the AR aging report — `GET /reports/ar-aging/export.pdf`
-  (CSV export was not added; PDF was the higher-value, explicitly-requested
-  gap and is what shipped).
+  alongside the Phase 14 CSV export; PDF was the explicitly-requested gap
+  this later phase closes.
 
 ## Customer self-service portal (Phase 9)
 
@@ -1865,6 +1866,121 @@ mutation, like every other authenticated mutation in this app, goes through
   billing period). `generate-storage-charge`/`generate-invoice` remain
   available as staff-triggered actions too, for one-off/manual cases.
 
+## Phase 17 — Backlog Completion
+
+This phase closes the small but consequential gaps prior phases had left
+explicitly documented rather than papered over. The common design rule is
+the same one the rest of HarborIQ uses: extend the existing source of truth
+and its transaction boundary instead of creating a second billing, reporting,
+authentication, portal, or purchasing path that can drift.
+
+**Recurring monthly slip billing is a scheduled, period-scoped extension of
+the Phase 15 line-item design, not a loosening of the one-off charge guard.**
+`generate_storage_charge()` still refuses a second manual storage charge for
+a reservation, which is the safe behavior for a short stay. Long-running
+wet-slip/dry-stack rentals instead go through
+`generate_recurring_monthly_charge()`: the daily `slip-storage-billing-daily`
+Celery Beat sweep considers only `confirmed`/`checked_in` reservations that
+overlap the current calendar month and creates a quantity-1 `storage` line
+at the slip's `monthly_rate`. The sweep runs daily rather than only on the
+first, so a mid-month reservation or a missed run is picked up on the next
+run. Its idempotency key is the exact `[period_start, period_end)` marker
+embedded in the line description, not `created_at`: insert wall-clock time
+would incorrectly treat a late run, replay, or backfill of (say) June as an
+August charge. A repeat for the same reservation/period therefore no-ops,
+while a new calendar month remains billable. The same Beat configuration also
+now drives the Phase 8 dunning sweep, removing the former external-cron
+requirement.
+
+**Report PDFs are renderings of the existing reports, never a competing
+calculation.** `GET /reports/ar-aging/export.pdf`,
+`/reports/pnl/export.pdf`, and `/reports/cash-flow/export.pdf` stay behind
+the existing `require_operations` gate. `app/services/report_pdf.py` first
+obtains the same dictionary returned by each report's JSON/CSV path, then
+only lays it out with ReportLab — the pure-Python renderer already chosen for
+invoice PDFs instead of a separate native-dependency stack. That preserves
+one source of truth for bucket totals, cash-basis P&L methodology, and the
+cash-flow cost-incurred caveat across all three download formats; it also
+reuses the invoice PDF's dark-header, alternating-row visual language rather
+than introducing a new report design.
+
+**Access-token revocation is now stateful exactly until a token would have
+died anyway.** Access JWTs carry a random `jti`; on logout,
+`app/services/auth.py` continues to revoke the refresh-token family and also
+writes the *calling* access token's JTI to
+`app/core/token_denylist.py`'s Redis key with a TTL equal to its remaining
+`exp`. `get_current_principal` verifies the JWT's signature/expiry and then
+checks that key on every authenticated request, so the logged-out token is
+rejected immediately rather than remaining usable for its short natural
+lifetime. Redis errors deliberately **fail open** on both the write and
+read path, the same availability-over-this-extra-defense-in-depth trade-off
+as rate limiting: refresh-token revocation still prevents minting a new
+access token, and an outage's exposure is bounded by the configured
+access-token TTL rather than remembered forever.
+
+**Company-wide MFA is a policy enforced at the login decision point, not a
+flag that merely decorates the UI.** Migration `0017_company_mfa_policy`
+adds `companies.mfa_required NOT NULL DEFAULT false`, leaving existing
+tenants unchanged until they opt in. Any authenticated user can read
+`GET /companies/me/mfa-policy`, while the `PATCH` toggle is restricted to
+owner/admin users. Login locks the user row and reads that company policy in
+the same decision: an enrolled user still receives the normal short-lived
+TOTP/backup-code pre-auth challenge; an unenrolled user at a mandating
+company receives `mfa_required` plus `mfa_enrollment_required`, with neither
+real session tokens nor a pre-auth token to bypass enrollment. The setting
+takes effect on subsequent logins and deliberately does not retroactively
+invalidate already-issued sessions, matching the codebase's broader
+role/policy-change semantics.
+
+**“Find my dock” exposes a customer's dock, not a customer-accessible marina
+map.** `GET /portal/{token}/dock-locations` resolves the durable portal
+magic link into its tenant/customer pair, then `list_dock_locations()` still
+filters `customer_id` in SQL as a second, narrower isolation boundary within
+that tenant. It returns only that customer's `confirmed` or `checked_in`
+reservations whose slips actually have latitude and longitude; pending,
+checked-out, cancelled, coordinate-less, and every other customer's rows
+are intentionally absent. `PortalDockLocation` at `/portal/:token/dock`
+reuses the Phase 11 react-leaflet/OpenStreetMap pattern for a read-only
+marker and treats an empty response as the honest “no GPS location on file”
+state rather than an error.
+
+**Stripe refunds reconcile even when the initiating action happened outside
+HarborIQ.** `charge.refunded` is a third, independent money path alongside
+the original payment webhook and the synchronous
+`POST /invoices/{id}/refund` flow. Because a Checkout Session's metadata is
+not reliably copied to its Charge, webhook company resolution can fall back
+through the payment intent already recorded on the invoice. For each
+succeeded entry in Stripe's full `refunds.data[]` list,
+`reconcile_refund_from_webhook()` finds the invoice by payment intent first,
+then by charge identifier; an unresolvable non-HarborIQ charge is a safe
+no-op. That full-list walk matters because Stripe re-sends the growing list
+for successive partial refunds. Migration `0018`'s partial unique index and
+`ON CONFLICT (stripe_refund_id) DO NOTHING` make every individual refund
+idempotent across repeated events while the existing invoice state machine
+records the resulting partial/full refund state.
+
+**Vendor “deactivation by convention” is now a real archive lifecycle.**
+Migration `0019_vendor_active_flag` adds `vendors.is_active DEFAULT true`
+and an `(company_id, is_active)` index for the active-only hot path.
+`POST /vendors/{id}/status` is a dedicated archive/reactivate action rather
+than an ordinary free-text PATCH, preserving a clean place for lifecycle
+rules or audit behavior later. The default vendor list — including the
+reorder-suggestion-to-draft-PO flow — offers only active vendors, and
+`_require_active_vendor()` refuses a new draft against an archived one.
+Conversely, `GET /vendors/{id}` and `include_inactive=true` can still find
+the row, so historical purchase orders keep rendering the vendor they were
+actually placed with. There remains no hard-delete endpoint: preserving that
+foreign-key-backed purchasing history is the reason archival was chosen.
+
+### What's intentionally NOT here yet (Phase 17)
+
+Nothing in this phase's six-area backlog was cut or deferred. The
+phase-specific work above is complete; limits that belong to longer-lived
+product decisions — such as full customer accounts, a general ledger,
+vendor-payment tracking, live accounting integrations, and crane/forklift
+IoT — remain in their own sections and the consolidated list below rather
+than being represented as unfinished Phase 17 work.
+
 
 ## Project layout
 
@@ -1890,23 +2006,27 @@ harboriq/
   alembic/versions/0009_geocoding.py
   app/
     core/      config, logging (env-aware JSON/console), observability (Sentry),
-               security (argon2 + JWT), rate_limit (login/reset limiter)
+               security (argon2 + JWT), rate_limit (login/reset limiter),
+               token_denylist (Redis JTI access-token revocation)
     db/        base, session, tenant, models
     api/       deps (auth + job authorization), errors (domain -> HTTP status),
                middleware (request-id correlation + Prometheus metrics)
     api/v1/    routes: auth, users, customers, vessels, jobs, invoices, health,
                inventory, public, stripe_webhooks, dispatch, billing, reports,
-               portal, messages, geocode_admin
+               portal, messages, geocode_admin, companies, slips,
+               slip_reservations, vendors
     services/  auth, users, crud, customers, vessels, jobs, invoices, stripe_billing,
                state_machines, inventory, public_tokens, outbox, outbox_dispatch,
                email, stripe_webhooks, dispatch, billing (Connect + dunning),
-               invoice_pdf, invoice_render, portal, messages, geocoding
+               invoice_pdf, invoice_render, reports, report_pdf, portal, messages,
+               geocoding, companies, slip_reservations, vendors
     schemas/   pydantic models (incl. invoices.py, invite + TeamMember/UserUpdate
                schemas in auth.py, dispatch.py, billing.py, reports.py, portal.py,
                messages.py, geocoding.py)
-    jobs/      dunning_sweep.py — standalone script, loopable over every company
-               (no Celery/cron runner in this repo; see "What's intentionally
-               NOT here yet")
+    jobs/      dunning_sweep.py — standalone script, also invoked on the
+               hourly Celery Beat schedule
+               slip_storage_billing_sweep.py — per-company recurring monthly
+               storage-charge fan-out, invoked daily by Celery Beat
                geocode_backfill.py — geocode any un-geocoded customer/user address;
                callable via POST /admin/geocode-backfill or `python -m app.jobs.
                geocode_backfill [--force]`
@@ -2225,7 +2345,7 @@ just the *what*, consolidated so nothing is scattered or repeated.
   in Phase 17** — see the "Update (Phase 17)" note under "Billing
   operations" above.
 - ~~CSV/PDF export of the AR aging report~~ **Shipped in Phase 17** (PDF;
-  CSV was not added — see "Billing operations" above).
+  CSV had already shipped in Phase 14 — see "Billing operations" above).
 - The React customer-facing pay page's own dedicated UI polish beyond what
   already exists — covered under "Frontend" below, not repeated here.
 
@@ -2234,7 +2354,10 @@ just the *what*, consolidated so nothing is scattered or repeated.
   React Testing Library tests exist. Also not installable in this
   sandbox's OS image, an environment limitation rather than a scope
   decision.
-- httpOnly-cookie refresh-token storage (currently `localStorage`).
+- ~~httpOnly-cookie refresh-token storage (currently `localStorage`).~~
+  **Shipped in Phase 16** — refresh tokens now use an httpOnly,
+  `SameSite=Lax` cookie plus the CSRF control described in "Enterprise
+  hardening" above.
 - Optimistic UI updates, a design system beyond the shared Tailwind
   components. (Offline support shipped in Phase 12 for the `/field`
   technician view specifically — see below; the main admin `AppShell` is
@@ -2303,11 +2426,13 @@ for the full rationale):**
 
 **Auth:**
 - ~~No MFA yet~~ **Shipped in Phase 16** (self-service TOTP enrollment) and
-  **Phase 17** (admin-forced company-wide policy — see "Phase 17" below).
+  **Phase 17** (admin-forced company-wide policy — see [Phase 17 — Backlog
+  Completion](#phase-17--backlog-completion)).
 - ~~A revoked session's access token stays valid until it expires... Stateful
   access-token revocation remains out of scope~~ **Shipped in Phase 17**:
   a Redis-backed JTI denylist now rejects a revoked access token
-  immediately, not just after natural expiry — see "Phase 17" below.
+  immediately, not just after natural expiry — see [Phase 17 — Backlog
+  Completion](#phase-17--backlog-completion).
 
 **AI dispatch engine (see "AI dispatch engine" above for the full
 rationale):**
