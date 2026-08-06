@@ -807,8 +807,10 @@ email through the existing outbox rather than sending directly — the same
 claim/retry/dead-letter machinery as every other outbound email. Exposed as
 both `POST /billing/dunning/run` (on-demand, per-tenant, `require_admin`)
 and a standalone `app/jobs/dunning_sweep.py` script loopable over every
-company (there is no Celery/cron runner in this repo to schedule it — see
-"What's intentionally NOT here yet").
+company. **Update (Phase 17):** the sweep also now runs automatically —
+`app/core/celery_app.py`'s `dunning-sweep-hourly` beat schedule calls
+`app.tasks.sweep_tasks.dunning_sweep_task` on its own, so a tight manual
+cron/loop is no longer required to keep reminders flowing.
 
 **AR aging** (`GET /reports/ar-aging`, `require_operations`) buckets every
 customer's outstanding `balance_due` into 1-30 / 31-60 / 61-90 / 90+ days
@@ -820,16 +822,18 @@ it by hand.
 **Deferred, on purpose (this phase):**
 - Destination charges / `application_fee_amount` platform-fee revenue on
   top of Connect — direct charges only; see "Payment architecture" above.
-- A scheduled runner for the dunning sweep (Celery beat, cron, GitHub
-  Actions schedule) — the sweep itself is real and callable on demand or in
-  a loop; nothing in this repo currently calls it automatically.
+
+**Shipped in a later phase (Phase 17), no longer deferred:**
+- A scheduled runner for the dunning sweep — see the "Update (Phase 17)"
+  note above.
 - Refund webhooks (`charge.refunded` arriving asynchronously from Stripe to
   reconcile a refund issued directly in the Stripe Dashboard rather than
-  through this API) — refunds initiated through `POST
-  /invoices/{id}/refund` are fully synchronous and correct; a refund issued
-  outside HarborIQ would not currently update `invoices`/`refunds`.
-- CSV/PDF export of the AR aging report — the JSON API and React table
-  exist; there is no "download as spreadsheet" button yet.
+  through this API) — `app/services/stripe_webhooks.py`'s `_on_charge_refunded`
+  now handles this as a third, independent, idempotent path alongside the
+  synchronous `POST /invoices/{id}/refund` flow.
+- PDF export of the AR aging report — `GET /reports/ar-aging/export.pdf`
+  (CSV export was not added; PDF was the higher-value, explicitly-requested
+  gap and is what shipped).
 
 ## Customer self-service portal (Phase 9)
 
@@ -1710,10 +1714,10 @@ lacks the role.
   by the API and rendered in the UI. Adding real accounts-payable tracking
   (when the shop actually pays each vendor bill) would be a larger, separate
   feature.
-- **PDF report exports.** Only CSV exports were built this phase — the
-  phase spec's own scope language treats "CSV/PDF" as options and CSV is the
-  one that directly serves the QuickBooks-import use case, which is the
-  higher-value target for a bookkeeper-facing export.
+- ~~**PDF report exports.**~~ **Shipped in Phase 17** —
+  `GET /reports/pnl/export.pdf` and `GET /reports/cash-flow/export.pdf`
+  (reusing the `invoice_pdf.py` reportlab pattern, see `app/services/report_pdf.py`)
+  now sit alongside the CSV exports below.
 
 
 ## Marina/slip management (Phase 15)
@@ -1852,10 +1856,14 @@ mutation, like every other authenticated mutation in this app, goes through
   or tracked by any physical equipment. No crane/forklift/boat-lift
   equipment is currently owned or operated, so there is no vendor API to
   build against yet — see `docs/SCALING_AND_EQUIPMENT_INTEGRATION.md`.
-- **Recurring/automatic monthly storage billing.** `generate-storage-charge`
-  and `generate-invoice` are explicit, staff-triggered actions per
-  reservation; there is no scheduled job that auto-bills monthly slip rent
-  the way a subscription would.
+- ~~**Recurring/automatic monthly storage billing.**~~ **Shipped in Phase
+  17** — a `slip-storage-billing-daily` Celery beat task
+  (`generate_recurring_monthly_charges_for_company` in
+  `app/services/slip_reservations.py`) now auto-generates each active
+  reservation's storage charge on a monthly cadence, idempotently (it will
+  not double-charge a reservation that already has a charge for the current
+  billing period). `generate-storage-charge`/`generate-invoice` remain
+  available as staff-triggered actions too, for one-off/manual cases.
 
 
 ## Project layout
@@ -2213,11 +2221,11 @@ just the *what*, consolidated so nothing is scattered or repeated.
   on customer payments. Adding a fee later is a parameter change to the
   same Checkout Session call, but is a pricing/legal decision that was
   deliberately not made here — see "Payment architecture" above.
-- A scheduled runner (Celery beat/cron) for the dunning sweep — the sweep
-  itself ships and is callable on demand or in a loop (see "Billing
-  operations" above); nothing in this repo calls it automatically yet.
-- CSV/PDF export of the AR aging report — the JSON API and React table
-  exist; there is no "download as spreadsheet" button.
+- ~~A scheduled runner (Celery beat/cron) for the dunning sweep~~ **Shipped
+  in Phase 17** — see the "Update (Phase 17)" note under "Billing
+  operations" above.
+- ~~CSV/PDF export of the AR aging report~~ **Shipped in Phase 17** (PDF;
+  CSV was not added — see "Billing operations" above).
 - The React customer-facing pay page's own dedicated UI polish beyond what
   already exists — covered under "Frontend" below, not repeated here.
 
