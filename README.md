@@ -1849,7 +1849,9 @@ mutation, like every other authenticated mutation in this app, goes through
   payment method or processor integration was added.
 - **Crane/forklift IoT integration.** Dry-stack launch/retrieval requests
   are logged and scheduled (`dry_stack_launch_requests`), not dispatched to
-  or tracked by any physical equipment.
+  or tracked by any physical equipment. No crane/forklift/boat-lift
+  equipment is currently owned or operated, so there is no vendor API to
+  build against yet — see `docs/SCALING_AND_EQUIPMENT_INTEGRATION.md`.
 - **Recurring/automatic monthly storage billing.** `generate-storage-charge`
   and `generate-invoice` are explicit, staff-triggered actions per
   reservation; there is no scheduled job that auto-bills monthly slip rent

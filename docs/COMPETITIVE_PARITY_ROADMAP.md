@@ -360,7 +360,12 @@ this is organized from).
       no new payment method or processor integration was added.
 - [ ] **Crane/forklift IoT integration** — dry-stack launch/retrieval
       requests are logged and scheduled (`dry_stack_launch_requests`), not
-      dispatched to or tracked by any physical equipment.
+      dispatched to or tracked by any physical equipment. Confirmed with
+      Cory (Aug 2026): no crane/forklift/boat-lift equipment is currently
+      owned or operated, so there is no vendor API to integrate against yet
+      — see `docs/SCALING_AND_EQUIPMENT_INTEGRATION.md` for a market survey
+      of what exists (Radian IoT boat-lift sensors, etc.) and the concrete
+      next step once equipment is chosen.
 - [ ] **Recurring/automatic monthly storage billing** — `generate-storage-
       charge` and `generate-invoice` are explicit, staff-triggered actions
       per reservation; there is no scheduled job that auto-bills monthly
@@ -414,7 +419,11 @@ this is organized from).
 - [ ] **True autoscaling/orchestration.** Multiple replicas can now be run
       by hand (e.g. Compose `--scale app=N`) behind a load balancer; there
       is no Kubernetes/ECS-style autoscaler, and Celery workers are a fixed
-      pool rather than scaling with queue depth.
+      pool rather than scaling with queue depth. Deliberately not built
+      further yet — see `docs/SCALING_AND_EQUIPMENT_INTEGRATION.md` for the
+      honest assessment (premature at current single-host-pilot scale), the
+      zero-new-infrastructure interim step, and the recommended ECS Fargate
+      path once a real capacity signal appears.
 
 ## Phase 17 — Security Hardening, Marina/Payments/Vendor Gaps — **COMPLETE**
 - [x] **Stateful access-token revocation.** Redis-backed JTI denylist
