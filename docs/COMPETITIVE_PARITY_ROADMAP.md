@@ -5,7 +5,7 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 16: auth (with Redis-backed rate limiting, httpOnly-
+Status as of Phase 17: auth (with Redis-backed rate limiting, httpOnly-
 cookie refresh tokens + CSRF, and self-service MFA/TOTP), multi-tenant CRM,
 invoicing + Stripe Checkout
 (single-account and per-tenant Stripe Connect direct charges), refunds,
@@ -32,7 +32,13 @@ marinas/boatyards — a one-table slip discriminator design, a
 `SlipReservationSM` state machine, DB-level (`btree_gist EXCLUDE`)
 double-booking prevention proven under genuine concurrency, storage billing
 that reuses the existing job-invoicing pipeline, and a CSS-grid slip map.
-629 backend tests, 116 frontend tests, CI green.
+Phase 17 then closed out the remaining deferred items from Phases 8, 13,
+15, and 16: stateful (Redis-backed) access-token revocation, an
+admin-forced company-wide MFA policy, recurring/automatic monthly slip
+billing, PDF report exports, a GPS-based customer-facing "find my dock"
+portal view, Stripe refund-webhook reconciliation for refunds issued
+directly from the Stripe Dashboard, and vendor deactivate/archive.
+703 backend tests, 121 frontend tests, CI green.
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
