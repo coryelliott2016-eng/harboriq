@@ -4,6 +4,7 @@ from app.api.v1.routes import (
     auth,
     billing,
     companies,
+    crypto_payments,
     customers,
     dispatch,
     field_app,
@@ -42,6 +43,7 @@ api_router.include_router(purchase_orders.router)
 api_router.include_router(slips.router)
 api_router.include_router(slip_reservations.router)
 api_router.include_router(invoices.router)
+api_router.include_router(crypto_payments.router, tags=["crypto-payments"])
 api_router.include_router(billing.router)
 api_router.include_router(reports.router)
 api_router.include_router(public.router, tags=["public"])

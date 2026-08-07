@@ -5,7 +5,7 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 17: auth (with Redis-backed rate limiting, httpOnly-
+Status as of Phase 18: auth (with Redis-backed rate limiting, httpOnly-
 cookie refresh tokens + CSRF, and self-service MFA/TOTP), multi-tenant CRM,
 invoicing + Stripe Checkout
 (single-account and per-tenant Stripe Connect direct charges), refunds,
@@ -37,8 +37,11 @@ Phase 17 then closed out the remaining deferred items from Phases 8, 13,
 admin-forced company-wide MFA policy, recurring/automatic monthly slip
 billing, PDF report exports, a GPS-based customer-facing "find my dock"
 portal view, Stripe refund-webhook reconciliation for refunds issued
-directly from the Stripe Dashboard, and vendor deactivate/archive.
-703 backend tests, 121 frontend tests, CI green.
+directly from the Stripe Dashboard, and vendor deactivate/archive. Phase 18
+adds an opt-in licensed-processor stablecoin/crypto invoice-payment rail:
+HMAC-verified provider webhooks, idempotent payment confirmation, and
+tenant-isolated payment records, with **no HarborIQ on-chain custody**.
+711 backend tests, 121 frontend tests, CI green.
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
@@ -485,6 +488,43 @@ this is organized from).
       Archive/Reactivate button were added to `VendorsPage.tsx` since the
       existing table made it a small addition. Closes the gap flagged under
       Phase 13: "no archived/inactive flag or filter yet."
+
+## Phase 18 — Crypto Payment Rail (MVP) — **COMPLETE**
+- [x] **Licensed-processor stablecoin checkout, not custody.** `POST
+      /invoices/{id}/crypto-payment-intent` (`app/api/v1/routes/
+      crypto_payments.py`) is `require_operations`-gated and creates a
+      `crypto_payments` request through `app/services/crypto_payments.py`'s
+      small provider seam. The initial `StripeStablecoinProvider` uses a
+      Stripe Checkout Session with Stripe's `crypto` payment method; HarborIQ
+      holds no wallet keys, never accepts an on-chain transfer directly, and
+      performs no on-chain custody or settlement. The route is explicitly
+      disabled until `CRYPTO_PAYMENTS_ENABLED=true`, so an unconfigured
+      installation cannot accidentally expose a payment option.
+- [x] **Tenant-safe schema + webhook idempotency.** Migration `0020` adds
+      `crypto_payments`, including the same composite `(company_id,
+      invoice_id)` FK discipline used by `payments`/`refunds`, a forced-RLS
+      tenant policy, and a partial unique `(provider, provider_reference)`
+      index. `crypto_processed_events` mirrors the service-role
+      `stripe_processed_events` deduplication pattern: its `INSERT ... ON
+      CONFLICT DO NOTHING` happens in the same transaction as the payment
+      status and invoice side effect, so a provider replay cannot double-pay
+      an invoice.
+- [x] **Fail-closed HMAC webhook + established invoice application path.**
+      `POST /webhooks/crypto` verifies `X-Crypto-Signature` as an
+      HMAC-SHA256 of the raw body using `CRYPTO_WEBHOOK_SECRET`; absence of
+      that secret is permitted only with a warning in development and returns
+      503 in every other `APP_ENV`. A confirmed event row-locks the
+      `crypto_payments` record, stamps it `confirmed`, and delegates to the
+      existing `invoices.mark_paid_from_webhook` implementation so amount
+      clamping and `InvoiceSM`'s `sent -> partial/paid` transitions remain
+      one code path. Failed/expired events update only their crypto-payment
+      record. Going live additionally requires stablecoin/crypto payments to
+      be enabled by Stripe on the connected account, alongside
+      `CRYPTO_WEBHOOK_SECRET`.
+- [x] **Covered behavior.** `tests/test_crypto_payments.py` covers enabled/
+      disabled behavior, valid/invalid/unconfigured signature policy,
+      confirmed partial payment and duplicate replay idempotency, failed
+      outcome isolation from the invoice, and cross-tenant read isolation.
 
 ## Differentiators to preserve/lean into throughout (not incumbents' turf)
 - Fully explainable AI dispatch scoring (factor-by-factor breakdown) vs.

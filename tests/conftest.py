@@ -30,6 +30,7 @@ SERVICE_URL = settings.service_database_url
 # Tables truncated between tests (order-independent with CASCADE).
 _TENANT_TABLES = [
     "audit_log", "outbox_events", "public_tokens", "messages", "refunds", "payments",
+    "crypto_processed_events", "crypto_payments",
     "invoices", "estimate_line_items", "estimates", "job_attachments",
     "job_time_entries", "dry_stack_launch_requests", "job_line_items",
     "slip_reservations", "slips", "jobs",

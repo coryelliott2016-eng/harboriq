@@ -42,6 +42,18 @@ class Settings(BaseSettings):
     stripe_api_key: str = ""
     stripe_webhook_secret: str = ""
 
+    # --- Crypto payments (Phase 18) ---
+    # Disabled by default: no API route creates a provider checkout until the
+    # explicit feature flag is on AND Stripe is configured.  An empty
+    # CRYPTO_WEBHOOK_SECRET follows the established webhook safety policy:
+    # development accepts local synthetic events with a warning, while every
+    # non-development environment fail-closes with a 503 rather than trusting
+    # an unsigned financial event.  HarborIQ is never an on-chain custodian;
+    # Stripe (or a future licensed provider) handles stablecoin checkout and
+    # settlement.
+    crypto_payments_enabled: bool = False
+    crypto_webhook_secret: str = ""
+
     # --- Auth ---
     # HS256 shared secret for signing access tokens. Refresh tokens are opaque
     # random strings stored hashed in user_sessions, so they do not use this.
