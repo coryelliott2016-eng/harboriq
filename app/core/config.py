@@ -1,6 +1,7 @@
 """Application configuration (pydantic-settings)."""
 from typing import Annotated
 
+from cryptography.fernet import Fernet
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -9,12 +10,18 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-before-deploying"  # noqa: S105 -- documented dev-only placeholder, not a real secret
 MIN_JWT_SECRET_BYTES = 32
 
-# Fixed, obviously-insecure Fernet key used only when APP_ENV=development and
-# MFA_ENCRYPTION_KEY is unset, so `users.mfa_secret_enc` encryption works out
-# of the box locally without requiring every developer to generate their own
-# key. Generated once via `Fernet.generate_key()`; never used outside dev
-# (enforced by `_require_strong_mfa_key_outside_development` below).
-DEV_MFA_ENCRYPTION_KEY = "3gWn9z6r0m1cX2h8vQvB5sYyF4dK7pL0aT9uJ6eR3iM="
+# Generated fresh at process start -- never a fixed value baked into source --
+# used only when APP_ENV=development and MFA_ENCRYPTION_KEY is unset, so
+# `users.mfa_secret_enc` encryption works out of the box locally without
+# requiring every developer to generate their own key. Never used outside dev
+# (enforced by `_require_strong_mfa_key_outside_development` below). A prior
+# revision hardcoded a fixed key here; that static value is never used for
+# anything beyond this repo's own dev fixtures, but a static high-entropy
+# secret in source is a bad pattern regardless, so it's generated at runtime
+# instead. Trade-off: restarting the dev server invalidates any MFA secret
+# previously encrypted with the prior process's key -- acceptable for local
+# dev, where re-enrolling MFA is a one-click action.
+DEV_MFA_ENCRYPTION_KEY = Fernet.generate_key().decode()
 
 
 class Settings(BaseSettings):
