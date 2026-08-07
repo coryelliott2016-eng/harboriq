@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     crypto_payments_enabled: bool = False
     crypto_webhook_secret: str = ""
 
+    # --- Asset tokenization (Phase 19) ---
+    # Disabled by default: this compliance-sensitive feature records only a
+    # draft intent to tokenize a marine asset, pending outside securities
+    # counsel review. It MUST NOT be enabled in a real deployment without
+    # that review; migration 0021 independently restricts every record to
+    # status='draft' and the API exposes no issuance or transfer operation.
+    asset_tokenization_enabled: bool = False
+
     # --- Auth ---
     # HS256 shared secret for signing access tokens. Refresh tokens are opaque
     # random strings stored hashed in user_sessions, so they do not use this.

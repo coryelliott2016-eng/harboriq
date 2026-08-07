@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes import (
+    asset_tokens,
     auth,
     billing,
     companies,
@@ -44,6 +45,7 @@ api_router.include_router(slips.router)
 api_router.include_router(slip_reservations.router)
 api_router.include_router(invoices.router)
 api_router.include_router(crypto_payments.router, tags=["crypto-payments"])
+api_router.include_router(asset_tokens.router)
 api_router.include_router(billing.router)
 api_router.include_router(reports.router)
 api_router.include_router(public.router, tags=["public"])

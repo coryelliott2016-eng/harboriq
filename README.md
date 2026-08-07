@@ -9,6 +9,9 @@ build plan: every issue from the technical critique is fixed at the code level.
 > delivery, dunning, and AR aging** (see "Billing operations" below), a
 > **licensed-processor stablecoin/crypto invoice-payment rail** (no
 > HarborIQ on-chain custody; see "Crypto payment rail" below), a
+> **draft-only, admin-gated asset-tokenization registration record** (off by
+> default pending outside securities-counsel review; see "Asset tokenization
+> layer" below), a
 > **customer self-service portal + customer<->staff messaging** (see
 > "Customer self-service portal" below), the
 > **React frontend**, **deployment/observability hardening** (structured
@@ -214,6 +217,9 @@ its server-side logs (see `app/api/middleware.py`, and
 | POST | `/api/v1/invoices/{id}/refund` | bearer, owner/admin/office | full/partial refund against `amount_paid`; lands on `refunded`/`partially_refunded` via `InvoiceSM` |
 | POST | `/api/v1/invoices/{id}/crypto-payment-intent` | bearer, owner/admin/office | create a licensed-processor stablecoin checkout for a sent/partial invoice (Phase 18 feature flag) |
 | GET | `/api/v1/crypto-payments/{id}` | bearer, owner/admin/office | one tenant-scoped stablecoin payment request/outcome |
+| POST | `/api/v1/asset-tokens` | bearer, owner/admin | register a draft-only asset-tokenization intent plus immutable `registered` ledger entry (Phase 19 feature flag; no issuance/transfer) |
+| GET | `/api/v1/asset-tokens` | bearer, owner/admin | list draft-only asset-tokenization registrations |
+| GET | `/api/v1/asset-tokens/{id}` | bearer, owner/admin | one tenant-scoped draft-only asset-tokenization registration |
 | POST | `/api/v1/billing/connect/onboarding-link` | bearer, owner/admin | create (or resume) this company's Stripe Connect account + a fresh onboarding link |
 | GET | `/api/v1/billing/connect/status` | bearer, owner/admin | this company's Connect account id + `charges_enabled`/`details_submitted` |
 | POST | `/api/v1/billing/dunning/run` | bearer, owner/admin | run the overdue-reminder sweep on demand; returns reminded invoice ids |
@@ -784,6 +790,23 @@ transaction as the crypto-payment status/invoice update, so replaying a
 provider event cannot double-pay an invoice. Migration `0020` adds
 `crypto_payments` (tenant RLS plus a cross-tenant-safe composite invoice FK)
 and the service-role `crypto_processed_events` audit/dedup table.
+
+## Asset tokenization layer (Phase 19, exploratory)
+
+Phase 19 adds an exploratory **draft-registration record only** for possible
+future tokenization of vessels, slips, equipment, or receivables. It creates no
+units, issuance, ownership, transfer, trading, or valuation-based allocation,
+and none is planned until HarborIQ has obtained outside securities-counsel
+review. `POST /asset-tokens` is restricted to owner/admin users and records
+exactly one `registered` ledger entry in the same transaction; `GET` endpoints
+are read-only and tenant-scoped.
+
+The feature has two independent enforcement layers: migration `0021` defines
+`asset_tokens.status` as `CHECK (status = 'draft')`, so no database caller can
+move a row out of draft without an explicit future migration, and the API has
+no PATCH/PUT/DELETE/status-change/issuance/transfer route at all. It is **off
+by default** (`ASSET_TOKENIZATION_ENABLED=false`) and must stay off in
+production until the outside legal review occurs.
 
 ## Billing operations (Phase 8)
 

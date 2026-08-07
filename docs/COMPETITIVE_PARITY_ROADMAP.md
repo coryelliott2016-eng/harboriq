@@ -526,6 +526,31 @@ this is organized from).
       confirmed partial payment and duplicate replay idempotency, failed
       outcome isolation from the invoice, and cross-tenant read isolation.
 
+## Phase 19 — Asset Tokenization Layer (Exploratory) — **COMPLETE (draft-only, pending legal review)**
+- [x] **Draft-registration only; no financialized token behavior.** `POST
+      /asset-tokens` lets an owner/admin record intent to possibly tokenize a
+      vessel, slip, equipment, or receivable and creates exactly one
+      `registered` ledger row in the same transaction. No issuance, unit
+      allocation, ownership, transfer, trading, or valuation-based allocation
+      exists or is planned until outside securities counsel completes its
+      review.
+- [x] **Two independent enforcement layers.** Migration `0021` makes
+      `asset_tokens.status` a plain text column constrained by `CHECK (status
+      = 'draft')`, so no code or direct SQL can move a record out of draft
+      without an explicit future migration. Separately, the router exposes
+      only POST registration and tenant-scoped GET reads: there is no
+      PATCH/PUT/DELETE/status-change/issuance/transfer endpoint to call.
+- [x] **Fail-closed feature gating + tenant-safe schema.**
+      `settings.asset_tokenization_enabled` defaults to `False` and must stay
+      off in production until the outside legal review occurs. Migration
+      `0021` adds forced RLS to `asset_tokens` and `token_ledger_entries`,
+      plus composite tenant-safe foreign keys to an optional vessel and from
+      each ledger entry to its asset-token record.
+- [x] **Covered behavior.** `tests/test_asset_tokens.py` covers the disabled
+      response, owner/admin authorization boundary, draft registration and
+      ledger write, vessel validation, tenant isolation, absent mutation
+      routes, and the database `status = 'draft'` check rejection.
+
 ## Differentiators to preserve/lean into throughout (not incumbents' turf)
 - Fully explainable AI dispatch scoring (factor-by-factor breakdown) vs.
   DockMaster's marketing-only "AI-powered scheduling" claim.

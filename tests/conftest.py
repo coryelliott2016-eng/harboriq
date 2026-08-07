@@ -31,6 +31,7 @@ SERVICE_URL = settings.service_database_url
 _TENANT_TABLES = [
     "audit_log", "outbox_events", "public_tokens", "messages", "refunds", "payments",
     "crypto_processed_events", "crypto_payments",
+    "token_ledger_entries", "asset_tokens",
     "invoices", "estimate_line_items", "estimates", "job_attachments",
     "job_time_entries", "dry_stack_launch_requests", "job_line_items",
     "slip_reservations", "slips", "jobs",
