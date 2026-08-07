@@ -1,0 +1,96 @@
+name: Master push audit trail
+
+# H-6 compensating control (Security Core Prompt v1.0).
+#
+# Real branch protection (required reviews, required status checks
+# blocking the push itself) needs GitHub Pro or a public repo on this
+# host, and as of this workflow's creation the account still reports
+# plan "free" and the branch-protection/rulesets APIs still return 403 --
+# see .github/CODEOWNERS for the full context. Until that is resolved,
+# every push directly lands on master with no gate. This workflow does
+# not (and cannot) block a push after the fact; it exists to remove the
+# other failure mode this audit actually hit in practice: a push landing
+# on master with nobody -- human or otherwise -- aware it happened until
+# something breaks or two efforts collide. It gives every direct push a
+# durable, visible record and a place for a human to react quickly.
+#
+# Replace this workflow with real branch protection the moment the plan
+# issue is resolved; it is a mitigation, not a fix for H-6.
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record push to master
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+          BEFORE: ${{ github.event.before }}
+          ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          COMMIT_URL="${{ github.server_url }}/${REPO}/commit/${SHA}"
+          ZERO_SHA="0000000000000000000000000000000000000000"
+
+          SUBJECT=$(git log -1 --format=%s "${SHA}")
+          BODY=$(git log -1 --format=%b "${SHA}")
+
+          if [ "${BEFORE}" = "${ZERO_SHA}" ] || [ -z "${BEFORE}" ]; then
+            COMPARE_URL="${COMMIT_URL}"
+            FILES="new branch/ref, no prior commit to diff against"
+          else
+            COMPARE_URL="${{ github.server_url }}/${REPO}/compare/${BEFORE}...${SHA}"
+            FILES=$(git diff --stat "${BEFORE}" "${SHA}" 2>/dev/null | tail -1 || echo "unknown (force-push rewrote history)")
+          fi
+
+          cat > /tmp/issue_body.md <<EOF
+          A commit was pushed directly to \`master\` with no branch-protection gate (H-6, still blocked pending a GitHub plan resolution -- see \`.github/CODEOWNERS\`).
+
+          This issue is an automated record, not an accusation -- direct pushes are the expected workflow on this repo right now. Its only purpose is to make sure a human sees every push, quickly, so two people or sessions never silently overwrite each other's work again (this happened once already: see the 2026-08-05 security audit's "coordination note").
+
+          | | |
+          |---|---|
+          | Commit | [\`${SHA:0:7}\`]($COMMIT_URL) |
+          | Author | @${ACTOR} |
+          | Subject | ${SUBJECT} |
+          | Diff | [compare view]($COMPARE_URL) |
+          | Files changed | ${FILES} |
+          | CI run | [$RUN_URL]($RUN_URL) |
+
+          <details><summary>Full commit message</summary>
+
+          \`\`\`
+          ${BODY}
+          \`\`\`
+
+          </details>
+
+          Close this issue once you've confirmed the push is expected and CI is green.
+          EOF
+
+          gh issue create \
+            --repo "${REPO}" \
+            --title "master push: ${SUBJECT} (${SHA:0:7})" \
+            --body-file /tmp/issue_body.md \
+            --label "master-push-audit" 2>&1 || {
+              echo "::warning::Could not create audit issue (label may not exist yet or repo issues are disabled). Falling back to a job summary only.";
+              cat /tmp/issue_body.md >> "$GITHUB_STEP_SUMMARY";
+            }
+
+          cat /tmp/issue_body.md >> "$GITHUB_STEP_SUMMARY"
