@@ -773,23 +773,27 @@ Phase 18 adds an optional stablecoin invoice-payment rail that uses a
 **licensed payment processor (Stripe), not HarborIQ on-chain custody**:
 HarborIQ never holds wallet keys, accepts a customer transfer directly, or
 settles blockchain assets. `POST /invoices/{id}/crypto-payment-intent`
-records a pending `crypto_payments` row and asks the provider for a hosted
-Checkout URL; Stripe's signed outcome then reaches `POST /webhooks/crypto`.
-The confirmed path reuses `invoices.mark_paid_from_webhook` rather than
-forking invoice arithmetic or `InvoiceSM` transitions, so partial and full
-payments retain the same row-locking/clamping protections as card Checkout.
+records a pending `crypto_payments` row, creates a Stripe Checkout Session
+with `payment_method_types=["crypto"]` and
+`metadata.kind=crypto_invoice_payment`, and stamps
+`invoices.stripe_checkout_session_id` so the **existing** Stripe webhook
+path can resolve it.
+
+**Production confirmation path:** Stripe delivers
+`checkout.session.completed` to `POST /webhooks/stripe` (Stripe-Signature).
+When `metadata.kind == crypto_invoice_payment`, the handler confirms the
+`crypto_payments` row and reuses `invoices.mark_paid_from_webhook` — same
+row-locking/clamping/`InvoiceSM` path as card Checkout. A generic
+`POST /webhooks/crypto` (HMAC `X-Crypto-Signature` via `CRYPTO_WEBHOOK_SECRET`)
+remains for non-Stripe processors and tests; do **not** point the Stripe
+Dashboard at it.
 
 The rail is **off by default** (`CRYPTO_PAYMENTS_ENABLED=false`). Going live
-requires a Stripe account for which Stripe has enabled stablecoin/crypto
-payments, `STRIPE_API_KEY`, and a strong `CRYPTO_WEBHOOK_SECRET`. The webhook
-verifies an HMAC-SHA256 digest against the raw body whenever that secret is
-present; without it, development accepts a locally generated event with a
-warning, while every non-development environment fail-closes with 503. Its
-`crypto_processed_events` deduplication record is inserted in the same
-transaction as the crypto-payment status/invoice update, so replaying a
-provider event cannot double-pay an invoice. Migration `0020` adds
-`crypto_payments` (tenant RLS plus a cross-tenant-safe composite invoice FK)
-and the service-role `crypto_processed_events` audit/dedup table.
+requires Stripe to enable crypto/stablecoin Checkout on the account,
+`STRIPE_API_KEY`, and a working `STRIPE_WEBHOOK_SECRET`. Step-by-step ops:
+[`docs/CRYPTO_PAYMENTS_ENABLEMENT.md`](docs/CRYPTO_PAYMENTS_ENABLEMENT.md).
+Migration `0020` adds `crypto_payments` (tenant RLS + composite invoice FK)
+and service-role `crypto_processed_events`.
 
 ## Asset tokenization layer (Phase 19, exploratory)
 

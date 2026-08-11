@@ -114,10 +114,14 @@ class StripeStablecoinProvider:
                 "company_id": str(company_id),
                 "crypto_currency": currency.lower(),
             },
-            success_url="https://app.harboriq.example/pay/"
-            f"{invoice_id}?crypto_checkout=success",
-            cancel_url="https://app.harboriq.example/pay/"
-            f"{invoice_id}?crypto_checkout=canceled",
+            success_url=(
+                f"{settings.app_base_url.rstrip('/')}/pay/"
+                f"{invoice_id}?crypto_checkout=success"
+            ),
+            cancel_url=(
+                f"{settings.app_base_url.rstrip('/')}/pay/"
+                f"{invoice_id}?crypto_checkout=canceled"
+            ),
             **request_options,
         )
         return {"provider_reference": session.id, "checkout_url_or_address": session.url}
@@ -235,6 +239,23 @@ def create_crypto_payment_intent(
                 ),
             },
         ).first()
+        # Stamp the Checkout Session id onto the invoice immediately so the
+        # real Stripe webhook path (`checkout.session.completed` with
+        # kind=crypto_invoice_payment) can resolve the invoice the same way
+        # card Checkout does — without requiring a second custom webhook.
+        db.execute(
+            text(
+                """
+                UPDATE invoices
+                   SET stripe_checkout_session_id = :provider_reference
+                 WHERE id = :invoice_id
+                """
+            ),
+            {
+                "provider_reference": provider_reference,
+                "invoice_id": invoice_id,
+            },
+        )
         db.commit()
 
     return {"payment": payment, "checkout_url_or_address": checkout_url_or_address}

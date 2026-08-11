@@ -271,3 +271,75 @@ def test_crypto_payment_is_not_visible_to_another_tenant(client, monkeypatch):
         headers=auth_headers(owner_b),
     )
     assert response.status_code == 404
+
+
+def test_stripe_checkout_completed_confirms_crypto_payment_and_marks_invoice_paid(
+    client, monkeypatch, service_db
+):
+    """Real Stripe events land on /webhooks/stripe, not /webhooks/crypto.
+
+    Phase 18's production path is checkout.session.completed with
+    metadata.kind == crypto_invoice_payment, handled by stripe_webhooks.
+    """
+    from app.services.stripe_webhooks import handle_stripe_webhook
+
+    _enable_fake_provider(monkeypatch)
+    owner = signup(client)
+    company_id = uuid.UUID(owner["user"]["company_id"])
+    invoice = _invoiced_job(client, owner, unit_price="100.00")
+    intent = _create_intent(client, owner, invoice["id"], amount="100.00")
+    session_id = intent["payment"]["provider_reference"]
+    assert session_id
+
+    # Intent creation must stamp the session onto the invoice so the Stripe
+    # webhook resolver can find it (same pattern as card Checkout).
+    stamped = service_db.execute(
+        text("SELECT stripe_checkout_session_id FROM invoices WHERE id = :id"),
+        {"id": invoice["id"]},
+    ).first()
+    assert stamped.stripe_checkout_session_id == session_id
+
+    eid = "evt_crypto_" + uuid.uuid4().hex
+    event = {
+        "id": eid,
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "id": session_id,
+                "object": "checkout.session",
+                "amount_total": 10000,
+                "payment_intent": f"pi_{uuid.uuid4().hex[:12]}",
+                "metadata": {
+                    "company_id": str(company_id),
+                    "invoice_id": str(invoice["id"]),
+                    "kind": "crypto_invoice_payment",
+                    "crypto_currency": "usdc",
+                },
+            }
+        },
+    }
+    status_code = handle_stripe_webhook(service_db, eid, event["type"], event)
+    assert status_code == 200
+
+    invoice_row = service_db.execute(
+        text("SELECT status, amount_paid, balance_due FROM invoices WHERE id = :id"),
+        {"id": invoice["id"]},
+    ).first()
+    payment_row = service_db.execute(
+        text("SELECT status, confirmed_at FROM crypto_payments WHERE id = :id"),
+        {"id": intent["payment"]["id"]},
+    ).first()
+    assert invoice_row.status == "paid"
+    assert str(invoice_row.amount_paid) == "100.00"
+    assert str(invoice_row.balance_due) == "0.00"
+    assert payment_row.status == "confirmed"
+    assert payment_row.confirmed_at is not None
+
+    # Replay must be a no-op (stripe_processed_events dedup).
+    status_code = handle_stripe_webhook(service_db, eid, event["type"], event)
+    assert status_code == 200
+    payments = service_db.execute(
+        text("SELECT count(*) FROM payments WHERE invoice_id = :id"),
+        {"id": invoice["id"]},
+    ).scalar_one()
+    assert payments == 1

@@ -509,18 +509,19 @@ this is organized from).
       CONFLICT DO NOTHING` happens in the same transaction as the payment
       status and invoice side effect, so a provider replay cannot double-pay
       an invoice.
-- [x] **Fail-closed HMAC webhook + established invoice application path.**
-      `POST /webhooks/crypto` verifies `X-Crypto-Signature` as an
-      HMAC-SHA256 of the raw body using `CRYPTO_WEBHOOK_SECRET`; absence of
-      that secret is permitted only with a warning in development and returns
-      503 in every other `APP_ENV`. A confirmed event row-locks the
-      `crypto_payments` record, stamps it `confirmed`, and delegates to the
-      existing `invoices.mark_paid_from_webhook` implementation so amount
-      clamping and `InvoiceSM`'s `sent -> partial/paid` transitions remain
-      one code path. Failed/expired events update only their crypto-payment
-      record. Going live additionally requires stablecoin/crypto payments to
-      be enabled by Stripe on the connected account, alongside
-      `CRYPTO_WEBHOOK_SECRET`.
+- [x] **Production Stripe webhook path + generic HMAC fallback.** Real Stripe
+      crypto Checkout completions are handled on the existing
+      `POST /webhooks/stripe` path when `metadata.kind ==
+      crypto_invoice_payment` (`_on_crypto_invoice_payment_completed` in
+      `app/services/stripe_webhooks.py`): confirm `crypto_payments`, then
+      `invoices.mark_paid_from_webhook`. Intent creation stamps
+      `invoices.stripe_checkout_session_id` immediately so resolution matches
+      card Checkout. The generic `POST /webhooks/crypto` (HMAC-SHA256 via
+      `CRYPTO_WEBHOOK_SECRET`) remains for non-Stripe processors and tests —
+      fail-closed outside development. Ops enablement:
+      `docs/CRYPTO_PAYMENTS_ENABLEMENT.md`. Going live requires Stripe to
+      enable crypto/stablecoin Checkout on the account plus a working
+      `STRIPE_WEBHOOK_SECRET`.
 - [x] **Covered behavior.** `tests/test_crypto_payments.py` covers enabled/
       disabled behavior, valid/invalid/unconfigured signature policy,
       confirmed partial payment and duplicate replay idempotency, failed
