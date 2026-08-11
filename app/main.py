@@ -1,5 +1,7 @@
 """HarborIQ v2 application entrypoint."""
-from fastapi import FastAPI
+import secrets
+
+from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -55,15 +57,29 @@ def root():
 
 
 @app.get("/metrics")
-def metrics():
+def metrics(authorization: str | None = Header(default=None)):
     """Prometheus scrape endpoint (text exposition format).
 
-    Deliberately unauthenticated — this is standard practice for Prometheus
-    scraping (Prometheus itself has no bearer-token story for scrape
-    targets by default) and the metrics here carry no tenant data, only
-    aggregate request counts/latencies. In a real deployment this endpoint
-    should still be firewalled to the scraper's network only rather than
-    left open on the public internet; that is a reverse-proxy/network
-    concern outside this app's control — see `docs/DEPLOYMENT.md`.
+    Carries no tenant data — only aggregate request counts/latencies — but
+    still discloses route inventory and traffic shape, so it is gated by
+    `METRICS_TOKEN` (Authorization: Bearer …) whenever that setting is
+    non-empty. Outside development the process refuses to start without a
+    token (see `Settings._require_metrics_token_outside_development`), so
+    production scrapes always authenticate. In development an empty token
+    keeps the historical open-scrape behaviour for local Prometheus.
+
+    Network-layer restriction (reverse-proxy `remote_ip` / firewall) remains
+    recommended as defense-in-depth — see `docs/DEPLOYMENT.md`.
     """
+    expected = (settings.metrics_token or "").strip()
+    if expected:
+        provided = ""
+        if authorization and authorization.lower().startswith("bearer "):
+            provided = authorization[7:].strip()
+        if not provided or not secrets.compare_digest(provided, expected):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or missing metrics bearer token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

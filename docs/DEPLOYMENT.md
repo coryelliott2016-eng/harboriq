@@ -106,9 +106,10 @@ it:
    the whole hop chain. If the proxy does not already assign one, it should
    just pass the header through unmodified in both directions and let the
    app mint it.
-5. Optionally, restrict `/metrics` and `/api/v1/readyz` to the
-   scraper's/operator's network at this layer (see "Metrics" below) — the
-   app itself does not, and should not, know about your network topology.
+5. Restrict `/metrics` and `/api/v1/readyz` to the scraper's/operator's
+   network at this layer (see "Metrics" below). The app now also requires
+   a bearer token for `/metrics` outside development (`METRICS_TOKEN`);
+   network restriction remains the recommended second layer.
 
 A minimal example Caddyfile (adapt hostnames/ports to your actual compose
 port mappings):
@@ -149,15 +150,34 @@ tracing system.
 
 `GET /metrics` exposes Prometheus text-format counters (`http_requests_total`)
 and a latency histogram (`http_request_duration_seconds`), both labelled by
-method/route-template/status — see `app/api/middleware.py`. This endpoint is
-**intentionally unauthenticated** (standard practice for Prometheus
-scraping; Prometheus itself has no bearer-token story for scrape targets by
-default), but it should still be **firewalled to your scraper's network
-only** in a real deployment — that is a reverse-proxy/network-level
-decision this app cannot make for you. With the Caddy example above, add a
-`handle /metrics` block restricted by `remote_ip` to your monitoring
-host/VPN range; with a plain firewall, simply do not forward port 8000/443
-paths for `/metrics` to the public internet at all.
+method/route-template/status — see `app/api/middleware.py`.
+
+**Authentication (required outside development):** set `METRICS_TOKEN` to a
+random secret (`openssl rand -hex 32`). The app rejects scrapes that do not
+present `Authorization: Bearer <token>` with HTTP 401, and refuses to start
+when `APP_ENV` is not `development` and the token is missing/short. In
+development an empty token keeps open scrape for local Prometheus.
+
+Prometheus scrape config (token auth is first-class — do not leave this
+open and rely on obscurity):
+
+```yaml
+scrape_configs:
+  - job_name: harboriq
+    metrics_path: /metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/harboriq_metrics_token
+    static_configs:
+      - targets: ["api.harboriq.example:443"]
+```
+
+**Network restriction (defense in depth, still required):** even with a
+bearer token, firewall `/metrics` to your scraper's network only. With the
+Caddy example above, add a `handle /metrics` block restricted by `remote_ip`
+to your monitoring host/VPN range; with a plain firewall, do not forward
+port 8000/443 paths for `/metrics` to the public internet at all.
 
 **What exists today vs. what does not, stated plainly:** the instrumentation
 hooks above (structured logs, request-id correlation, the `/metrics`

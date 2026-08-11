@@ -159,6 +159,15 @@ class Settings(BaseSettings):
     # feature is simply skipped, never an error). Setting SENTRY_DSN turns
     # on error/performance reporting with zero other code changes.
     sentry_dsn: str = ""
+    # Shared secret that must be presented as `Authorization: Bearer <token>`
+    # to scrape GET /metrics. Empty is allowed ONLY in development (open
+    # scrape for local Prometheus). Outside development the process refuses
+    # to start without a non-empty value — same fail-closed style as
+    # JWT_SECRET — so a forgotten env var cannot leave the route inventory
+    # and traffic-shape counters on a public listener. Prometheus scrapers
+    # support this natively via `authorization.credentials` /
+    # `bearer_token_file` in scrape_configs (see docs/DEPLOYMENT.md).
+    metrics_token: str = ""
 
     # --- CORS ---
     # Comma-separated in the env var (CORS_ALLOW_ORIGINS); defaults to the
@@ -207,6 +216,23 @@ class Settings(BaseSettings):
                 "MFA_ENCRYPTION_KEY must be set to a real Fernet key when "
                 f"APP_ENV={self.app_env!r} (try: python -c \"from cryptography.fernet "
                 'import Fernet; print(Fernet.generate_key().decode())\")'
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _require_metrics_token_outside_development(self) -> "Settings":
+        if self.app_env == "development":
+            return self
+        if not self.metrics_token or not self.metrics_token.strip():
+            raise ValueError(
+                "METRICS_TOKEN must be set to a non-empty shared secret when "
+                f"APP_ENV={self.app_env!r} (try: openssl rand -hex 32). "
+                "Prometheus scrapers pass it via authorization.credentials / "
+                "bearer_token_file — see docs/DEPLOYMENT.md."
+            )
+        if len(self.metrics_token.encode()) < 16:
+            raise ValueError(
+                "METRICS_TOKEN must be at least 16 bytes outside development"
             )
         return self
 
