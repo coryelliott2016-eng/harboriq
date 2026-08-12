@@ -28,6 +28,11 @@ class LocationPingOut(BaseModel):
     current_latitude: Decimal
     current_longitude: Decimal
     location_updated_at: datetime
+    # Marine threat model Scenario 2 (2026-08-11): true when implied ground
+    # speed from the prior ping exceeds the configured plausibility ceiling.
+    # Informational only — the coordinates were still accepted.
+    anomaly_suspected: bool = False
+    implied_speed_kmh: float | None = None
 
 
 class TechnicianLocationOut(BaseModel):

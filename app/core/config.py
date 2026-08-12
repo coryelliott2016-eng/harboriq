@@ -90,6 +90,21 @@ class Settings(BaseSettings):
     # original in-process version.
     rate_limit_requests_per_window: int = 10
     rate_limit_window_seconds: int = 60
+    # Location-ping is authenticated and keyed per-user (not IP). The staff
+    # web app pings about once every 3 minutes (see useLocationPing.ts), so
+    # 30/minute is still ~90x headroom for legitimate GPS retries while
+    # stopping a compromised session from flooding spoofed coordinates onto
+    # the dispatch board (marine threat model Scenario 2, 2026-08-11).
+    location_ping_rate_limit_per_window: int = 30
+    location_ping_rate_limit_window_seconds: int = 60
+    # Implied ground speed above this (km/h) between consecutive pings is
+    # flagged as anomalous. 250 km/h is well above highway/boat speeds and
+    # GPS noise, well below aircraft teleport-spoofs. Flagged, not rejected
+    # — legitimate cold-start GPS jumps still land, they just surface a flag.
+    location_ping_max_plausible_speed_kmh: float = 250.0
+    # Only run the speed check when the prior ping is this fresh; older gaps
+    # are treated as a new trip (device off overnight, flight, etc.).
+    location_ping_plausibility_window_seconds: int = 2 * 60 * 60
 
     # --- Invite tokens ---
     invite_ttl_hours: int = 24 * 7

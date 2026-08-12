@@ -282,6 +282,67 @@ def check_location_ping_bounds(repo: Path, report: ScanReport) -> None:
     )
 
 
+
+def check_location_ping_rate_limit(repo: Path, report: ScanReport) -> None:
+    """Marine threat model Scenario 2: per-user rate limit on location-ping."""
+    rl = _read(repo / "app" / "core" / "rate_limit.py")
+    route = _read(repo / "app" / "api" / "v1" / "routes" / "users.py")
+    ok = (
+        "enforce_location_ping_rate_limit" in rl
+        and "_location_ping_limiter" in rl
+        and "enforce_location_ping_rate_limit" in route
+    )
+    report.add(
+        "TM-2", "location-ping per-user rate limit",
+        "PASS" if ok else "FAIL",
+        "limiter + route enforcement present" if ok else "location-ping rate limit missing",
+        "regression",
+    )
+
+
+def check_location_ping_plausibility(repo: Path, report: ScanReport) -> None:
+    """Marine threat model Scenario 2: implied-speed anomaly flagging."""
+    svc = _read(repo / "app" / "services" / "users.py")
+    schema = _read(repo / "app" / "schemas" / "dispatch_board.py")
+    ok = (
+        "_evaluate_location_anomaly" in svc
+        and "_haversine_km" in svc
+        and "anomaly_suspected" in schema
+    )
+    report.add(
+        "TM-3", "location-ping speed plausibility check",
+        "PASS" if ok else "FAIL",
+        "haversine anomaly check + response flag present" if ok else "plausibility check missing",
+        "regression",
+    )
+
+
+def check_logout_all_devices_access_epoch(repo: Path, report: ScanReport) -> None:
+    """Marine threat model Scenario 1: all_devices kills other access tokens.
+
+    Evidence: epoch bump on logout-all, ave claim at mint, stale-epoch check
+    in deps. Without this, other devices' access tokens linger until exp.
+    """
+    denylist = _read(repo / "app" / "core" / "token_denylist.py")
+    security = _read(repo / "app" / "core" / "security.py")
+    deps = _read(repo / "app" / "api" / "deps.py")
+    auth_svc = _read(repo / "app" / "services" / "auth.py")
+    ok = (
+        "bump_user_access_epoch" in denylist
+        and "is_user_access_epoch_stale" in denylist
+        and '"ave"' in security
+        and "is_user_access_epoch_stale" in deps
+        and "bump_user_access_epoch" in auth_svc
+    )
+    report.add(
+        "TM-4", "logout all_devices invalidates other access tokens",
+        "PASS" if ok else "FAIL",
+        "access-epoch bump + JWT ave + deps check present" if ok else "access-epoch control missing",
+        "regression",
+    )
+
+
+
 # ---------------------------------------------------------------------------
 # Group B -- known, accepted-open items. We track *state changes*, not
 # pass/fail, since these are documented as open in the audit report.
@@ -349,6 +410,9 @@ def run_all_checks(repo: Path, repo_slug: str | None) -> ScanReport:
     check_push_audit_workflow(repo, report)
     check_codeowners(repo, report)
     check_location_ping_bounds(repo, report)
+    check_location_ping_rate_limit(repo, report)
+    check_location_ping_plausibility(repo, report)
+    check_logout_all_devices_access_epoch(repo, report)
     if repo_slug:
         check_branch_protection(report, repo_slug)
         check_dependabot_alerts(report, repo_slug)

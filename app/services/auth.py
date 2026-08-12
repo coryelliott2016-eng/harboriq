@@ -45,7 +45,7 @@ from app.core.security import (
     password_needs_rehash,
     verify_password,
 )
-from app.core.token_denylist import denylist_token
+from app.core.token_denylist import bump_user_access_epoch, denylist_token
 from app.db.models import UserRole
 from app.db.tenant import tenant_context
 from app.services import outbox, public_tokens
@@ -813,12 +813,22 @@ def logout(
     sessions without an access token in hand (e.g. an admin force-logout of
     another user) still work -- they simply do not get the immediate-
     revocation guarantee for a token they never had.
+
+    When `all_devices=True`, a per-user access-token cutoff is also written
+    so OTHER devices' still-valid access tokens (whose jtis this handler
+    does not know) stop working immediately rather than lingering until
+    their natural `exp` — marine threat model Scenario 1 (lost/stolen
+    device), 2026-08-11.
     """
     if access_token_jti is not None and access_token_expires_at is not None:
         denylist_token(access_token_jti, access_token_expires_at)
 
     if all_devices:
         revoked = _revoke_all_user_sessions(app_db, company_id, user_id, "logout_all")
+        # Bump the per-user access epoch so EVERY outstanding access token
+        # (not just the caller's jti) fails the next deps check. New logins
+        # stamp the new epoch and work immediately.
+        bump_user_access_epoch(user_id)
     else:
         with tenant_context(app_db, company_id):
             family_id = app_db.execute(

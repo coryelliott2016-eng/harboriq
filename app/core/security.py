@@ -122,11 +122,21 @@ class AccessClaims:
     session_id: uuid.UUID
     jti: str
     expires_at: datetime
+    issued_at: datetime
+    #: Access-token epoch observed at issue time. Compared to the live
+    #: per-user epoch in Redis on every request so logout(all_devices) can
+    #: invalidate every outstanding access token, not only the caller's jti.
+    access_epoch: int
 
 
 def create_access_token(
     user_id: uuid.UUID, company_id: uuid.UUID, role: str, session_id: uuid.UUID
 ) -> str:
+    # Lazy import: token_denylist imports redis/config only, but keep the
+    # dependency edge out of module import time so a Redis blip during app
+    # boot cannot prevent this module from loading.
+    from app.core.token_denylist import get_user_access_epoch
+
     now = datetime.now(timezone.utc)
     payload = {
         "iss": settings.jwt_issuer,
@@ -138,6 +148,9 @@ def create_access_token(
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_ttl_minutes),
         "jti": secrets.token_urlsafe(16),
+        # Stamp the epoch at issue time. logout(all_devices) bumps the live
+        # value; tokens carrying a stale epoch are rejected in deps.
+        "ave": get_user_access_epoch(user_id),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -158,6 +171,14 @@ def decode_access_token(token: str) -> AccessClaims:
     if payload.get("typ") != "access":
         raise InvalidToken("not an access token")
     try:
+        # `ave` is optional for forward-compat with tokens minted before the
+        # epoch control shipped; missing claim is treated as epoch 0 so the
+        # first revoke-all still invalidates them.
+        raw_ave = payload.get("ave", 0)
+        try:
+            access_epoch = int(raw_ave)
+        except (TypeError, ValueError) as exc:
+            raise InvalidToken("malformed access epoch") from exc
         return AccessClaims(
             user_id=uuid.UUID(payload["sub"]),
             company_id=uuid.UUID(payload["cid"]),
@@ -165,6 +186,8 @@ def decode_access_token(token: str) -> AccessClaims:
             session_id=uuid.UUID(payload["sid"]),
             jti=payload["jti"],
             expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
+            issued_at=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
+            access_epoch=access_epoch,
         )
     except (KeyError, ValueError) as exc:
         raise InvalidToken("malformed claims") from exc

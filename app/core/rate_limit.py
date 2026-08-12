@@ -121,6 +121,15 @@ _password_reset_limiter = _RedisFixedWindowLimiter(
     settings.rate_limit_requests_per_window,
     settings.rate_limit_window_seconds,
 )
+# Authenticated endpoint: identity is user_id, not IP. A stolen session
+# spoofing technician location (marine threat model Scenario 2) is the
+# threat; per-IP limiting would miss a mobile tech whose IP rotates and
+# would not stop a single compromised bearer token.
+_location_ping_limiter = _RedisFixedWindowLimiter(
+    "location_ping",
+    settings.location_ping_rate_limit_per_window,
+    settings.location_ping_rate_limit_window_seconds,
+)
 
 
 def _client_key(request: Request) -> str:
@@ -148,7 +157,30 @@ def enforce_password_reset_rate_limit(request: Request) -> None:
     enforce_rate_limit(_password_reset_limiter, request)
 
 
+def enforce_rate_limit_for_identity(
+    limiter: _RedisFixedWindowLimiter, identity: str, *, detail: str = "too many requests, try again later"
+) -> None:
+    """Raise 429 if `identity` (any opaque key — user id, IP, etc.) is over budget."""
+    allowed, retry_after = limiter.hit(identity)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=detail,
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def enforce_location_ping_rate_limit(user_id: str) -> None:
+    """Per-user throttle for POST /users/me/location-ping (threat model Scenario 2)."""
+    enforce_rate_limit_for_identity(
+        _location_ping_limiter,
+        user_id,
+        detail="location ping rate limit exceeded",
+    )
+
+
 def _reset_all_for_tests() -> None:
-    """Test-only: clear both limiters so test order does not bleed state."""
+    """Test-only: clear all limiters so test order does not bleed state."""
     _login_limiter.reset()
     _password_reset_limiter.reset()
+    _location_ping_limiter.reset()
