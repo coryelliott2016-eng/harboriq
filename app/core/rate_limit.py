@@ -130,6 +130,13 @@ _location_ping_limiter = _RedisFixedWindowLimiter(
     settings.location_ping_rate_limit_per_window,
     settings.location_ping_rate_limit_window_seconds,
 )
+# Public marketing signup form (unauthenticated). Per-IP; generous enough for
+# a real human correcting typos, tight enough to blunt spray bots.
+_marketing_lead_limiter = _RedisFixedWindowLimiter(
+    "marketing_lead",
+    settings.marketing_lead_rate_limit_per_window,
+    settings.marketing_lead_rate_limit_window_seconds,
+)
 
 
 def _client_key(request: Request) -> str:
@@ -179,8 +186,14 @@ def enforce_location_ping_rate_limit(user_id: str) -> None:
     )
 
 
+def enforce_marketing_lead_rate_limit(request: Request) -> None:
+    """Per-IP throttle for POST /api/v1/public/leads."""
+    enforce_rate_limit(_marketing_lead_limiter, request)
+
+
 def _reset_all_for_tests() -> None:
     """Test-only: clear all limiters so test order does not bleed state."""
     _login_limiter.reset()
     _password_reset_limiter.reset()
     _location_ping_limiter.reset()
+    _marketing_lead_limiter.reset()

@@ -154,6 +154,19 @@ class Settings(BaseSettings):
     # The API itself never renders these pages.
     app_base_url: str = "http://localhost:5173"
 
+    # --- Marketing leads (public GTM / trial signup) ---
+    # Destination for internal "new trial signup" notifications. Empty means
+    # store the lead but skip the notify email (console-transport still logs
+    # if SMTP is also unset and a notify is attempted with a non-empty to).
+    marketing_lead_notify_to: str = "coryelliott19@icloud.com"
+    # Bearer token for GET /api/v1/public/leads (platform admin list). Empty
+    # disables the list endpoint (always 401) — set a long random value in
+    # every real deployment that needs to read leads via API.
+    marketing_leads_admin_token: str = ""
+    # Public POST /public/leads anti-abuse (per IP, Redis fixed window).
+    marketing_lead_rate_limit_per_window: int = 5
+    marketing_lead_rate_limit_window_seconds: int = 600
+
     # --- SMS transport (Phase 11) ---
     # Empty twilio_account_sid (the dev default) means "console transport":
     # app/services/sms.py logs the message instead of calling out, mirroring

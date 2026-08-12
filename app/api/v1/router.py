@@ -14,6 +14,7 @@ from app.api.v1.routes import (
     inventory,
     invoices,
     jobs,
+    marketing_leads,
     messages,
     portal,
     public,
@@ -49,6 +50,7 @@ api_router.include_router(asset_tokens.router)
 api_router.include_router(billing.router)
 api_router.include_router(reports.router)
 api_router.include_router(public.router, tags=["public"])
+api_router.include_router(marketing_leads.router, tags=["public", "marketing-leads"])
 api_router.include_router(portal.router)
 api_router.include_router(messages.router)
 api_router.include_router(stripe_webhooks.router, tags=["webhooks"])
