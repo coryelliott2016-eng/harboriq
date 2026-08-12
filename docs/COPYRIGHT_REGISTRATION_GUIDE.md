@@ -1,8 +1,7 @@
 # HarborIQ — U.S. Copyright Registration Guide
 
 This is a ready-to-file packet for registering HarborIQ's source code with
-the U.S. Copyright Office, with the **claimant set to Lit Movement Capital
-Holdings, LLC** (the software's human author, Cory Elliott, assigns the
+the U.S. Copyright Office, with the **claimant set to HarborIQ, Inc.** (the software's human author, Cory Elliott, assigns the
 copyright to the entity — see the new "Author vs. Claimant" section below
 for why both fields still matter and what the eCO form needs beyond just
 the entity name). **You (Cory Elliott) must still personally create the
@@ -43,7 +42,7 @@ disclosure language below, which is a genuinely unsettled area (see
    - Author created: *(see exact wording below — do not leave this generic)*
    - Citizenship/domicile: United States
    - Work made for hire: **No** (you're filing as the individual human author, not an employer — the entity below holds the copyright by *assignment*, not because it was a work-for-hire)
-9. **Claimant:** **Lit Movement Capital Holdings, LLC**. The eCO form will ask, since this differs from the author named in step 8, *"how did the claimant obtain ownership of the copyright?"* — answer **"By written agreement"** (use this only once an actual signed IP assignment from Cory Elliott to Lit Movement Capital Holdings, LLC exists — see "Author vs. Claimant" below; do not submit this answer if no such document exists yet).
+9. **Claimant:** **HarborIQ, Inc.**. The eCO form will ask, since this differs from the author named in step 8, *"how did the claimant obtain ownership of the copyright?"* — answer **"By written agreement"** (use this only once an actual signed IP assignment from Cory Elliott to HarborIQ, Inc. exists — see "Author vs. Claimant" below; do not submit this answer if no such document exists yet).
 10. **Limitation of Claim → "Material Excluded" → "Other":** *(see exact wording below)*
 11. **Rights and permissions / correspondent:** your contact info.
 12. **Certification:** you personally certify — read it, it's a legal statement.
@@ -61,8 +60,7 @@ The **Claimant** field is different: it identifies whoever *owns* the
 copyright at the time of filing, which can be the author themselves or
 someone the author has transferred ownership to.
 
-Because you've asked for the claimant to be **Lit Movement Capital
-Holdings, LLC** rather than you personally, that means the copyright in
+Because you've asked for the claimant to be **HarborIQ, Inc.** rather than you personally, that means the copyright in
 this code needs to actually be assigned from you to that entity — the
 copyright registration form doesn't create that transfer, it only records
 who already owns the work. Two things to have in place before you file,
@@ -70,14 +68,14 @@ not after:
 
 1. **A written IP assignment agreement** — a short document where Cory
    Elliott (as an individual) assigns all right, title, and interest in
-   the HarborIQ source code to Lit Movement Capital Holdings, LLC, signed
+   the HarborIQ source code to HarborIQ, Inc., signed
    and dated. Copyright transfers must be in writing to be valid
    ([17 U.S.C. § 204(a)](https://www.copyright.gov/title17/92chap2.html)).
    This is the document you'll be pointing to when the eCO form asks how
    the claimant obtained ownership — have it executed (and keep the
    signed copy with your other entity/trust records) before you answer
    "By written agreement" on the form.
-2. **Confirm Lit Movement Capital Holdings, LLC is actually registered**
+2. **Confirm HarborIQ, Inc. is actually registered**
    with your state (e.g., check [Sunbiz](https://search.sunbiz.org/) if
    it's a Florida entity) before filing — the Copyright Office doesn't
    verify entity status, but naming an unformed or administratively
@@ -88,13 +86,22 @@ not after:
 
 If you'd rather skip the assignment paperwork for now, the simpler and
 equally valid path is to file with **Cory Elliott as both author and
-claimant**, then execute the assignment to Lit Movement Capital Holdings,
-LLC separately at any later point (recorded with the Copyright Office per
+claimant**, then execute the assignment to HarborIQ, Inc. separately at
+any later point (recorded with the Copyright Office per
 [Circular 12](https://www.copyright.gov/circs/circ12.pdf) if you want it
 on the public record) — ownership transfers don't require a new
 registration each time. Only proceed with the entity as claimant on this
 filing if the assignment above genuinely exists or you'll have it signed
 before you submit.
+
+> **Current status check (as of this filing):** HarborIQ, Inc. is not yet
+> registered with the Florida Division of Corporations (Sunbiz) — Articles
+> of Incorporation are drafted and ready to sign/file but have not been
+> submitted. Do not file the copyright claim naming HarborIQ, Inc. as
+> claimant until (1) the Sunbiz Articles are filed and accepted, and (2)
+> the IP Assignment Agreement is signed by Cory Elliott. Until both are
+> true, file with Cory Elliott as both author and claimant (the fallback
+> path above), then execute the assignment once the entity legally exists.
 
 ## Exact field language to use
 
