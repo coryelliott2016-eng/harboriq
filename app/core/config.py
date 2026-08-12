@@ -105,6 +105,13 @@ class Settings(BaseSettings):
     # Only run the speed check when the prior ping is this fresh; older gaps
     # are treated as a new trip (device off overnight, flight, etc.).
     location_ping_plausibility_window_seconds: int = 2 * 60 * 60
+    # Offline field-queue replay age (marine threat model Scenario 3).
+    # client_queued_at older than the hard max is rejected; ages above the
+    # warn threshold are accepted but structured-logged for ops review.
+    offline_queue_max_age_seconds: int = 14 * 24 * 60 * 60  # 14 days hard reject
+    offline_queue_warn_age_seconds: int = 72 * 60 * 60  # 72h warn
+    # Allow a small future skew for client clocks that run slightly fast.
+    offline_queue_future_skew_seconds: int = 5 * 60
 
     # --- Invite tokens ---
     invite_ttl_hours: int = 24 * 7

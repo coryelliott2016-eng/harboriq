@@ -4,6 +4,7 @@ import type { AuthResponse, LoginMfaRequiredResponse, User } from "../types/api"
 import { authApi } from "../lib/services";
 import { ApiError } from "../lib/api";
 import { clearSession, getCsrfToken, setAccessToken } from "../lib/tokenStore";
+import { wipeFieldOfflineData } from "../lib/offlineDb";
 
 // Discriminates the two possible POST /auth/login response shapes. Kept
 // here (rather than as a type-guard export from types/api.ts) since it is
@@ -124,6 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearSession();
       setUser(null);
+      // Marine threat model Scenario 1: destroy the offline vault DEK and any
+      // cached jobs / pending actions so a lost-device logout leaves no
+      // readable customer PII in IndexedDB on this profile.
+      void wipeFieldOfflineData();
     }
   }, []);
 

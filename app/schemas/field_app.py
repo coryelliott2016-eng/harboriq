@@ -33,6 +33,9 @@ class JobAttachmentCreate(BaseModel):
     #: queued action (e.g. after a dropped response) with the same key is a
     #: no-op that returns the original row rather than creating a duplicate.
     idempotency_key: OptionalText = Field(default=None, max_length=200)
+    #: ISO timestamp when the offline queue originally enqueued this action
+    #: on the device. Used for age/sanity checks on replay (threat model S3).
+    client_queued_at: datetime | None = None
 
     @model_validator(mode="after")
     def _strip_data_url_prefix(self) -> "JobAttachmentCreate":
@@ -100,3 +103,5 @@ class ClockActionRequest(BaseModel):
     #: Same idempotency story as attachments — the offline queue may replay
     #: a clock-in/out after a dropped response.
     idempotency_key: OptionalText = Field(default=None, max_length=200)
+    #: See JobAttachmentCreate.client_queued_at.
+    client_queued_at: datetime | None = None

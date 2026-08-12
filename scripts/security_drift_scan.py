@@ -342,6 +342,49 @@ def check_logout_all_devices_access_epoch(repo: Path, report: ScanReport) -> Non
     )
 
 
+def check_offline_indexeddb_encryption(repo: Path, report: ScanReport) -> None:
+    """Marine threat model Scenario 1: field offline cache encrypted at rest."""
+    vault = _read(repo / "frontend" / "src" / "lib" / "offlineVault.ts")
+    db = _read(repo / "frontend" / "src" / "lib" / "offlineDb.ts")
+    auth = _read(repo / "frontend" / "src" / "context" / "AuthContext.tsx")
+    ok = (
+        "AES-GCM" in vault
+        and "encryptJson" in vault
+        and "DB_VERSION = 2" in db
+        and "wipeFieldOfflineData" in db
+        and "wipeFieldOfflineData" in auth
+        and "VAULT_META_STORE" in db
+    )
+    report.add(
+        "TM-5", "IndexedDB offline vault encryption + logout wipe",
+        "PASS" if ok else "FAIL",
+        "AES-GCM vault + v2 schema + logout wipe present" if ok else "offline encryption control missing",
+        "regression",
+    )
+
+
+def check_offline_queue_integrity_controls(repo: Path, report: ScanReport) -> None:
+    """Marine threat model Scenario 3: offline replay age + idempotency audit."""
+    svc = _read(repo / "app" / "services" / "field_app.py")
+    schema = _read(repo / "app" / "schemas" / "field_app.py")
+    queue = _read(repo / "frontend" / "src" / "lib" / "offlineQueue.ts")
+    cfg = _read(repo / "app" / "core" / "config.py")
+    ok = (
+        "check_client_queued_at" in svc
+        and "offline_queue_idempotency_replay" in svc
+        and "client_queued_at" in schema
+        and "offline_queue_max_age_seconds" in cfg
+        and "purgeStaleQueuedActions" in queue
+        and "MAX_QUEUE_AGE_MS" in queue
+    )
+    report.add(
+        "TM-6", "offline queue age checks + idempotency replay audit",
+        "PASS" if ok else "FAIL",
+        "client_queued_at age gate + replay audit + client purge present" if ok else "offline integrity controls missing",
+        "regression",
+    )
+
+
 
 # ---------------------------------------------------------------------------
 # Group B -- known, accepted-open items. We track *state changes*, not
@@ -413,6 +456,8 @@ def run_all_checks(repo: Path, repo_slug: str | None) -> ScanReport:
     check_location_ping_rate_limit(repo, report)
     check_location_ping_plausibility(repo, report)
     check_logout_all_devices_access_epoch(repo, report)
+    check_offline_indexeddb_encryption(repo, report)
+    check_offline_queue_integrity_controls(repo, report)
     if repo_slug:
         check_branch_protection(report, repo_slug)
         check_dependabot_alerts(report, repo_slug)
