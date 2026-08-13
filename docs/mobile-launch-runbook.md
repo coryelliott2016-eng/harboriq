@@ -84,7 +84,7 @@ the CI job already targets `macos-26`.
 2. Add secrets: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (the .p8 file
    contents), plus a distribution certificate (`IOS_CERT_P12_BASE64`,
    `IOS_CERT_PASSWORD`).
-3. Extend the `ios` job with fastlane (`match`/`gym`/`pilot`) or
+3. Extend the `ios` job with fastlane or
    `xcodebuild archive` + `xcrun altool` to archive, sign, and push to
    TestFlight. (Do this as a follow-up PR once the secrets exist.)
 4. TestFlight → App Store review. **Guideline 4.2 note:** the listing should

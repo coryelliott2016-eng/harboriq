@@ -91,7 +91,9 @@ jobs:
       - run: npx cap sync ios
       - name: Compile check (unsigned)
         working-directory: frontend/ios/App
+        # Capacitor 8 iOS projects use Swift Package Manager (no CocoaPods,
+        # no .xcworkspace) — build the .xcodeproj directly.
         run: |
-          xcodebuild -workspace App.xcworkspace -scheme App \
+          xcodebuild -project App.xcodeproj -scheme App \
             -configuration Release -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO build
