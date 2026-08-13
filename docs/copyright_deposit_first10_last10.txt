@@ -3,7 +3,7 @@ VERSION: 0.1.0
 Source Code Deposit Copy -- Prepared for U.S. Copyright Office
 registration under the trade-secret deposit option: first 10 and
 last 10 pages (40 lines/page equivalent, per Circular 61 /
-37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
+37 C.F.R. 202.20(c)(2)(vii)(A)(2)).
 Total lines in full combined source listing: 31281
 This is a partial deposit by design -- it is NOT the complete program.
 
