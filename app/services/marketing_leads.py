@@ -59,8 +59,10 @@ def create_lead(
     user_agent: str | None,
 ) -> dict:
     """Insert a marketing lead. Caller commits."""
-    # CAST(NULL AS inet) is fine; CAST('' AS inet) is not — only pass a value
-    # when we have a real address string.
+    # Explicit casts on every parameter so psycopg's server-side type
+    # inference doesn't blow up on NULL (AmbiguousParameter on $6/inet).
+    # CAST(NULL AS inet) is well-defined; CAST('' AS inet) is not — the
+    # caller normalises empty strings to None above.
     row = db.execute(
         text(
             """
@@ -69,9 +71,13 @@ def create_lead(
                 ip_hint, user_agent
             )
             VALUES (
-                :full_name, :business_name, :email, :team_size, :source,
-                CASE WHEN :ip_hint IS NULL THEN NULL ELSE CAST(:ip_hint AS inet) END,
-                :user_agent
+                CAST(:full_name AS text),
+                CAST(:business_name AS text),
+                CAST(:email AS citext),
+                CAST(:team_size AS text),
+                CAST(:source AS text),
+                CAST(:ip_hint AS inet),
+                CAST(:user_agent AS text)
             )
             RETURNING id, full_name, business_name, email, team_size, source,
                       notified_at, created_at

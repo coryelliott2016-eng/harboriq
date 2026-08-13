@@ -21,12 +21,19 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
-# Cross-tenant webhook dedup ledgers. Written by harboriq_service before
-# any tenant context exists; app role must have zero privileges.
+# Platform tables written by harboriq_service before any tenant context
+# exists; app role must have zero privileges.
+#
+# * stripe_processed_events / crypto_processed_events — cross-tenant webhook
+#   idempotency ledgers (migration 0022).
+# * marketing_leads — public GTM / trial signup capture, arrives before any
+#   company exists (migration 0023). Access model matches the webhook
+#   ledgers: SERVICE ROLE ONLY, app role REVOKEd.
 SERVICE_ONLY_TABLES = frozenset(
     {
         "stripe_processed_events",
         "crypto_processed_events",
+        "marketing_leads",
     }
 )
 

@@ -110,6 +110,7 @@ export async function decryptJson<T>(key: CryptoKey, envelope: EncryptedEnvelope
       `offline vault: decrypt failed (tampered or wrong key): ${
         err instanceof Error ? err.message : String(err)
       }`,
+      { cause: err },
     );
   }
 }
