@@ -95,6 +95,10 @@ jobs:
       # comment here -- not silenced wholesale.
       - name: Dependency audit (blocking)
         run: |
+          # Upgrade pip first so the audit never fails on the runner image's
+          # own bundled pip (e.g. PYSEC-2026-196 in pip <26.1.2) rather than
+          # on a real project dependency.
+          python -m pip install --upgrade pip
           pip install pip-audit
           pip-audit
 
