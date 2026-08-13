@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { useAuth, canManageOperations, canManageUsers } from "../context/AuthContext";
+import { useAuth, canManageOperations, canManageUsers } from "../context/auth";
 
 const navItems = [
   { to: "/", label: "Dashboard", end: true },

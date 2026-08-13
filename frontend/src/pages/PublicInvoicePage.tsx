@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { publicApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { Card, ErrorBanner, Spinner, money } from "../components/ui";
+import { Card, ErrorBanner, Spinner } from "../components/ui";
+import { money } from "../lib/format";
 
 export function PublicInvoicePage() {
   const { token } = useParams<{ token: string }>();

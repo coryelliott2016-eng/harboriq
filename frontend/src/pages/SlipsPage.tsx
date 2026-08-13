@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { slipsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { canManageOperations, useAuth } from "../context/AuthContext";
+import { canManageOperations, useAuth } from "../context/auth";
 import {
   Badge,
   Button,
@@ -14,8 +14,8 @@ import {
   Modal,
   Spinner,
   inputClass,
-  money,
 } from "../components/ui";
+import { money } from "../lib/format";
 import type { Slip, SlipInput, SlipStatus, SlipType } from "../types/api";
 
 const STATUS_TONE: Record<SlipStatus, "slate" | "blue" | "green" | "red" | "amber"> = {

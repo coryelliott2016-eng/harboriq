@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/auth";
 import { useFieldJobs } from "../hooks/useFieldJobs";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { useOfflineQueue } from "../hooks/useOfflineQueue";

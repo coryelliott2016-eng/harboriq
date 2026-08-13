@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { customersApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { useAuth, canManageOperations } from "../context/AuthContext";
+import { useAuth, canManageOperations } from "../context/auth";
 import {
   Button,
   Card,
@@ -13,9 +13,9 @@ import {
   Field,
   Modal,
   Spinner,
-  customerName,
   inputClass,
 } from "../components/ui";
+import { customerName } from "../lib/format";
 import type { CustomerInput } from "../types/api";
 
 const emptyForm: CustomerInput = {

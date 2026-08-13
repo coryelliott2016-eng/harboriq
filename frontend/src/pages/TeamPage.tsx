@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authApi, usersApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { canManageUsers, useAuth } from "../context/AuthContext";
+import { canManageUsers, useAuth } from "../context/auth";
 import {
   Badge,
   Button,

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { dispatchApi, fieldApi, invoicesApi, jobsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { useAuth, canManageOperations } from "../context/AuthContext";
+import { useAuth, canManageOperations } from "../context/auth";
 import {
   Badge,
   Button,
@@ -14,8 +14,8 @@ import {
   Modal,
   Spinner,
   inputClass,
-  money,
 } from "../components/ui";
+import { money } from "../lib/format";
 import { JOB_STATUS_LABELS, legalNextStatuses } from "../lib/jobStateMachine";
 import { DispatchBreakdown } from "../components/DispatchBreakdown";
 import type { JobLineItem, JobLineItemInput, JobLineItemKind, JobStatus } from "../types/api";

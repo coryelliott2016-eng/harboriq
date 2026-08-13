@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { reportsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { Button, Card, ErrorBanner, Spinner, StatCard, money } from "../components/ui";
+import { Button, Card, ErrorBanner, Spinner, StatCard } from "../components/ui";
+import { money } from "../lib/format";
 import type { AgingBuckets } from "../types/api";
 
 const BUCKET_COLUMNS: { key: keyof AgingBuckets; label: string }[] = [
