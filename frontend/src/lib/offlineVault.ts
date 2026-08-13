@@ -75,8 +75,11 @@ export async function exportDekRaw(key: CryptoKey): Promise<string> {
 
 export async function importDekRaw(b64: string): Promise<CryptoKey> {
   const raw = base64ToBytes(b64);
-  // Copy into a fresh ArrayBuffer — some runtimes reject SharedArrayBuffer views.
-  const copy = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+  // Copy into a fresh ArrayBuffer — some runtimes reject SharedArrayBuffer
+  // views. base64ToBytes always allocates a plain ArrayBuffer, but TS 5.7
+  // widens Uint8Array#buffer to ArrayBuffer | SharedArrayBuffer, so we
+  // narrow explicitly.
+  const copy = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
   return requireSubtle().importKey("raw", copy, { name: ALGO, length: KEY_LENGTH }, true, [
     "encrypt",
     "decrypt",
@@ -96,8 +99,10 @@ export async function decryptJson<T>(key: CryptoKey, envelope: EncryptedEnvelope
   }
   const iv = base64ToBytes(envelope.iv);
   const ct = base64ToBytes(envelope.ct);
-  const ivCopy = iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength);
-  const ctCopy = ct.buffer.slice(ct.byteOffset, ct.byteOffset + ct.byteLength);
+  // Same SharedArrayBuffer-widening narrowing as importDekRaw above — the
+  // source buffers are always plain ArrayBuffers from base64ToBytes.
+  const ivCopy = iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) as ArrayBuffer;
+  const ctCopy = ct.buffer.slice(ct.byteOffset, ct.byteOffset + ct.byteLength) as ArrayBuffer;
   try {
     const plain = await requireSubtle().decrypt(
       { name: ALGO, iv: new Uint8Array(ivCopy) },

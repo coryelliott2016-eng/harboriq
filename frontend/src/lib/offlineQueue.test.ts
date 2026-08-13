@@ -192,7 +192,6 @@ describe("offline queue age limits (threat model S1/S3)", () => {
       jobId: "job-1",
       payload: {},
       createdAt: new Date(now).toISOString(),
-      attempts: 0,
     });
     await enqueueAction({
       idempotencyKey: staleKey,
@@ -200,7 +199,6 @@ describe("offline queue age limits (threat model S1/S3)", () => {
       jobId: "job-1",
       payload: {},
       createdAt: new Date(now - MAX_QUEUE_AGE_MS - 60_000).toISOString(),
-      attempts: 0,
     });
 
     const removed = await purgeStaleQueuedActions(now);
@@ -218,7 +216,6 @@ describe("offline queue age limits (threat model S1/S3)", () => {
       jobId: "job-1",
       payload: {},
       createdAt: nowIso,
-      attempts: 0,
     });
     const sent: string[] = [];
     const result = await replayQueue(async (action) => {

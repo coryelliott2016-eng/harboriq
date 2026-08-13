@@ -5,6 +5,7 @@ owner. Admin list is gated by MARKETING_LEADS_ADMIN_TOKEN, not a tenant JWT.
 """
 from __future__ import annotations
 
+import ipaddress
 import secrets
 import uuid
 from typing import Annotated
@@ -37,12 +38,26 @@ router = APIRouter()
 
 
 def _client_ip(request: Request) -> str | None:
+    """Return the caller's IP as a valid inet-parseable string, or None.
+
+    Postgres `inet` rejects non-IP tokens (e.g. Starlette TestClient's
+    literal `"testclient"` host), so we validate before returning. Any
+    unparseable value collapses to None.
+    """
+    candidate: str | None = None
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()[:64] or None
-    if request.client is None:
+        candidate = forwarded.split(",")[0].strip()[:64] or None
+    elif request.client is not None:
+        candidate = request.client.host
+
+    if not candidate:
         return None
-    return request.client.host
+    try:
+        ipaddress.ip_address(candidate)
+    except ValueError:
+        return None
+    return candidate
 
 
 def _notify_and_mark(lead_id: uuid.UUID, lead_snapshot: dict) -> None:
