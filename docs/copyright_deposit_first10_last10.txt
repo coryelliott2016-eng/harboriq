@@ -4,7 +4,7 @@ Source Code Deposit Copy -- Prepared for U.S. Copyright Office
 registration under the trade-secret deposit option: first 10 and
 last 10 pages (40 lines/page equivalent, per Circular 61 /
 37 C.F.R. 202.20(c)(2)(vii)(A)(2)).
-Total lines in full combined source listing: 31281
+Total lines in full combined source listing: 31308
 This is a partial deposit by design -- it is NOT the complete program.
 
 COPYRIGHT NOTICE (from LICENSE file of the version being registered):
@@ -415,7 +415,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
     scraper endpoint is cheap and consistent, and excluding it would just be
 
 ======================================================================
-[... 30481 lines omitted per trade-secret deposit rules ...]
+[... 30508 lines omitted per trade-secret deposit rules ...]
 ======================================================================
 
 ======================================================================
