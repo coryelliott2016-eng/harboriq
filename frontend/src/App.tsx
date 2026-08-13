@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { canManageOperations, canManageUsers, useAuth } from "./context/auth";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { canManageOperations, canManageUsers, useAuth } from "./context/AuthContext";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { ArAgingPage } from "./pages/ArAgingPage";
 import { BillingSettingsPage } from "./pages/BillingSettingsPage";

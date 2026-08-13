@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { money } from "../lib/format";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -14,7 +15,7 @@ import {
 } from "recharts";
 import { reportsApi, type ReportDateRange } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { Button, Card, ErrorBanner, Field, Spinner, StatCard, inputClass, money } from "../components/ui";
+import { Button, Card, ErrorBanner, Field, Spinner, StatCard, inputClass } from "../components/ui";
 import type { CashFlowMonth, PnlMonth } from "../types/api";
 
 type Tab = "pnl" | "cash-flow";

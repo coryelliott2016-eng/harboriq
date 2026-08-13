@@ -1,21 +1,11 @@
 import { useState } from "react";
+import { canManageOperations, useAuth } from "../context/auth";
+import { customerName } from "../lib/format";
 import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customersApi, slipReservationsApi, slipsApi, vesselsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { canManageOperations, useAuth } from "../context/AuthContext";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorBanner,
-  Field,
-  Modal,
-  Spinner,
-  customerName,
-  inputClass,
-} from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorBanner, Field, Modal, Spinner, inputClass } from "../components/ui";
 import type { SlipReservation, SlipReservationInput, SlipReservationStatus } from "../types/api";
 
 const STATUS_TONE: Record<SlipReservationStatus, "slate" | "blue" | "green" | "red" | "amber"> = {

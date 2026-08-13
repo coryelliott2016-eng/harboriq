@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { money } from "../lib/format";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { portalApi } from "../lib/services";
 import { ApiError, apiRequest } from "../lib/api";
-import { Badge, Button, Card, EmptyState, ErrorBanner, Spinner, money } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorBanner, Spinner } from "../components/ui";
 import { PortalLayout, PORTAL_INVALID_LINK_MESSAGE } from "./PortalLayout";
 import type { PortalEstimate } from "../types/api";
 

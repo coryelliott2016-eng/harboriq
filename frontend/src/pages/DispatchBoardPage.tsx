@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
+import { useAuth } from "../context/auth";
 import type { DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { customersApi, jobsApi, usersApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
 import { useLocationPing } from "../hooks/useLocationPing";
 import { DispatchMap } from "../components/DispatchMap";
 import { Badge, Card, ErrorBanner, Spinner } from "../components/ui";

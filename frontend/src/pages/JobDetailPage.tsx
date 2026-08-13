@@ -1,21 +1,12 @@
 import { useState } from "react";
+import { canManageOperations, useAuth } from "../context/auth";
+import { money } from "../lib/format";
 import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { dispatchApi, fieldApi, invoicesApi, jobsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { useAuth, canManageOperations } from "../context/AuthContext";
-import {
-  Badge,
-  Button,
-  Card,
-  ErrorBanner,
-  Field,
-  Modal,
-  Spinner,
-  inputClass,
-  money,
-} from "../components/ui";
+import { Badge, Button, Card, ErrorBanner, Field, Modal, Spinner, inputClass } from "../components/ui";
 import { JOB_STATUS_LABELS, legalNextStatuses } from "../lib/jobStateMachine";
 import { DispatchBreakdown } from "../components/DispatchBreakdown";
 import type { JobLineItem, JobLineItemInput, JobLineItemKind, JobStatus } from "../types/api";

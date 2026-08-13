@@ -1,21 +1,12 @@
 import { useState } from "react";
+import { canManageOperations, useAuth } from "../context/auth";
+import { customerName } from "../lib/format";
 import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { customersApi, vesselsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { useAuth, canManageOperations } from "../context/AuthContext";
-import {
-  Button,
-  Card,
-  EmptyState,
-  ErrorBanner,
-  Field,
-  Modal,
-  Spinner,
-  customerName,
-  inputClass,
-} from "../components/ui";
+import { Button, Card, EmptyState, ErrorBanner, Field, Modal, Spinner, inputClass } from "../components/ui";
 import type { VesselInput } from "../types/api";
 
 export function CustomerDetailPage() {

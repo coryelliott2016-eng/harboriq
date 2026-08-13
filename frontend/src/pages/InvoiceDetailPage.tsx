@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { money } from "../lib/format";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { invoicesApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { Badge, Button, Card, ErrorBanner, Spinner, money } from "../components/ui";
+import { Badge, Button, Card, ErrorBanner, Spinner } from "../components/ui";
 import { INVOICE_STATUS_LABELS, canRefund, canSend, canVoid } from "../lib/invoiceStateMachine";
 
 function statusTone(status: string) {

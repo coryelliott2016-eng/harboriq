@@ -1,9 +1,9 @@
 import { useState } from "react";
+import { canManageOperations, useAuth } from "../context/auth";
 import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { vendorsApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { canManageOperations, useAuth } from "../context/AuthContext";
 import {
   Button,
   Card,
