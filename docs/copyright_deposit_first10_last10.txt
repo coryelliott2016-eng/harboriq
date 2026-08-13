@@ -1,634 +1,18 @@
-HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
+TITLE: HarborIQ
+VERSION: 0.1.0
+Source Code Deposit Copy -- Prepared for U.S. Copyright Office
+registration under the trade-secret deposit option: first 10 and
+last 10 pages (40 lines/page equivalent, per Circular 61 /
+37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
+Total lines in full combined source listing: 31281
 This is a partial deposit by design -- it is NOT the complete program.
 
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
+COPYRIGHT NOTICE (from LICENSE file of the version being registered):
+Copyright (c) 2026 HarborIQ, Inc. All Rights Reserved.
 
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=HarborIQ -- Source Code Deposit Copy
-Prepared for U.S. Copyright Office registration under the
-trade-secret deposit option: first 10 and last 10 pages
-(40 lines/page equivalent, per Circular 61 / 37 C.F.R. 202.20(c)(2)(vii)(A)(1)).
-Total lines in full combined source listing: 24593
-This is a partial deposit by design -- it is NOT the complete program.
-
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
-FIRST 10 PAGES (400 LINES)
-=
+======================================================================
 FIRST 10 PAGES (400 LINES)
-=
+======================================================================
 # ===== FILE: app/__init__.py =====
 
 # ===== FILE: app/api/__init__.py =====
@@ -651,12 +35,14 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.security import InvalidToken, decode_access_token
+from app.core.token_denylist import is_denylisted, is_user_access_epoch_stale
 from app.db.models import OPERATIONS_ROLES, USER_MANAGEMENT_ROLES, UserRole
 from app.db.session import get_db, get_service_db
 from app.db.tenant import set_tenant
@@ -673,6 +59,9 @@ class Principal:
 
     user: AuthenticatedUser
     session_id: uuid.UUID
+    token_jti: str
+    token_expires_at: datetime
+    token_issued_at: datetime
 
 
 def _unauthenticated(detail: str = "not authenticated") -> HTTPException:
@@ -696,12 +85,24 @@ def get_current_principal(
     except InvalidToken as exc:
         raise _unauthenticated(f"invalid access token: {exc}") from exc
 
+    if is_denylisted(claims.jti):
+        raise _unauthenticated("access token has been revoked")
+
+    if is_user_access_epoch_stale(claims.user_id, claims.access_epoch):
+        raise _unauthenticated("access token has been revoked")
+
     user = load_user(db, claims.company_id, claims.user_id)
     if user is None or not user.is_active:
         raise _unauthenticated("account is not active")
 
     set_tenant(db, user.company_id)
-    return Principal(user=user, session_id=claims.session_id)
+    return Principal(
+        user=user,
+        session_id=claims.session_id,
+        token_jti=claims.jti,
+        token_expires_at=claims.expires_at,
+        token_issued_at=claims.issued_at,
+    )
 
 
 def get_current_user(
@@ -871,6 +272,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.types import ASGIApp
 
+from app.core.config import settings
+
 REQUEST_ID_HEADER = "X-Request-ID"
 
 log = structlog.get_logger()
@@ -940,626 +343,84 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class PrometheusMiddleware(BaseHTTPMiddleware):
-    """Record request count + latency for every request, labelled by route.
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Baseline HTTP security response headers (Security Core Prompt v1.0,
+    H-3 fix; OWASP ASVS V14 "HTTP Security Headers").
 
-    Deliberately does not special-case `/metrics` itself — scraping the
-    scraper endpoint is cheap and consistent, and excluding it would just be
-    one more special case to maintain for no real benefit.
+    This is a pure API backend (the SPA is served separately by nginx, which
+    gets its own copy of these headers — see `frontend/nginx.conf`), so the
+    policy here is deliberately strict and has none of a traditional
+    server-rendered site's inline-script/style needs:
+
+    - `Strict-Transport-Security`: only sent once `app_env` is not
+      `development`, so a local plain-HTTP dev server is never told by the
+      browser to upgrade every future request to HTTPS (which would break
+      it). `includeSubDomains` + a 1-year max-age is the standard
+      preload-eligible baseline; `preload` itself is intentionally left out
+      since submitting to the HSTS preload list is a one-way, cross-team
+      decision that shouldn't be made implicitly by this middleware.
+    - `Content-Security-Policy`: `default-src 'none'` — this origin never
+      serves HTML/JS/images itself (JSON API only), so there is nothing to
+      allow-list. `frame-ancestors 'none'` blocks this API from being
+      framed anywhere (defense-in-depth alongside `X-Frame-Options`).
+    - `X-Content-Type-Options: nosniff` — stops browsers from MIME-sniffing
+      JSON responses (or user-uploaded attachment bytes, see M-3) as HTML.
+    - `X-Frame-Options: DENY` and `Referrer-Policy: strict-origin-when-
+      cross-origin` — standard clickjacking / referrer-leak hardening.
+    - `Permissions-Policy` — explicitly denies browser features this API
+      has no reason to grant.
     """
 
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
 
+    # Swagger UI / ReDoc render actual HTML in the browser and pull their
+    # JS/CSS from a CDN, so the `default-src 'none'` API policy below would
+    # break them outright. They're documentation surfaces, not the JSON API
+    # surface this policy protects, so they get a separate, docs-appropriate
+    # CSP instead of being silently broken.
+    _DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
+
     async def dispatch(self, request: Request, call_next):
-        start = time.perf_counter()
-        status_code = 500
-        try:
-            response = await call_next(request)
-            status_code = response.status_code
-            return response
-        finally:
-            duration = time.perf_counter() - start
-            path = _route_label(request)
-            labels = {
-                "method": request.method,
-                "path": path,
-                "status": str(status_code),
-            }
-            REQUEST_COUNT.labels(**labels).inc()
-            REQUEST_LATENCY.labels(**labels).observe(duration)
+        response = await call_next(request)
+        headers = response.headers
+        headers["X-Content-Type-Options"] = "nosniff"
+        headers["X-Frame-Options"] = "DENY"
+        headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        headers["Permissions-Policy"] = (
+            "geolocation=(), camera=(), microphone=(), payment=()"
+        )
+        if request.url.path in self._DOCS_PATHS:
+            headers["Content-Security-Policy"] = (
+                "default-src 'self'; img-src 'self' data: fastapi.tiangolo.com; "
+                "script-src 'self' cdn.jsdelivr.net 'unsafe-inline'; "
+                "style-src 'self' cdn.jsdelivr.net 'unsafe-inline'; "
+                "frame-ancestors 'none'"
+            )
+        else:
+            headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'"
+            )
+        if settings.app_env != "development":
+            headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+        return response
 
-# ===== FILE: app/api/v1/router.py =====
-from fastapi import APIRouter
 
-from app.api.v1.routes import (
-    auth,
-    billing,
-    customers,
-    dispatch,
-    field_app,
-    geocode_admin,
-    health,
-    inventory,
-    invoices,
-    jobs,
-    messages,
-    portal,
-    public,
-    purchase_orders,
-    reports,
-    sms_webhooks,
-    stripe_webhooks,
-    users,
-    vendors,
-    vessels,
-)
+class PrometheusMiddleware(BaseHTTPMiddleware):
+    """Record request count + latency for every request, labelled by route.
 
-api_router = APIRouter(prefix="/api/v1")
-api_router.include_router(health.router, tags=["health"])
-api_router.include_router(auth.router)
-api_router.include_router(users.router)
-api_router.include_router(customers.router)
-api_router.include_router(vessels.router)
-api_router.include_router(jobs.router)
-api_router.include_router(field_app.router)
-api_router.include_router(dispatch.router)
-api_router.include_router(inventory.router, tags=["inventory"])
-api_router.include_router(vendors.router)
-api_router.include_router(purchase_orders.router)
-api_router.include_router(invoices.router)
-api_router.include_router(billing.router)
-api_router.include_router(reports.router)
-api_router.include_router(public.router, tags=["public"])
-api_router.include_router(portal.router)
-api_router.include_router(messages.router)
-api_router.include_router(stripe_webhooks.router, tags=["webhooks"])
-api_router.include_router(sms_webhooks.router, tags=["webhooks"])
-api_router.include_router(geocode_admin.router)
-
-# ===== FILE: app/api/v1/routes/auth.py =====
-"""Authentication + tenant onboarding endpoints.
-
-Unauthenticated: signup, login, refresh, password-reset request/confirm.
-Authenticated:   me, logout, users (owner/admin only).
-
-Phase 16 -- refresh-token transport: the refresh token is now set as an
-httpOnly cookie (`REFRESH_COOKIE_NAME`) rather than returned in the JSON
-response body / stored in frontend localStorage. Every endpoint that used to
-return a `refresh_token` field now calls `_set_refresh_cookie` instead; only
-the access token still travels in the JSON body (`TokenPair.access_token`),
-unchanged. `POST /auth/refresh` reads the cookie via `request.cookies`, not
+    Deliberately does not special-case `/metrics` itself — scraping the
+    scraper endpoint is cheap and consistent, and excluding it would just be
 
 ======================================================================
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
-[... 23793 lines omitted per trade-secret deposit rules ...]
-=
+[... 30481 lines omitted per trade-secret deposit rules ...]
+======================================================================
 
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
+======================================================================
 LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-LAST 10 PAGES (400 LINES)
-=
-  pay_token: string;
-  pay_url: string;
-}
-
-export interface VoidInvoiceResponse {
-  invoice: Invoice;
-}
-
-// --- Refunds (Phase 8) ---
-
-export interface RefundInput {
-  /** Omit for a full refund of whatever remains refundable. */
-  amount?: string;
-  reason?: string;
-}
-
-export interface Refund {
-  id: string;
-  invoice_id: string;
-  amount: string;
-  reason: string | null;
-  stripe_refund_id: string | null;
-  created_at: string;
-}
-
-export interface RefundResponse {
-  invoice: Invoice;
-  refund: Refund;
-}
-
-// --- Public pay page ---
-
-export interface PublicInvoice {
-  id: string;
-  status: InvoiceStatus;
-  currency: string;
-  subtotal: string;
-  tax_total: string;
-  total: string;
-  amount_paid: string;
-  balance_due: string;
-  due_date: string | null;
-  line_items: InvoiceLineItem[];
-  checkout_url: string | null;
-}
-
-// --- Customer self-service portal (Phase 9) ---
-// Mirrors app/schemas/portal.py exactly. Decimal fields are strings, same
-// convention as the rest of this file.
-
-export interface PortalVessel {
-  id: string;
-  name: string | null;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  hull_id: string | null;
-  registration: string | null;
-}
-
-export interface PortalMe {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  company_name: string | null;
-  email: string | null;
-  phone: string | null;
-  vessels: PortalVessel[];
-}
-
-export interface PortalJob {
-  id: string;
-  title: string | null;
-  status: JobStatus;
-  scheduled_at: string | null;
-  scheduled_end_at: string | null;
-  completed_at: string | null;
-  vessel_id: string | null;
-  technician_name: string | null;
-}
-
-export interface PortalInvoice {
-  id: string;
-  status: InvoiceStatus;
-  currency: string;
-  subtotal: string;
-  tax_total: string;
-  total: string;
-  amount_paid: string;
-  balance_due: string;
-  due_date: string | null;
-  paid_at: string | null;
-  created_at: string;
-}
-
-export interface PortalEstimate {
-  id: string;
-  job_id: string | null;
-  status: string;
-  currency: string;
-  subtotal: string;
-  tax_total: string;
-  total: string;
-  approved_at: string | null;
-  created_at: string;
-}
-
-export interface PortalApproveToken {
-  approve_path: string;
+======================================================================
 }
 
 export interface PortalInviteResponse {
@@ -1727,6 +588,8 @@ export interface JobAttachmentInput {
   data: string;
   content_type?: string;
   idempotency_key?: string | null;
+  /** Original device enqueue time (ISO). Forwarded for server age audit. */
+  client_queued_at?: string | null;
 }
 
 export interface JobTimeEntry {
@@ -1741,6 +604,8 @@ export interface JobTimeEntry {
 
 export interface ClockActionInput {
   idempotency_key?: string | null;
+  /** Original device enqueue time (ISO). Forwarded for server age audit. */
+  client_queued_at?: string | null;
 }
 
 // --- inventory, vendors & purchase orders (Phase 13) ---
@@ -1791,6 +656,7 @@ export interface Vendor {
   contact_email: string | null;
   contact_phone: string | null;
   notes: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -1845,6 +711,110 @@ export interface ReceiptLineInput {
 
 export interface ReceivePurchaseOrderInput {
   receipts: ReceiptLineInput[];
+}
+
+// ---------------------------------------------------------------------------
+// Marina / slip management (Phase 15)
+// ---------------------------------------------------------------------------
+export type SlipType = "wet_slip" | "dry_stack" | "mooring";
+export type SlipStatus = "available" | "occupied" | "reserved" | "maintenance";
+
+export interface Slip {
+  id: string;
+  company_id: string;
+  identifier: string;
+  slip_type: SlipType;
+  status: SlipStatus;
+  length_ft: string | null;
+  width_ft: string | null;
+  depth_ft: string | null;
+  rack_level: number | null;
+  rack_position: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  monthly_rate: string;
+  daily_rate: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SlipInput {
+  identifier: string;
+  slip_type: SlipType;
+  status?: SlipStatus;
+  length_ft?: string | null;
+  width_ft?: string | null;
+  depth_ft?: string | null;
+  rack_level?: number | null;
+  rack_position?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  monthly_rate?: string;
+  daily_rate?: string;
+  notes?: string | null;
+}
+
+export type SlipReservationStatus =
+  | "pending"
+  | "confirmed"
+  | "checked_in"
+  | "checked_out"
+  | "cancelled";
+
+export interface SlipReservation {
+  id: string;
+  company_id: string;
+  slip_id: string;
+  customer_id: string;
+  vessel_id: string | null;
+  status: SlipReservationStatus;
+  start_date: string;
+  end_date: string;
+  checked_in_at: string | null;
+  checked_out_at: string | null;
+  cancelled_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SlipReservationInput {
+  slip_id: string;
+  customer_id: string;
+  vessel_id?: string | null;
+  start_date: string;
+  end_date: string;
+  notes?: string | null;
+}
+
+export interface SlipAvailability {
+  slip_id: string;
+  start_date: string;
+  end_date: string;
+  available: boolean;
+}
+
+export interface GenerateStorageChargeInput {
+  rate?: string | null;
+  quantity?: string | null;
+  description?: string | null;
+}
+
+export interface StorageCharge {
+  id: string;
+  job_id: string | null;
+  slip_reservation_id: string | null;
+  kind: string;
+  description: string;
+  quantity: string;
+  unit_price: string;
+  line_total: string;
+  taxable: boolean;
+  invoice_id: string | null;
+  invoiced_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ===== FILE: frontend/src/vite-env.d.ts =====
