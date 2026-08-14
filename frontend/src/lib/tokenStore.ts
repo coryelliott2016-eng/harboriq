@@ -14,7 +14,7 @@
 // origin with `credentials: "include"` (see `src/lib/api.ts`). The matching
 // CSRF cookie (`csrf_token`) IS readable by design -- see
 // `getCsrfToken` below and `app/core/csrf.py`'s docstring for why.
-const CSRF_COOKIE_NAME = "csrf_token";
+const CSRF_COOKIE_NAME = import.meta.env.VITE_CSRF_COOKIE_NAME ?? "csrf_token";
 
 let accessToken: string | null = null;
 

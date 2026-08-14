@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
@@ -33,7 +34,10 @@ class PublicInvoiceOut(BaseModel):
     total: Decimal
     amount_paid: Decimal
     balance_due: Decimal
-    due_date: str | None = None
+    # datetime, not str: populated straight from the ORM row via
+    # `from_attributes` (Invoice.due_date is a tz-aware DateTime column);
+    # pydantic serializes it to an ISO-8601 string in the JSON response.
+    due_date: datetime | None = None
     line_items: list[InvoiceLineItemOut] = []
     #: Present only when Stripe is configured and the invoice is still
     #: payable (not already paid/void); lazily created on first read.

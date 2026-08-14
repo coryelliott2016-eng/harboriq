@@ -41,7 +41,13 @@ export function InvoiceDetailPage() {
       // server / direct API use — not something a customer should ever open
       // in a browser. The customer-facing link is our own SPA route, which
       // in turn calls that API. Build it from `pay_token` instead.
-      setPayUrl(`${window.location.origin}/pay/${resp.pay_token}`);
+      // Router-aware: under VITE_ROUTER=hash (proxied staging hosts) the SPA
+      // route lives in the fragment, anchored at the current document path.
+      setPayUrl(
+        import.meta.env.VITE_ROUTER === "hash"
+          ? `${window.location.origin}${window.location.pathname}#/pay/${resp.pay_token}`
+          : `${window.location.origin}/pay/${resp.pay_token}`,
+      );
       queryClient.invalidateQueries({ queryKey: ["invoices", id] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
     },

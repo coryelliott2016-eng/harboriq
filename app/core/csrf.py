@@ -33,7 +33,9 @@ import secrets
 
 from fastapi import HTTPException, Request, Response, status
 
-CSRF_COOKIE_NAME = "csrf_token"
+from app.core.config import settings
+
+CSRF_COOKIE_NAME = settings.csrf_cookie_name
 CSRF_HEADER_NAME = "X-CSRF-Token"
 
 

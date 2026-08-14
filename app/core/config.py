@@ -161,6 +161,20 @@ class Settings(BaseSettings):
     # The API itself never renders these pages.
     app_base_url: str = "http://localhost:5173"
 
+    # --- Auth cookie deployment shape ---
+    # Defaults preserve the existing local/dev contract exactly. Deployments
+    # that serve the API behind a path-prefixing reverse proxy (the cookie
+    # Path no longer matches the browser-visible URL), or on hosts that only
+    # forward `__Host-`-prefixed cookies, can override via env:
+    #   REFRESH_COOKIE_NAME=__Host-refresh_token
+    #   AUTH_COOKIE_PATH=/
+    #   CSRF_COOKIE_NAME=__Host-csrf_token
+    # Note `__Host-` names additionally require Secure (true outside
+    # development) and forbid a Domain attribute (never set here).
+    refresh_cookie_name: str = "refresh_token"
+    auth_cookie_path: str = "/api/v1/auth"
+    csrf_cookie_name: str = "csrf_token"
+
     # --- Marketing leads (public GTM / trial signup) ---
     # Destination for internal "new trial signup" notifications. Empty means
     # store the lead but skip the notify email (console-transport still logs
