@@ -120,7 +120,15 @@ jobs:
           node-version: 20
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      # `--legacy-peer-deps` is required until eslint-plugin-jsx-a11y ships a
+      # release with an eslint v10 peer range. Its 6.10.2 declares
+      # `eslint@^3 || ... || ^9` (see the plugin's CHANGELOG, no v10
+      # support tag yet), and this project is on eslint@^10.8.0, so a
+      # strict `npm ci` refuses to install with ERESOLVE. The plugin does
+      # work with eslint v10 at runtime; the peer range is stale. Revisit
+      # this flag when jsx-a11y publishes a version that declares eslint
+      # v10 support in its peers and remove it.
+      - run: npm ci --legacy-peer-deps
       - run: npm run lint
       - run: npm run build
       - run: npm run test
