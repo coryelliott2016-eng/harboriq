@@ -78,6 +78,13 @@ dev = [
     # (app/services/invoice_pdf.py, via reportlab).
     # >=6.15.0: fixes PYSEC-2026-3655 / PYSEC-2026-3656 (pip-audit, 2026-08).
     "pypdf>=6.15.0",
+    # tests/test_provisioning_scripts.py guards its provision_aws_backup.py
+    # section with pytest.importorskip("boto3") -- without boto3 declared
+    # here, those idempotency tests (bucket/policy/user/key) silently skip
+    # in CI and locally, leaving scripts/provision_aws_backup.py with zero
+    # exercised coverage in the standard gate. The tests use fake in-memory
+    # clients only; no real AWS calls are made (see that file's header).
+    "boto3>=1.34",
 ]
 
 [tool.setuptools.packages.find]
