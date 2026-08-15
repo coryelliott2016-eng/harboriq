@@ -329,6 +329,83 @@ comment for the full reasoning on each):
   tooling of choice rather than baked into a backup script that runs on
   every cron tick.
 
+### Restore from a dump (`scripts/restore_db_s3.sh`)
+
+An untested backup is not a backup. `scripts/restore_db_s3.sh` is the
+scripted companion to `backup_db_s3.sh`: it restores either an
+already-local `*.sql.gz` produced by `backup_db.sh` or one pulled fresh
+from S3 into a target Postgres database, using `psql --set ON_ERROR_STOP=1`
+so a bad restore aborts loudly instead of half-applying and returning `0`.
+
+Safety guardrail: the script refuses to run against a `RESTORE_DATABASE_URL`
+whose dbname looks production-shaped (contains `harboriq`, doesn't contain
+`test`/`scratch`/`rehearsal`/`restore`) unless the operator sets
+`RESTORE_CONFIRM=YES-I-KNOW-THIS-WILL-OVERWRITE-DATA`. This is intentionally
+a soft guardrail against copy-paste-from-docs incidents; the real
+boundary on the production primary is the role's own access.
+
+Three common modes:
+
+```bash
+# 1. Restore a specific local dump into a scratch database (create it first):
+createdb -h db-host -U postgres harboriq_scratch
+RESTORE_DATABASE_URL=postgresql://postgres:...@db-host:5432/harboriq_scratch \
+  ./scripts/restore_db_s3.sh ./backups/harboriq_20260814T021500Z.sql.gz
+
+# 2. Pull the newest dump from S3 and restore into a scratch database:
+createdb -h db-host -U postgres harboriq_scratch
+RESTORE_DATABASE_URL=postgresql://postgres:...@db-host:5432/harboriq_scratch \
+  BACKUP_S3_BUCKET=my-company-harboriq-backups \
+  ./scripts/restore_db_s3.sh --from-s3-latest
+
+# 3. Pull a specific S3 key:
+RESTORE_DATABASE_URL=postgresql://postgres:...@db-host:5432/harboriq_scratch \
+  BACKUP_S3_BUCKET=my-company-harboriq-backups \
+  ./scripts/restore_db_s3.sh --from-s3 \
+    harboriq-backups/harboriq_20260814T021500Z.sql.gz
+```
+
+The script does not create the target database (`CREATE DATABASE` needs
+superuser/`CREATEDB` and a maintenance-DB connection, done as a separate
+explicit step above) and does not run Alembic against the restored DB
+(the dump captured the schema live at backup time — run `alembic upgrade
+head` yourself if the code has moved forward since).
+
+### Rehearsal (`scripts/rehearse_backup_restore.sh`)
+
+`scripts/rehearse_backup_restore.sh` runs a full round trip end to end so
+an operator (or CI) can verify the backup path actually works, without
+touching production:
+
+1. `scripts/backup_db.sh` against a source URL you provide.
+2. Create a fresh scratch database (name embeds `rehearsal_<pid|timestamp>`).
+3. Install the required extensions (`pgcrypto`, `citext`, `btree_gist`)
+   into the scratch DB, since a freshly-created database has none.
+4. `scripts/restore_db_s3.sh` the dump into the scratch DB.
+5. Verify `alembic_version` and core-table row counts round-trip.
+6. Drop the scratch DB and the temp workdir on exit.
+
+```bash
+REHEARSAL_ADMIN_URL=postgresql://postgres:...@db-host:5432/postgres \
+  REHEARSAL_SOURCE_URL=$SERVICE_DATABASE_URL \
+  ./scripts/rehearse_backup_restore.sh
+```
+
+Suggested monthly cron entry on the backup host (run against a
+read-replica if one exists, so a real restore does not compete with live
+traffic; log to the same location as `backup_db_s3.sh`'s own log):
+
+```
+17 3 1 * * REHEARSAL_ADMIN_URL=postgresql://...@db-host:5432/postgres \
+  REHEARSAL_SOURCE_URL=$SERVICE_DATABASE_URL \
+  /opt/harboriq/scripts/rehearse_backup_restore.sh \
+  >> /var/log/harboriq-backup.log 2>&1
+```
+
+CI runs this same script every push against the CI Postgres service
+container via `tests/test_backup_restore_rehearsal.py` — a regression that
+breaks either script's happy path fails the `test` job.
+
 ## CDN / WAF (Cloudflare) (Phase 16)
 
 Nothing in this repo provisions a CDN or WAF — like the reverse-proxy/TLS

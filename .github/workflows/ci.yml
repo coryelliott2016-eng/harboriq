@@ -68,6 +68,12 @@ jobs:
       DATABASE_URL: postgresql+psycopg://harboriq_app:harboriq_app_pass@localhost:5432/harboriq
       SERVICE_DATABASE_URL: postgresql+psycopg://harboriq_service:harboriq_service_pass@localhost:5432/harboriq
       REDIS_URL: redis://localhost:6379/0
+      # Backup / restore rehearsal gate (tests/test_backup_restore_rehearsal.py):
+      # a superuser URL pointed at the maintenance `postgres` database so
+      # the rehearsal script can CREATE / DROP its own scratch database.
+      # Not the same as SERVICE_DATABASE_URL above (which points at the
+      # `harboriq` app database and is a role without CREATEDB).
+      REHEARSAL_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
