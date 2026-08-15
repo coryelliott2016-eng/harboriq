@@ -32,7 +32,9 @@ jobs:
       # `ruff.lint.select` in pyproject.toml includes "S" (bandit-derived
       # security rules) on top of the previous pyflakes/pycodestyle-only
       # set -- this now doubles as this repo's lightweight SAST gate.
-      - run: ruff check app tests
+      # `scripts` added 2026-08-15: operator/provisioning scripts previously
+      # had zero lint or SAST coverage (found during launch-audit Phase 2).
+      - run: ruff check app tests scripts
 
   test:
     runs-on: ubuntu-latest

@@ -130,3 +130,10 @@ ignore = [
 # (e.g. "test-auth-token", seeded user passwords) -- these are not secrets,
 # they are throwaway values that only ever exist inside the test database.
 "tests/*" = ["S105", "S106", "S107", "S110"]
+# S603/S607: this operator script shells out to the GitHub CLI (`gh api ...`)
+# with a fixed argument list -- no shell=True, no request- or user-controlled
+# strings (repo_slug comes from the script's own constant/arg parsing), and
+# resolving `gh` from PATH is the normal way to invoke an installed CLI from
+# an ops script. Reviewed 2026-08-15 when scripts/ was added to the CI lint
+# scope (it previously had no static-analysis coverage at all).
+"scripts/security_drift_scan.py" = ["S603", "S607"]
