@@ -12,6 +12,7 @@ export function SignupPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -19,6 +20,10 @@ export function SignupPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!agreedToTerms) {
+      setError("You must agree to the Terms of Service and Privacy Policy to create an account.");
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -78,7 +83,37 @@ export function SignupPage() {
             />
           </Field>
           <p className="text-xs text-slate-400">At least 12 characters.</p>
-          <Button type="submit" disabled={submitting} className="mt-2 w-full">
+          <label className="flex items-start gap-2 text-xs text-slate-500">
+            <input
+              type="checkbox"
+              required
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300"
+            />
+            <span>
+              I agree to the{" "}
+              <a
+                href="https://harboriq.com/#/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-slate-700 underline"
+              >
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a
+                href="https://harboriq.com/#/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-slate-700 underline"
+              >
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+          <Button type="submit" disabled={submitting || !agreedToTerms} className="mt-2 w-full">
             {submitting ? "Creating account…" : "Create account"}
           </Button>
         </form>
