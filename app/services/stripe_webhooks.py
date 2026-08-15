@@ -128,10 +128,13 @@ def _apply_side_effect(db: Session, event_type: str, payload: dict, company_id: 
 
     IMPORTANT — two unrelated "invoice" concepts collide in Stripe's event
     names here and must not be conflated:
-      * Stripe Billing subscription invoices (`invoice.payment_succeeded`) —
-        HarborIQ's OWN SaaS subscription charge to the shop. Handled by
-        `_on_subscription_payment_succeeded`, still a TODO stub; nothing in
-        Phase 3 implements platform subscription billing.
+      * Stripe Billing subscription invoices (`invoice.payment_succeeded` /
+        `invoice.payment_failed`) — HarborIQ's OWN SaaS subscription charge to
+        the shop. Handled by `_on_subscription_payment_succeeded` /
+        `_on_subscription_payment_failed`, which resolve the local
+        `subscriptions` row by `stripe_subscription_id` and reconcile
+        active/past_due status. Plan changes, seats, and usage metering are
+        NOT implemented — fixed-price plans only at launch (P2 backlog).
       * `checkout.session.completed` with `metadata.kind == "invoice_payment"`
         — a marine-shop CUSTOMER paying one of the shop's `invoices` rows via
         the Phase 3 pay link. Handled by `_on_invoice_payment_completed`.
@@ -148,6 +151,8 @@ def _apply_side_effect(db: Session, event_type: str, payload: dict, company_id: 
 
     if event_type == "invoice.payment_succeeded":
         _on_subscription_payment_succeeded(db, company_id, obj)
+    elif event_type == "invoice.payment_failed":
+        _on_subscription_payment_failed(db, company_id, obj)
     elif event_type == "checkout.session.completed":
         meta = obj.get("metadata", {}) or {}
         kind = meta.get("kind")
@@ -180,22 +185,45 @@ def _apply_side_effect(db: Session, event_type: str, payload: dict, company_id: 
 def _on_subscription_payment_succeeded(db: Session, company_id: uuid.UUID, obj: dict) -> None:
     """Stripe Billing subscription invoice paid — HarborIQ's OWN SaaS charge
     to the shop for using the platform. Distinct from a shop's customer
-    invoices (`app.services.invoices`), which is what Phase 3 implements.
+    invoices (`app.services.invoices`), which Phase 3 implements.
 
-    Still a TODO stub: platform subscription billing (plans, seats, usage
-    metering) is not implemented yet. Renamed from `_on_payment_succeeded` in
-    Phase 3 purely to stop the name colliding, in a reader's head, with the
-    unrelated marine-shop invoice payments this phase adds.
+    Resolves the local `subscriptions` row by `stripe_subscription_id` (the
+    Stripe Invoice object carries the parent subscription id on `.subscription`)
+    and marks it `active`, clearing any `past_due` state from a prior failed
+    charge and advancing `current_period_end` from the invoice's line-item
+    period so trial/renewal countdowns stay accurate. Scoped to `company_id`
+    via `current_setting('app.current_company_id')` (RLS-safe even though this
+    handler runs on the service-role connection) so a cross-tenant Stripe id
+    collision can never update the wrong tenant's row.
+
+    Plan changes (upgrade/downgrade), seat counts, and usage-based metering
+    are NOT implemented — HarborIQ ships fixed-price plans only at launch;
+    those remain a P2 backlog item, tracked separately from this reconciliation
+    fix, and do not block the pilot (Stripe is skipped entirely when
+    `STRIPE_API_KEY` is unset).
     """
     amount_paid_cents = obj.get("amount_paid") or obj.get("amount")
     payment_intent = obj.get("payment_intent")
+    subscription_id = obj.get("subscription")
+    period_end_ts = _extract_invoice_period_end(obj)
 
-    # TODO: resolve the local subscription by a stored Stripe id, e.g.:
-    #   inv = db.execute(text("""
-    #       UPDATE subscriptions SET status='active'
-    #        WHERE stripe_subscription_id = :sid
-    #          AND company_id::text = current_setting('app.current_company_id')
-    #        RETURNING id"""), {"sid": ...}).first()
+    if subscription_id:
+        db.execute(
+            text(
+                """
+                UPDATE subscriptions
+                   SET status = 'active',
+                       current_period_end = COALESCE(
+                           to_timestamp(:period_end), current_period_end
+                       ),
+                       canceled_at = NULL
+                 WHERE stripe_subscription_id = :sid
+                   AND company_id::text = current_setting('app.current_company_id')
+                 RETURNING id
+                """
+            ),
+            {"sid": subscription_id, "period_end": period_end_ts},
+        )
 
     # Non-DB side effect: queue a receipt — dispatched after commit by the
     # outbox worker (same transaction as the dedup INSERT above).
@@ -205,6 +233,60 @@ def _on_subscription_payment_succeeded(db: Session, company_id: uuid.UUID, obj: 
         "receipt.send",
         {"payment_intent": payment_intent, "amount_cents": amount_paid_cents},
     )
+
+
+def _on_subscription_payment_failed(db: Session, company_id: uuid.UUID, obj: dict) -> None:
+    """Stripe Billing subscription invoice failed to collect.
+
+    Marks the local subscription `past_due` so the app can surface a billing
+    warning / restrict access per the shop's plan policy. Does not cancel the
+    subscription — Stripe's own retry schedule (Smart Retries) governs
+    `customer.subscription.deleted` after exhausting retries, which is a
+    separate event this handler does not yet subscribe to (P2 backlog: full
+    dunning-state lifecycle).
+    """
+    subscription_id = obj.get("subscription")
+    if not subscription_id:
+        return
+
+    db.execute(
+        text(
+            """
+            UPDATE subscriptions
+               SET status = 'past_due'
+             WHERE stripe_subscription_id = :sid
+               AND company_id::text = current_setting('app.current_company_id')
+               AND status != 'canceled'
+             RETURNING id
+            """
+        ),
+        {"sid": subscription_id},
+    )
+
+    outbox.enqueue(
+        db,
+        company_id,
+        "billing.payment_failed",
+        {"subscription_id": subscription_id},
+    )
+
+
+def _extract_invoice_period_end(obj: dict) -> int | None:
+    """Best-effort extraction of the billing period end (unix seconds) from a
+    Stripe Invoice object. Prefers the invoice's own `period_end`; falls back
+    to the first subscription line item's `period.end` since Stripe does not
+    always populate the top-level field identically across API versions.
+    """
+    period_end = obj.get("period_end")
+    if period_end:
+        return period_end
+
+    lines = (obj.get("lines") or {}).get("data") or []
+    for line in lines:
+        period = line.get("period") or {}
+        if period.get("end"):
+            return period["end"]
+    return None
 
 
 def _on_subscription_checkout_completed(db: Session, company_id: uuid.UUID, obj: dict) -> None:

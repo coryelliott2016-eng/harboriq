@@ -1,11 +1,13 @@
 """Stripe webhook -> marine-shop customer invoice payment.
 
-Distinct from `tests/test_stripe_webhook_idempotency.py`, which exercises the
-UNRELATED Stripe Billing subscription-invoice path
-(`invoice.payment_succeeded` -> `_on_subscription_payment_succeeded`, still a
-stub). This file drives `checkout.session.completed` with
-`metadata.kind == "invoice_payment"`, which is what Phase 3 implements:
-`_on_invoice_payment_completed` -> `invoices.mark_paid_from_webhook`.
+Distinct from `tests/test_stripe_webhook_idempotency.py` and
+`tests/test_stripe_subscription_billing.py`, which exercise the UNRELATED
+Stripe Billing subscription-invoice path (`invoice.payment_succeeded` /
+`invoice.payment_failed` -> `_on_subscription_payment_succeeded` /
+`_on_subscription_payment_failed`). This file drives
+`checkout.session.completed` with `metadata.kind == "invoice_payment"`, which
+is what Phase 3 implements: `_on_invoice_payment_completed` ->
+`invoices.mark_paid_from_webhook`.
 """
 from __future__ import annotations
 
@@ -151,10 +153,11 @@ def test_duplicate_event_delivery_does_not_double_pay(client, service_db):
     assert payments == 1, "duplicate event created a second payment row"
 
 
-def test_subscription_invoice_payment_succeeded_is_unaffected(service_db, company_a):
-    """The pre-existing Stripe Billing subscription path (renamed to
-    `_on_subscription_payment_succeeded`) must remain wired to
-    `invoice.payment_succeeded` and keep queuing a receipt, unmodified."""
+def test_subscription_invoice_payment_succeeded_still_queues_a_receipt(service_db, company_a):
+    """The Stripe Billing subscription path
+    (`_on_subscription_payment_succeeded`) must remain wired to
+    `invoice.payment_succeeded` and keep queuing a receipt, with or without a
+    resolvable local subscription row."""
     eid = "evt_" + uuid.uuid4().hex
     payload = {
         "id": eid,
