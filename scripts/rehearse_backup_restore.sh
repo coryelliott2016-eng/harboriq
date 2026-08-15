@@ -61,6 +61,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 REHEARSAL_SCRATCH_DB="${REHEARSAL_SCRATCH_DB:-harboriq_rehearsal_$(date +%s)}"
 
+# Normalize SQLAlchemy-style URL schemes (`postgresql+psycopg://`,
+# `postgresql+asyncpg://`, ...) to the plain `postgresql://` libpq scheme
+# that `psql` and `pg_dump` actually understand. The rest of the codebase
+# stores DB URLs in SQLAlchemy form because that's what the app driver
+# needs, so accepting them here and stripping the driver suffix is much
+# less surprising than forcing every caller to remember to rewrite it.
+# Without this, pg_dump silently ignores the URL (unknown scheme), falls
+# back to a unix-socket default, and fails with "connection to server on
+# socket ... failed" in CI where Postgres is a TCP-only service container.
+normalize_libpq_url() {
+  python3 - "$1" <<'PY'
+import sys, urllib.parse
+url = sys.argv[1]
+p = urllib.parse.urlsplit(url)
+scheme = p.scheme
+if "+" in scheme:
+    scheme = scheme.split("+", 1)[0]
+if scheme == "postgres":
+    scheme = "postgresql"
+print(urllib.parse.urlunsplit((scheme, p.netloc, p.path, p.query, p.fragment)))
+PY
+}
+REHEARSAL_ADMIN_URL="$(normalize_libpq_url "$REHEARSAL_ADMIN_URL")"
+REHEARSAL_SOURCE_URL="$(normalize_libpq_url "$REHEARSAL_SOURCE_URL")"
+
 # Guard: the scratch DB name has to include "rehearsal" so restore_db_s3.sh
 # treats it as a safe target without RESTORE_CONFIRM. If a caller overrides
 # REHEARSAL_SCRATCH_DB with something that doesn't match, fail loudly here
@@ -111,6 +136,8 @@ cleanup() {
 trap cleanup EXIT
 
 echo "rehearse_backup_restore.sh: step 1/5 — dump source"
+# BACKUP_DATABASE_URL is passed to `pg_dump` directly, so it must already
+# be in plain libpq form — normalize_libpq_url above has done that.
 if ! BACKUP_DATABASE_URL="$REHEARSAL_SOURCE_URL" \
      BACKUP_OUTPUT_DIR="$BACKUPS_DIR" \
      BACKUP_RETENTION_DAYS=0 \
