@@ -41,10 +41,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      # See ci.yml for the --legacy-peer-deps rationale (eslint-plugin-jsx-a11y
-      # 6.10.2 declares an eslint peer range that stops at v9; the project
-      # is on eslint@^10.8.0). Remove when jsx-a11y publishes v10 support.
-      - run: npm ci --legacy-peer-deps
+      # See frontend/.npmrc for the eslint-plugin-jsx-a11y peer-range
+      # compatibility setting.
+      - run: npm ci
       - name: Build web assets
         run: npm run build
         env:
@@ -86,10 +85,9 @@ jobs:
           node-version: 22
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
-      # See ci.yml for the --legacy-peer-deps rationale (eslint-plugin-jsx-a11y
-      # 6.10.2 declares an eslint peer range that stops at v9; the project
-      # is on eslint@^10.8.0). Remove when jsx-a11y publishes v10 support.
-      - run: npm ci --legacy-peer-deps
+      # See frontend/.npmrc for the eslint-plugin-jsx-a11y peer-range
+      # compatibility setting.
+      - run: npm ci
       - name: Build web assets
         run: npm run build
         env:

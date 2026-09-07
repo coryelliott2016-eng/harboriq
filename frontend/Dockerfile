@@ -8,10 +8,8 @@ WORKDIR /app
 COPY package*.json ./
 # --legacy-peer-deps: eslint-plugin-jsx-a11y@6.10.2 declares an eslint peer
 # range that stops at ^9 (no v10 support tag yet), but this project is on
-# eslint@^10.8.0. See .github/workflows/ci.yml for the same rationale.
-# Remove this flag once jsx-a11y publishes a release with eslint v10 in its
-# peerDependencies range.
-RUN npm ci --legacy-peer-deps
+# eslint@^10.8.0. The repository's .npmrc supplies the compatibility setting.
+RUN npm ci
 
 COPY . .
 # VITE_API_URL is baked into the JS bundle at build time (Vite inlines
