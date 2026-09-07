@@ -29,6 +29,14 @@ function extractErrorMessage(body: ApiErrorBody | null, fallback: string): strin
  * when a refresh attempt has definitively failed. */
 function forceLogout(): void {
   clearSession();
+  // Route detection must match the active router (see src/main.tsx): under
+  // VITE_ROUTER=hash the SPA route lives in the URL fragment, not pathname.
+  if (import.meta.env.VITE_ROUTER === "hash") {
+    if (!window.location.hash.startsWith("#/login")) {
+      window.location.assign("#/login");
+    }
+    return;
+  }
   if (window.location.pathname !== "/login") {
     window.location.assign("/login");
   }
@@ -88,7 +96,15 @@ export interface RequestOptions {
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const url = new URL(`${API_BASE}${path}`);
+  // Relative VITE_API_URL values (e.g. proxied staging hosts that rewrite
+  // the API origin to a path like "port/8000") need a base or the URL
+  // constructor throws. Absolute bases must NOT pass one: tests (and some
+  // embedders) stub `window.location`, and an unparsable base throws even
+  // when the URL itself is absolute.
+  const raw = `${API_BASE}${path}`;
+  const url = /^[a-z][a-z0-9+.-]*:/i.test(raw)
+    ? new URL(raw)
+    : new URL(raw, window.location.href);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== null && value !== "") {

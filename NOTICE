@@ -1,5 +1,8 @@
 HarborIQ
-Copyright (c) 2026 Cory Elliott. All Rights Reserved.
+Copyright (c) 2026 HarborIQ, Inc. All Rights Reserved.
+(Cory Elliott is the software's human author; HarborIQ, Inc., a Florida
+profit corporation, holds the copyright as assignee/successor-in-interest
+under the IP Assignment Agreement between Cory Elliott and HarborIQ, Inc.)
 
 This is proprietary, confidential software. See the LICENSE file in the
 repository root for the full terms. No open-source license applies to any
@@ -11,7 +14,8 @@ and are not affected by HarborIQ's proprietary license.
 
 AI-assisted development notice: portions of this codebase were generated
 with the assistance of AI coding tools under the direction, prompting,
-review, and editorial control of the human author named above, who
+review, and editorial control of the human author, Cory Elliott, who
 selected, arranged, tested, corrected, and integrated the resulting code
-into the finished work. See docs/COPYRIGHT_REGISTRATION_GUIDE.md for the
-authorship disclosure prepared for U.S. Copyright Office registration.
+into the finished work before it was assigned to HarborIQ, Inc. See
+docs/COPYRIGHT_REGISTRATION_GUIDE.md for the authorship disclosure prepared
+for U.S. Copyright Office registration.

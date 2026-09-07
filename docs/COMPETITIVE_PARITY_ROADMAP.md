@@ -5,7 +5,7 @@ Goal: match the core capabilities of DockMaster (marine-specific incumbent,
 field-service gold standard) — plus ship differentiators neither offers —
 so HarborIQ is legitimately "top tier," not just MVP-viable.
 
-Status as of Phase 17: auth (with Redis-backed rate limiting, httpOnly-
+Status as of Phase 18: auth (with Redis-backed rate limiting, httpOnly-
 cookie refresh tokens + CSRF, and self-service MFA/TOTP), multi-tenant CRM,
 invoicing + Stripe Checkout
 (single-account and per-tenant Stripe Connect direct charges), refunds,
@@ -37,8 +37,11 @@ Phase 17 then closed out the remaining deferred items from Phases 8, 13,
 admin-forced company-wide MFA policy, recurring/automatic monthly slip
 billing, PDF report exports, a GPS-based customer-facing "find my dock"
 portal view, Stripe refund-webhook reconciliation for refunds issued
-directly from the Stripe Dashboard, and vendor deactivate/archive.
-703 backend tests, 121 frontend tests, CI green.
+directly from the Stripe Dashboard, and vendor deactivate/archive. Phase 18
+adds an opt-in licensed-processor stablecoin/crypto invoice-payment rail:
+HMAC-verified provider webhooks, idempotent payment confirmation, and
+tenant-isolated payment records, with **no HarborIQ on-chain custody**.
+711 backend tests, 121 frontend tests, CI green.
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
@@ -485,6 +488,69 @@ this is organized from).
       Archive/Reactivate button were added to `VendorsPage.tsx` since the
       existing table made it a small addition. Closes the gap flagged under
       Phase 13: "no archived/inactive flag or filter yet."
+
+## Phase 18 — Crypto Payment Rail (MVP) — **COMPLETE**
+- [x] **Licensed-processor stablecoin checkout, not custody.** `POST
+      /invoices/{id}/crypto-payment-intent` (`app/api/v1/routes/
+      crypto_payments.py`) is `require_operations`-gated and creates a
+      `crypto_payments` request through `app/services/crypto_payments.py`'s
+      small provider seam. The initial `StripeStablecoinProvider` uses a
+      Stripe Checkout Session with Stripe's `crypto` payment method; HarborIQ
+      holds no wallet keys, never accepts an on-chain transfer directly, and
+      performs no on-chain custody or settlement. The route is explicitly
+      disabled until `CRYPTO_PAYMENTS_ENABLED=true`, so an unconfigured
+      installation cannot accidentally expose a payment option.
+- [x] **Tenant-safe schema + webhook idempotency.** Migration `0020` adds
+      `crypto_payments`, including the same composite `(company_id,
+      invoice_id)` FK discipline used by `payments`/`refunds`, a forced-RLS
+      tenant policy, and a partial unique `(provider, provider_reference)`
+      index. `crypto_processed_events` mirrors the service-role
+      `stripe_processed_events` deduplication pattern: its `INSERT ... ON
+      CONFLICT DO NOTHING` happens in the same transaction as the payment
+      status and invoice side effect, so a provider replay cannot double-pay
+      an invoice.
+- [x] **Production Stripe webhook path + generic HMAC fallback.** Real Stripe
+      crypto Checkout completions are handled on the existing
+      `POST /webhooks/stripe` path when `metadata.kind ==
+      crypto_invoice_payment` (`_on_crypto_invoice_payment_completed` in
+      `app/services/stripe_webhooks.py`): confirm `crypto_payments`, then
+      `invoices.mark_paid_from_webhook`. Intent creation stamps
+      `invoices.stripe_checkout_session_id` immediately so resolution matches
+      card Checkout. The generic `POST /webhooks/crypto` (HMAC-SHA256 via
+      `CRYPTO_WEBHOOK_SECRET`) remains for non-Stripe processors and tests —
+      fail-closed outside development. Ops enablement:
+      `docs/CRYPTO_PAYMENTS_ENABLEMENT.md`. Going live requires Stripe to
+      enable crypto/stablecoin Checkout on the account plus a working
+      `STRIPE_WEBHOOK_SECRET`.
+- [x] **Covered behavior.** `tests/test_crypto_payments.py` covers enabled/
+      disabled behavior, valid/invalid/unconfigured signature policy,
+      confirmed partial payment and duplicate replay idempotency, failed
+      outcome isolation from the invoice, and cross-tenant read isolation.
+
+## Phase 19 — Asset Tokenization Layer (Exploratory) — **COMPLETE (draft-only, pending legal review)**
+- [x] **Draft-registration only; no financialized token behavior.** `POST
+      /asset-tokens` lets an owner/admin record intent to possibly tokenize a
+      vessel, slip, equipment, or receivable and creates exactly one
+      `registered` ledger row in the same transaction. No issuance, unit
+      allocation, ownership, transfer, trading, or valuation-based allocation
+      exists or is planned until outside securities counsel completes its
+      review.
+- [x] **Two independent enforcement layers.** Migration `0021` makes
+      `asset_tokens.status` a plain text column constrained by `CHECK (status
+      = 'draft')`, so no code or direct SQL can move a record out of draft
+      without an explicit future migration. Separately, the router exposes
+      only POST registration and tenant-scoped GET reads: there is no
+      PATCH/PUT/DELETE/status-change/issuance/transfer endpoint to call.
+- [x] **Fail-closed feature gating + tenant-safe schema.**
+      `settings.asset_tokenization_enabled` defaults to `False` and must stay
+      off in production until the outside legal review occurs. Migration
+      `0021` adds forced RLS to `asset_tokens` and `token_ledger_entries`,
+      plus composite tenant-safe foreign keys to an optional vessel and from
+      each ledger entry to its asset-token record.
+- [x] **Covered behavior.** `tests/test_asset_tokens.py` covers the disabled
+      response, owner/admin authorization boundary, draft registration and
+      ledger write, vessel validation, tenant isolation, absent mutation
+      routes, and the database `status = 'draft'` check rejection.
 
 ## Differentiators to preserve/lean into throughout (not incumbents' turf)
 - Fully explainable AI dispatch scoring (factor-by-factor breakdown) vs.

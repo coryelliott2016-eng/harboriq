@@ -1,0 +1,99 @@
+# Mobile store builds (Capacitor shell around the frontend PWA).
+#
+# Scope-limited triggers: macOS runners bill at a 10x minute multiplier on
+# private repos, so this workflow only runs when mobile-relevant files
+# change, or on demand via workflow_dispatch.
+#
+# Signing model (deliberate):
+#   * Android: builds a RELEASE .aab. If the four ANDROID_* secrets exist it
+#     is signed with the Play upload key and ready to upload to Play Console;
+#     otherwise the job still builds unsigned to validate the toolchain.
+#   * iOS: compile-check only (CODE_SIGNING_ALLOWED=NO) until the Apple
+#     Developer account exists. Archive + TestFlight upload gets added once
+#     certs/App Store Connect API key secrets are available — see
+#     docs/mobile-launch-runbook.md.
+name: Mobile builds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "frontend/android/**"
+      - "frontend/ios/**"
+      - "frontend/capacitor.config.ts"
+      - ".github/workflows/mobile.yml"
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22 # Capacitor CLI 8 requires Node >= 22
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Build web assets
+        run: npm run build
+        env:
+          # Set the PROD_API_URL repository variable once the production
+          # API is deployed; the placeholder keeps toolchain validation
+          # working before then.
+          VITE_API_URL: ${{ vars.PROD_API_URL || 'https://api.harboriq.app' }}
+      - run: npx cap sync android
+      - name: Decode upload keystore (if configured)
+        if: ${{ vars.ANDROID_SIGNING_READY == 'true' }}
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks
+      - name: Build release bundle (.aab)
+        working-directory: frontend/android
+        run: |
+          if [ "${{ vars.ANDROID_SIGNING_READY }}" = "true" ]; then
+            ./gradlew bundleRelease \
+              -Pandroid.injected.signing.store.file=$PWD/upload-keystore.jks \
+              -Pandroid.injected.signing.store.password='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}' \
+              -Pandroid.injected.signing.key.alias='${{ secrets.ANDROID_KEY_ALIAS }}' \
+              -Pandroid.injected.signing.key.password='${{ secrets.ANDROID_KEY_PASSWORD }}'
+          else
+            ./gradlew bundleRelease
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harboriq-android-aab
+          path: frontend/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
+
+  ios:
+    runs-on: macos-26 # Xcode 26 required for App Store submissions since 2026-04-28
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Build web assets
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ vars.PROD_API_URL || 'https://api.harboriq.app' }}
+      - run: npx cap sync ios
+      - name: Compile check (unsigned)
+        working-directory: frontend/ios/App
+        # Capacitor 8 iOS projects use Swift Package Manager (no CocoaPods,
+        # no .xcworkspace) — build the .xcodeproj directly.
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App \
+            -configuration Release -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO build

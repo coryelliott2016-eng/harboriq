@@ -419,6 +419,35 @@ class StripeProcessedEvent(Base):
     outcome: Mapped[str] = mapped_column(Text, nullable=False)
 
 
+class MarketingLead(UUIDPKMixin, TimestampMixin, Base):
+    """Platform marketing / trial signup lead (migration 0023).
+
+    Not tenant-scoped: leads arrive from the public GTM site before any
+    company exists. SERVICE ROLE ONLY — see alembic/sql/0023_marketing_leads.sql.
+    """
+
+    __tablename__ = "marketing_leads"
+    full_name: Mapped[str] = mapped_column(Text, nullable=False)
+    business_name: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    team_size: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(
+        Text, nullable=False, default="marketing-signup", server_default="marketing-signup"
+    )
+    ip_hint: Mapped[Optional[str]] = mapped_column(INET)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text)
+    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("idx_marketing_leads_created_at", "created_at"),
+        Index("idx_marketing_leads_email_created", "email", "created_at"),
+        CheckConstraint(
+            "team_size IN ('solo', 'team', 'business', 'enterprise')",
+            name="ck_marketing_leads_team_size",
+        ),
+    )
+
+
 class OutboxEvent(UUIDPKMixin if False else Base):  # type: ignore[misc]
     __tablename__ = "outbox_events"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

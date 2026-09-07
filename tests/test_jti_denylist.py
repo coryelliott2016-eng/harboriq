@@ -72,9 +72,12 @@ def test_denylist_check_fails_open_when_redis_is_unavailable(client):
     assert denied.status_code == 401
 
     with patch("app.core.token_denylist.get_redis") as mock_get_redis:
-        mock_get_redis.return_value.exists.side_effect = RedisError("boom")
-        # Fails open: Redis being down must not turn a (still cryptographically
-        # valid, unexpired) access token into a hard failure.
+        mock_redis = mock_get_redis.return_value
+        # Both the jti denylist (EXISTS) and the access-epoch check (GET) must
+        # fail open — a Redis outage degrades revocation, it does not 401
+        # every authenticated request.
+        mock_redis.exists.side_effect = RedisError("boom")
+        mock_redis.get.side_effect = RedisError("boom")
         resp = client.get("/api/v1/auth/me", headers=headers)
         assert resp.status_code == 200, resp.text
 
@@ -88,3 +91,37 @@ def test_logging_out_all_devices_still_denylists_the_calling_tokens_jti(client):
 
     after = client.get("/api/v1/auth/me", headers=headers)
     assert after.status_code == 401, after.text
+
+
+def test_logout_all_devices_kills_other_access_tokens_immediately(client):
+    """all_devices must not leave OTHER devices' access tokens usable until exp.
+
+    Pre-fix: only the calling token's jti was denylisted, so a second
+    device's still-valid access token survived for up to access_token_ttl.
+    The per-user access cutoff closes that residual window (threat model
+    Scenario 1 — lost/stolen device).
+    """
+    owner = signup(client)
+    headers_a = auth_headers(owner)
+
+    login_resp = login(client, owner["user"]["email"])
+    headers_b = auth_headers(login_resp)
+
+    # Both sessions work before the revoke.
+    assert client.get("/api/v1/auth/me", headers=headers_a).status_code == 200
+    assert client.get("/api/v1/auth/me", headers=headers_b).status_code == 200
+
+    resp = client.post(
+        "/api/v1/auth/logout", json={"all_devices": True}, headers=headers_a
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Calling token dead (jti denylist).
+    assert client.get("/api/v1/auth/me", headers=headers_a).status_code == 401
+    # Other device's access token also dead immediately (user access cutoff).
+    assert client.get("/api/v1/auth/me", headers=headers_b).status_code == 401
+
+    # A fresh login after the cutoff still works.
+    fresh = login(client, owner["user"]["email"])
+    assert client.get("/api/v1/auth/me", headers=auth_headers(fresh)).status_code == 200
+

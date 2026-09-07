@@ -22,7 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.security import InvalidToken, decode_access_token
-from app.core.token_denylist import is_denylisted
+from app.core.token_denylist import is_denylisted, is_user_access_epoch_stale
 from app.db.models import OPERATIONS_ROLES, USER_MANAGEMENT_ROLES, UserRole
 from app.db.session import get_db, get_service_db
 from app.db.tenant import set_tenant
@@ -41,6 +41,7 @@ class Principal:
     session_id: uuid.UUID
     token_jti: str
     token_expires_at: datetime
+    token_issued_at: datetime
 
 
 def _unauthenticated(detail: str = "not authenticated") -> HTTPException:
@@ -67,6 +68,9 @@ def get_current_principal(
     if is_denylisted(claims.jti):
         raise _unauthenticated("access token has been revoked")
 
+    if is_user_access_epoch_stale(claims.user_id, claims.access_epoch):
+        raise _unauthenticated("access token has been revoked")
+
     user = load_user(db, claims.company_id, claims.user_id)
     if user is None or not user.is_active:
         raise _unauthenticated("account is not active")
@@ -77,6 +81,7 @@ def get_current_principal(
         session_id=claims.session_id,
         token_jti=claims.jti,
         token_expires_at=claims.expires_at,
+        token_issued_at=claims.issued_at,
     )
 
 

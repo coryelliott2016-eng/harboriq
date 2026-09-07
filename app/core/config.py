@@ -1,6 +1,7 @@
 """Application configuration (pydantic-settings)."""
 from typing import Annotated
 
+from cryptography.fernet import Fernet
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -9,12 +10,18 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 DEV_JWT_SECRET = "dev-only-insecure-secret-change-me-before-deploying"  # noqa: S105 -- documented dev-only placeholder, not a real secret
 MIN_JWT_SECRET_BYTES = 32
 
-# Fixed, obviously-insecure Fernet key used only when APP_ENV=development and
-# MFA_ENCRYPTION_KEY is unset, so `users.mfa_secret_enc` encryption works out
-# of the box locally without requiring every developer to generate their own
-# key. Generated once via `Fernet.generate_key()`; never used outside dev
-# (enforced by `_require_strong_mfa_key_outside_development` below).
-DEV_MFA_ENCRYPTION_KEY = "3gWn9z6r0m1cX2h8vQvB5sYyF4dK7pL0aT9uJ6eR3iM="
+# Generated fresh at process start -- never a fixed value baked into source --
+# used only when APP_ENV=development and MFA_ENCRYPTION_KEY is unset, so
+# `users.mfa_secret_enc` encryption works out of the box locally without
+# requiring every developer to generate their own key. Never used outside dev
+# (enforced by `_require_strong_mfa_key_outside_development` below). A prior
+# revision hardcoded a fixed key here; that static value is never used for
+# anything beyond this repo's own dev fixtures, but a static high-entropy
+# secret in source is a bad pattern regardless, so it's generated at runtime
+# instead. Trade-off: restarting the dev server invalidates any MFA secret
+# previously encrypted with the prior process's key -- acceptable for local
+# dev, where re-enrolling MFA is a one-click action.
+DEV_MFA_ENCRYPTION_KEY = Fernet.generate_key().decode()
 
 
 class Settings(BaseSettings):
@@ -34,6 +41,26 @@ class Settings(BaseSettings):
 
     stripe_api_key: str = ""
     stripe_webhook_secret: str = ""
+
+    # --- Crypto payments (Phase 18) ---
+    # Disabled by default: no API route creates a provider checkout until the
+    # explicit feature flag is on AND Stripe is configured.  An empty
+    # CRYPTO_WEBHOOK_SECRET follows the established webhook safety policy:
+    # development accepts local synthetic events with a warning, while every
+    # non-development environment fail-closes with a 503 rather than trusting
+    # an unsigned financial event.  HarborIQ is never an on-chain custodian;
+    # Stripe (or a future licensed provider) handles stablecoin checkout and
+    # settlement.
+    crypto_payments_enabled: bool = False
+    crypto_webhook_secret: str = ""
+
+    # --- Asset tokenization (Phase 19) ---
+    # Disabled by default: this compliance-sensitive feature records only a
+    # draft intent to tokenize a marine asset, pending outside securities
+    # counsel review. It MUST NOT be enabled in a real deployment without
+    # that review; migration 0021 independently restricts every record to
+    # status='draft' and the API exposes no issuance or transfer operation.
+    asset_tokenization_enabled: bool = False
 
     # --- Auth ---
     # HS256 shared secret for signing access tokens. Refresh tokens are opaque
@@ -63,6 +90,28 @@ class Settings(BaseSettings):
     # original in-process version.
     rate_limit_requests_per_window: int = 10
     rate_limit_window_seconds: int = 60
+    # Location-ping is authenticated and keyed per-user (not IP). The staff
+    # web app pings about once every 3 minutes (see useLocationPing.ts), so
+    # 30/minute is still ~90x headroom for legitimate GPS retries while
+    # stopping a compromised session from flooding spoofed coordinates onto
+    # the dispatch board (marine threat model Scenario 2, 2026-08-11).
+    location_ping_rate_limit_per_window: int = 30
+    location_ping_rate_limit_window_seconds: int = 60
+    # Implied ground speed above this (km/h) between consecutive pings is
+    # flagged as anomalous. 250 km/h is well above highway/boat speeds and
+    # GPS noise, well below aircraft teleport-spoofs. Flagged, not rejected
+    # — legitimate cold-start GPS jumps still land, they just surface a flag.
+    location_ping_max_plausible_speed_kmh: float = 250.0
+    # Only run the speed check when the prior ping is this fresh; older gaps
+    # are treated as a new trip (device off overnight, flight, etc.).
+    location_ping_plausibility_window_seconds: int = 2 * 60 * 60
+    # Offline field-queue replay age (marine threat model Scenario 3).
+    # client_queued_at older than the hard max is rejected; ages above the
+    # warn threshold are accepted but structured-logged for ops review.
+    offline_queue_max_age_seconds: int = 14 * 24 * 60 * 60  # 14 days hard reject
+    offline_queue_warn_age_seconds: int = 72 * 60 * 60  # 72h warn
+    # Allow a small future skew for client clocks that run slightly fast.
+    offline_queue_future_skew_seconds: int = 5 * 60
 
     # --- Invite tokens ---
     invite_ttl_hours: int = 24 * 7
@@ -112,6 +161,33 @@ class Settings(BaseSettings):
     # The API itself never renders these pages.
     app_base_url: str = "http://localhost:5173"
 
+    # --- Auth cookie deployment shape ---
+    # Defaults preserve the existing local/dev contract exactly. Deployments
+    # that serve the API behind a path-prefixing reverse proxy (the cookie
+    # Path no longer matches the browser-visible URL), or on hosts that only
+    # forward `__Host-`-prefixed cookies, can override via env:
+    #   REFRESH_COOKIE_NAME=__Host-refresh_token
+    #   AUTH_COOKIE_PATH=/
+    #   CSRF_COOKIE_NAME=__Host-csrf_token
+    # Note `__Host-` names additionally require Secure (true outside
+    # development) and forbid a Domain attribute (never set here).
+    refresh_cookie_name: str = "refresh_token"
+    auth_cookie_path: str = "/api/v1/auth"
+    csrf_cookie_name: str = "csrf_token"
+
+    # --- Marketing leads (public GTM / trial signup) ---
+    # Destination for internal "new trial signup" notifications. Empty means
+    # store the lead but skip the notify email (console-transport still logs
+    # if SMTP is also unset and a notify is attempted with a non-empty to).
+    marketing_lead_notify_to: str = "coryelliott19@icloud.com"
+    # Bearer token for GET /api/v1/public/leads (platform admin list). Empty
+    # disables the list endpoint (always 401) — set a long random value in
+    # every real deployment that needs to read leads via API.
+    marketing_leads_admin_token: str = ""
+    # Public POST /public/leads anti-abuse (per IP, Redis fixed window).
+    marketing_lead_rate_limit_per_window: int = 5
+    marketing_lead_rate_limit_window_seconds: int = 600
+
     # --- SMS transport (Phase 11) ---
     # Empty twilio_account_sid (the dev default) means "console transport":
     # app/services/sms.py logs the message instead of calling out, mirroring
@@ -132,6 +208,15 @@ class Settings(BaseSettings):
     # feature is simply skipped, never an error). Setting SENTRY_DSN turns
     # on error/performance reporting with zero other code changes.
     sentry_dsn: str = ""
+    # Shared secret that must be presented as `Authorization: Bearer <token>`
+    # to scrape GET /metrics. Empty is allowed ONLY in development (open
+    # scrape for local Prometheus). Outside development the process refuses
+    # to start without a non-empty value — same fail-closed style as
+    # JWT_SECRET — so a forgotten env var cannot leave the route inventory
+    # and traffic-shape counters on a public listener. Prometheus scrapers
+    # support this natively via `authorization.credentials` /
+    # `bearer_token_file` in scrape_configs (see docs/DEPLOYMENT.md).
+    metrics_token: str = ""
 
     # --- CORS ---
     # Comma-separated in the env var (CORS_ALLOW_ORIGINS); defaults to the
@@ -180,6 +265,23 @@ class Settings(BaseSettings):
                 "MFA_ENCRYPTION_KEY must be set to a real Fernet key when "
                 f"APP_ENV={self.app_env!r} (try: python -c \"from cryptography.fernet "
                 'import Fernet; print(Fernet.generate_key().decode())\")'
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _require_metrics_token_outside_development(self) -> "Settings":
+        if self.app_env == "development":
+            return self
+        if not self.metrics_token or not self.metrics_token.strip():
+            raise ValueError(
+                "METRICS_TOKEN must be set to a non-empty shared secret when "
+                f"APP_ENV={self.app_env!r} (try: openssl rand -hex 32). "
+                "Prometheus scrapers pass it via authorization.credentials / "
+                "bearer_token_file — see docs/DEPLOYMENT.md."
+            )
+        if len(self.metrics_token.encode()) < 16:
+            raise ValueError(
+                "METRICS_TOKEN must be at least 16 bytes outside development"
             )
         return self
 

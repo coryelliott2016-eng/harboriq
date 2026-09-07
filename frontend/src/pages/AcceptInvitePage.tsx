@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { authApi } from "../lib/services";
 import { ApiError } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/auth";
 import { Button, Card, ErrorBanner, Field, Spinner, inputClass } from "../components/ui";
 
 // Public (unauthenticated) route, mirroring PublicInvoicePage's structure: it

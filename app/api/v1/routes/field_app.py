@@ -85,7 +85,12 @@ def clock_in(
     authorize_job_action(db, user, job_id)
     with http_errors():
         return service.clock_in(
-            db, user.company_id, job_id, user.id, body.idempotency_key
+            db,
+            user.company_id,
+            job_id,
+            user.id,
+            body.idempotency_key,
+            client_queued_at=body.client_queued_at,
         )
 
 
@@ -100,7 +105,12 @@ def clock_out(
     authorize_job_action(db, user, job_id)
     with http_errors():
         return service.clock_out(
-            db, user.company_id, job_id, user.id, body.idempotency_key
+            db,
+            user.company_id,
+            job_id,
+            user.id,
+            body.idempotency_key,
+            client_queued_at=body.client_queued_at,
         )
 
 

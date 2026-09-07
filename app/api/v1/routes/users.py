@@ -25,6 +25,7 @@ from app.api.deps import (
     require_operations,
 )
 from app.api.errors import http_errors
+from app.core.rate_limit import enforce_location_ping_rate_limit
 from app.schemas.auth import (
     MfaConfirmRequest,
     MfaConfirmResponse,
@@ -114,16 +115,21 @@ def ping_my_location(
     It is NOT background tracking — closing the tab or the browser stops
     pings immediately, and there is no mobile app yet. True background
     tracking is deliberately out of scope for this phase (Phase 12).
+
+    Rate-limited per authenticated user (not IP) and evaluated for
+    teleport-style speed anomalies — marine threat model Scenario 2
+    (2026-08-11). Anomalies are flagged on the response, not rejected.
     """
+    enforce_location_ping_rate_limit(str(actor.id))
     with http_errors():
-        row = users_service.ping_location(
+        result = users_service.ping_location(
             db,
             actor.company_id,
             user_id=actor.id,
             latitude=body.latitude,
             longitude=body.longitude,
         )
-    return LocationPingOut.model_validate(row)
+    return LocationPingOut.model_validate(result)
 
 
 @router.get(

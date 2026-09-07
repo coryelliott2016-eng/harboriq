@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   enqueueAction,
   listQueuedActions,
+  MAX_QUEUE_AGE_MS,
   newIdempotencyKey,
+  purgeStaleQueuedActions,
   removeQueuedAction,
   replayQueue,
   type ActionSender,
@@ -172,5 +174,55 @@ describe("offlineQueue", () => {
   it("mints unique idempotency keys", () => {
     const keys = new Set(Array.from({ length: 50 }, () => newIdempotencyKey()));
     expect(keys.size).toBe(50);
+  });
+});
+
+describe("offline queue age limits (threat model S1/S3)", () => {
+  beforeEach(async () => {
+    await _resetForTests();
+  });
+
+  it("purgeStaleQueuedActions drops items older than MAX_QUEUE_AGE_MS", async () => {
+    const freshKey = newIdempotencyKey();
+    const staleKey = newIdempotencyKey();
+    const now = Date.now();
+    await enqueueAction({
+      idempotencyKey: freshKey,
+      kind: "clock_in",
+      jobId: "job-1",
+      payload: {},
+      createdAt: new Date(now).toISOString(),
+    });
+    await enqueueAction({
+      idempotencyKey: staleKey,
+      kind: "clock_out",
+      jobId: "job-1",
+      payload: {},
+      createdAt: new Date(now - MAX_QUEUE_AGE_MS - 60_000).toISOString(),
+    });
+
+    const removed = await purgeStaleQueuedActions(now);
+    expect(removed).toBe(1);
+    const remaining = await listQueuedActions();
+    expect(remaining.map((a) => a.idempotencyKey)).toEqual([freshKey]);
+  });
+
+  it("replayQueue purges stale items before sending", async () => {
+    const staleKey = newIdempotencyKey();
+    const nowIso = new Date(Date.now() - MAX_QUEUE_AGE_MS - 1).toISOString();
+    await enqueueAction({
+      idempotencyKey: staleKey,
+      kind: "clock_in",
+      jobId: "job-1",
+      payload: {},
+      createdAt: nowIso,
+    });
+    const sent: string[] = [];
+    const result = await replayQueue(async (action) => {
+      sent.push(action.idempotencyKey);
+    });
+    expect(sent).toEqual([]);
+    expect(result.succeeded).toEqual([]);
+    expect(await listQueuedActions()).toEqual([]);
   });
 });

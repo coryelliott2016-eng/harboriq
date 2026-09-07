@@ -150,8 +150,16 @@ def _apply_side_effect(db: Session, event_type: str, payload: dict, company_id: 
         _on_subscription_payment_succeeded(db, company_id, obj)
     elif event_type == "checkout.session.completed":
         meta = obj.get("metadata", {}) or {}
-        if meta.get("kind") == "invoice_payment":
+        kind = meta.get("kind")
+        if kind == "invoice_payment":
             _on_invoice_payment_completed(db, company_id, obj)
+        elif kind == "crypto_invoice_payment":
+            # Phase 18: stablecoin Checkout created by
+            # app.services.crypto_payments.StripeStablecoinProvider. Real Stripe
+            # events land on THIS endpoint (Stripe-Signature verification),
+            # not on the generic HMAC /webhooks/crypto path — that path remains
+            # for non-Stripe licensed processors and local tests.
+            _on_crypto_invoice_payment_completed(db, company_id, obj)
         else:
             _on_subscription_checkout_completed(db, company_id, obj)
     elif event_type == "payment_intent.succeeded":
@@ -162,6 +170,8 @@ def _apply_side_effect(db: Session, event_type: str, payload: dict, company_id: 
         meta = obj.get("metadata", {}) or {}
         if meta.get("kind") == "invoice_payment":
             _on_invoice_payment_completed(db, company_id, obj)
+        elif meta.get("kind") == "crypto_invoice_payment":
+            _on_crypto_invoice_payment_completed(db, company_id, obj)
     elif event_type == "charge.refunded":
         _on_charge_refunded(db, company_id, obj)
     # ... other event types as needed
@@ -238,6 +248,89 @@ def _on_invoice_payment_completed(db: Session, company_id: uuid.UUID, obj: dict)
         company_id,
         "invoice.paid",
         {"invoice_metadata": (obj.get("metadata") or {}).get("invoice_id")},
+    )
+
+
+def _on_crypto_invoice_payment_completed(
+    db: Session, company_id: uuid.UUID, obj: dict
+) -> None:
+    """A marine-shop customer finished a Phase 18 stablecoin Checkout Session.
+
+    Mirrors `_on_invoice_payment_completed` for money application, then
+    advances the matching `crypto_payments` row from `pending` -> `confirmed`
+    so ops can see which rail collected the funds. The invoice is resolved by
+    the Checkout Session id stamped onto `invoices.stripe_checkout_session_id`
+    at intent-creation time (see `create_crypto_payment_intent`).
+    """
+    import json
+
+    session_id = obj.get("id") if obj.get("object") == "checkout.session" else None
+    payment_intent_id = obj.get("payment_intent") or (
+        obj.get("id") if obj.get("object") == "payment_intent" else None
+    )
+    amount_total_cents = obj.get("amount_total") or obj.get("amount") or 0
+    meta = obj.get("metadata") or {}
+
+    if session_id:
+        # Idempotent on status: a replay is already stopped by
+        # stripe_processed_events; this UPDATE is a no-op if already confirmed.
+        db.execute(
+            text(
+                """
+                UPDATE crypto_payments
+                   SET status = 'confirmed',
+                       confirmed_at = COALESCE(confirmed_at, now()),
+                       raw_metadata = COALESCE(raw_metadata, '{}'::jsonb)
+                           || jsonb_build_object(
+                                  'stripe_event_object', CAST(:obj AS jsonb),
+                                  'confirmed_via', 'stripe_webhook'
+                              )
+                 WHERE company_id = :company_id
+                   AND provider = 'stripe_stablecoin'
+                   AND provider_reference = :session_id
+                   AND status = 'pending'
+                """
+            ),
+            {
+                "company_id": company_id,
+                "session_id": session_id,
+                "obj": json.dumps(obj, default=str),
+            },
+        )
+
+    invoices.mark_paid_from_webhook(
+        db,
+        company_id,
+        stripe_checkout_session_id=session_id,
+        stripe_payment_intent_id=payment_intent_id,
+        amount_paid_cents=amount_total_cents,
+    )
+
+    crypto_payment_id = None
+    if session_id:
+        row = db.execute(
+            text(
+                """
+                SELECT id FROM crypto_payments
+                 WHERE company_id = :company_id
+                   AND provider_reference = :session_id
+                """
+            ),
+            {"company_id": company_id, "session_id": session_id},
+        ).first()
+        if row is not None:
+            crypto_payment_id = str(row.id)
+
+    outbox.enqueue(
+        db,
+        company_id,
+        "invoice.paid",
+        {
+            "invoice_id": meta.get("invoice_id"),
+            "crypto_payment_id": crypto_payment_id,
+            "provider": "stripe_stablecoin",
+            "confirmed_via": "stripe_webhook",
+        },
     )
 
 

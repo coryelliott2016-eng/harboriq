@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { invoicesApi } from "../lib/services";
-import { Badge, Card, EmptyState, ErrorBanner, Spinner, money } from "../components/ui";
+import { Badge, Card, EmptyState, ErrorBanner, Spinner } from "../components/ui";
+import { money } from "../lib/format";
 import { INVOICE_STATUS_LABELS } from "../lib/invoiceStateMachine";
 import type { InvoiceStatus } from "../types/api";
 

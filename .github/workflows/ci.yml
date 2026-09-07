@@ -12,11 +12,11 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
@@ -24,8 +24,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install ruff
@@ -69,8 +69,8 @@ jobs:
       SERVICE_DATABASE_URL: postgresql+psycopg://harboriq_service:harboriq_service_pass@localhost:5432/harboriq
       REDIS_URL: redis://localhost:6379/0
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install psql + create roles
@@ -95,6 +95,10 @@ jobs:
       # comment here -- not silenced wholesale.
       - name: Dependency audit (blocking)
         run: |
+          # Upgrade pip first so the audit never fails on the runner image's
+          # own bundled pip (e.g. PYSEC-2026-196 in pip <26.1.2) rather than
+          # on a real project dependency.
+          python -m pip install --upgrade pip
           pip install pip-audit
           pip-audit
 
@@ -104,8 +108,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: "npm"
@@ -132,7 +136,7 @@ jobs:
     needs: [secret-scan, lint, test, frontend]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build backend image
         run: docker build -t harboriq-backend:ci .
       - name: Build frontend image

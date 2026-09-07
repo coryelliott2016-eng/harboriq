@@ -7,6 +7,11 @@ build plan: every issue from the technical critique is fixed at the code level.
 > (customers, vessels, work orders), **invoicing + Stripe payment
 > collection**, **Stripe Connect onboarding, refunds, PDF/email invoice
 > delivery, dunning, and AR aging** (see "Billing operations" below), a
+> **licensed-processor stablecoin/crypto invoice-payment rail** (no
+> HarborIQ on-chain custody; see "Crypto payment rail" below), a
+> **draft-only, admin-gated asset-tokenization registration record** (off by
+> default pending outside securities-counsel review; see "Asset tokenization
+> layer" below), a
 > **customer self-service portal + customer<->staff messaging** (see
 > "Customer self-service portal" below), the
 > **React frontend**, **deployment/observability hardening** (structured
@@ -104,6 +109,7 @@ tests/test_invoicing_lifecycle.py       # draft -> sent -> paid, draft/sent -> v
 tests/test_invoicing_rls.py             # cross-tenant isolation + composite FKs on invoices/payments
 tests/test_public_invoice_pay.py        # token resolves invoice; read never burns a use; checkout URL
 tests/test_stripe_invoice_webhook.py    # checkout.session.completed pays/partials an invoice, idempotently
+tests/test_crypto_payments.py           # stablecoin checkout intent, HMAC webhook, idempotency, RLS isolation
 tests/test_auth_rate_limit_lockout.py   # per-IP 429s, 5-failure lockout -> 423, expiry, generic messaging
 tests/test_email_and_outbox_dispatch.py # console-fallback + real SMTP transport, dispatch_pending rewrite
 tests/test_auth_invites.py              # invite create/preview/accept, role-escalation guard, tenant isolation
@@ -209,6 +215,11 @@ its server-side logs (see `app/api/middleware.py`, and
 | POST | `/api/v1/invoices/{id}/send` | bearer, owner/admin/office | draft -> sent; mints a Stripe Checkout Session (best-effort) and a public pay token |
 | POST | `/api/v1/invoices/{id}/void` | bearer, owner/admin/office | draft/sent -> void; 409 if any payment has already landed; frees line items for re-invoicing |
 | POST | `/api/v1/invoices/{id}/refund` | bearer, owner/admin/office | full/partial refund against `amount_paid`; lands on `refunded`/`partially_refunded` via `InvoiceSM` |
+| POST | `/api/v1/invoices/{id}/crypto-payment-intent` | bearer, owner/admin/office | create a licensed-processor stablecoin checkout for a sent/partial invoice (Phase 18 feature flag) |
+| GET | `/api/v1/crypto-payments/{id}` | bearer, owner/admin/office | one tenant-scoped stablecoin payment request/outcome |
+| POST | `/api/v1/asset-tokens` | bearer, owner/admin | register a draft-only asset-tokenization intent plus immutable `registered` ledger entry (Phase 19 feature flag; no issuance/transfer) |
+| GET | `/api/v1/asset-tokens` | bearer, owner/admin | list draft-only asset-tokenization registrations |
+| GET | `/api/v1/asset-tokens/{id}` | bearer, owner/admin | one tenant-scoped draft-only asset-tokenization registration |
 | POST | `/api/v1/billing/connect/onboarding-link` | bearer, owner/admin | create (or resume) this company's Stripe Connect account + a fresh onboarding link |
 | GET | `/api/v1/billing/connect/status` | bearer, owner/admin | this company's Connect account id + `charges_enabled`/`details_submitted` |
 | POST | `/api/v1/billing/dunning/run` | bearer, owner/admin | run the overdue-reminder sweep on demand; returns reminded invoice ids |
@@ -216,6 +227,7 @@ its server-side logs (see `app/api/middleware.py`, and
 | GET | `/api/v1/public/invoice/{token}` | public token | read-only pay page: invoice, line items, live checkout URL |
 | POST | `/api/v1/public/estimate/{token}/approve` | public token | public estimate approval (e-sign) |
 | POST | `/api/v1/webhooks/stripe` | Stripe signature | idempotent Stripe webhook (subscription billing *and* invoice payment) |
+| POST | `/api/v1/webhooks/crypto` | HMAC-SHA256 signature | idempotent licensed-processor stablecoin payment webhook (Phase 18) |
 | POST | `/api/v1/customers/{id}/portal-invite` | bearer, owner/admin/office | issue (or renew) a customer's durable portal magic link and email it |
 | GET | `/api/v1/portal/{token}/me` | portal token | that customer's profile + vessels only |
 | GET | `/api/v1/portal/{token}/jobs` | portal token | that customer's job history (status/schedule/technician, no internal notes or pricing) |
@@ -754,6 +766,51 @@ disclosed how, in which tenant agreement) that deliberately was not made
 here. **The final merchant-of-record and fee model still requires
 legal/payment-provider review** — do not treat this scaffold as legal advice.
 See the corrected build spec, §8.
+
+## Crypto payment rail (Phase 18)
+
+Phase 18 adds an optional stablecoin invoice-payment rail that uses a
+**licensed payment processor (Stripe), not HarborIQ on-chain custody**:
+HarborIQ never holds wallet keys, accepts a customer transfer directly, or
+settles blockchain assets. `POST /invoices/{id}/crypto-payment-intent`
+records a pending `crypto_payments` row, creates a Stripe Checkout Session
+with `payment_method_types=["crypto"]` and
+`metadata.kind=crypto_invoice_payment`, and stamps
+`invoices.stripe_checkout_session_id` so the **existing** Stripe webhook
+path can resolve it.
+
+**Production confirmation path:** Stripe delivers
+`checkout.session.completed` to `POST /webhooks/stripe` (Stripe-Signature).
+When `metadata.kind == crypto_invoice_payment`, the handler confirms the
+`crypto_payments` row and reuses `invoices.mark_paid_from_webhook` — same
+row-locking/clamping/`InvoiceSM` path as card Checkout. A generic
+`POST /webhooks/crypto` (HMAC `X-Crypto-Signature` via `CRYPTO_WEBHOOK_SECRET`)
+remains for non-Stripe processors and tests; do **not** point the Stripe
+Dashboard at it.
+
+The rail is **off by default** (`CRYPTO_PAYMENTS_ENABLED=false`). Going live
+requires Stripe to enable crypto/stablecoin Checkout on the account,
+`STRIPE_API_KEY`, and a working `STRIPE_WEBHOOK_SECRET`. Step-by-step ops:
+[`docs/CRYPTO_PAYMENTS_ENABLEMENT.md`](docs/CRYPTO_PAYMENTS_ENABLEMENT.md).
+Migration `0020` adds `crypto_payments` (tenant RLS + composite invoice FK)
+and service-role `crypto_processed_events`.
+
+## Asset tokenization layer (Phase 19, exploratory)
+
+Phase 19 adds an exploratory **draft-registration record only** for possible
+future tokenization of vessels, slips, equipment, or receivables. It creates no
+units, issuance, ownership, transfer, trading, or valuation-based allocation,
+and none is planned until HarborIQ has obtained outside securities-counsel
+review. `POST /asset-tokens` is restricted to owner/admin users and records
+exactly one `registered` ledger entry in the same transaction; `GET` endpoints
+are read-only and tenant-scoped.
+
+The feature has two independent enforcement layers: migration `0021` defines
+`asset_tokens.status` as `CHECK (status = 'draft')`, so no database caller can
+move a row out of draft without an explicit future migration, and the API has
+no PATCH/PUT/DELETE/status-change/issuance/transfer route at all. It is **off
+by default** (`ASSET_TOKENIZATION_ENABLED=false`) and must stay off in
+production until the outside legal review occurs.
 
 ## Billing operations (Phase 8)
 

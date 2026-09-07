@@ -10,7 +10,7 @@ title = "HarborIQ gitleaks config"
 useDefault = true
 
 [allowlist]
-description = "Known-fake credential fixtures used only in tests/"
+description = "Known-fake credential fixtures used only in tests/, plus one historical dev-only placeholder now removed from source"
 regexes = [
   # tests/test_stripe_webhook_signature.py, tests/test_sms_inbound_webhook.py:
   # synthetic Stripe/Twilio webhook secrets used only to compute a valid

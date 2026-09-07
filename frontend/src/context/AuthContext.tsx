@@ -1,9 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { AuthResponse, LoginMfaRequiredResponse, User } from "../types/api";
+import { AuthContext } from "./auth";
+import type { MfaLoginChallenge } from "./auth";
 import { authApi } from "../lib/services";
 import { ApiError } from "../lib/api";
 import { clearSession, getCsrfToken, setAccessToken } from "../lib/tokenStore";
+import { wipeFieldOfflineData } from "../lib/offlineDb";
 
 // Discriminates the two possible POST /auth/login response shapes. Kept
 // here (rather than as a type-guard export from types/api.ts) since it is
@@ -13,34 +16,6 @@ function isMfaRequired(
 ): resp is LoginMfaRequiredResponse {
   return "mfa_required" in resp;
 }
-
-/** Returned by `login()` when the account has MFA active -- there are no
- * real tokens yet, so the caller must render a second-factor prompt and
- * then call `loginMfa()` with the code the user enters. */
-export interface MfaLoginChallenge {
-  preAuthToken: string;
-}
-
-interface AuthContextValue {
-  user: User | null;
-  /** True while the initial GET /auth/me hydration is in flight. */
-  loading: boolean;
-  /** Resolves once logged in. Resolves to an `MfaLoginChallenge` instead,
-   * WITHOUT logging in, if the account requires a second factor -- pass it
-   * to `loginMfa()` once the user has entered their code. */
-  login: (email: string, password: string) => Promise<MfaLoginChallenge | void>;
-  loginMfa: (preAuthToken: string, code: string) => Promise<void>;
-  signup: (input: {
-    company_name: string;
-    email: string;
-    password: string;
-    full_name?: string;
-  }) => Promise<void>;
-  acceptInvite: (token: string, input: { password: string; full_name?: string }) => Promise<void>;
-  logout: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 function applyAuthResponse(resp: AuthResponse, setUser: (u: User) => void) {
   setAccessToken(resp.tokens.access_token);
@@ -85,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<MfaLoginChallenge | void> => {
     const resp = await authApi.login({ email, password });
     if (isMfaRequired(resp)) {
       return { preAuthToken: resp.pre_auth_token };
@@ -124,6 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearSession();
       setUser(null);
+      // Marine threat model Scenario 1: destroy the offline vault DEK and any
+      // cached jobs / pending actions so a lost-device logout leaves no
+      // readable customer PII in IndexedDB on this profile.
+      void wipeFieldOfflineData();
     }
   }, []);
 
@@ -133,20 +112,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
-  return ctx;
-}
-
-export const OPERATIONS_ROLES: User["role"][] = ["owner", "admin", "office"];
-
-export function canManageOperations(role: User["role"] | undefined): boolean {
-  return !!role && OPERATIONS_ROLES.includes(role);
-}
-
-export function canManageUsers(role: User["role"] | undefined): boolean {
-  return role === "owner" || role === "admin";
 }

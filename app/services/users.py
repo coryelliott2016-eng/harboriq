@@ -19,17 +19,24 @@ both surface as 404, leaking nothing about whether the id exists elsewhere.
 """
 from __future__ import annotations
 
+import math
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
+import structlog
 from sqlalchemy import Row, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.models import USER_MANAGEMENT_ROLES
 from app.db.tenant import tenant_context
 from app.services import geocoding
 from app.services.crud import Conflict, NotFound, ValidationFailed, assignments
+
+logger = structlog.get_logger(__name__)
 
 #: Fields any user may change about themselves.
 SELF_EDITABLE_COLUMNS = frozenset({"full_name", "skills", "address_text"})
@@ -165,6 +172,70 @@ def update_profile(
     return row
 
 
+@dataclass(frozen=True)
+class LocationPingResult:
+    """Service-layer result for one location ping (route maps to LocationPingOut)."""
+
+    id: uuid.UUID
+    current_latitude: Any
+    current_longitude: Any
+    location_updated_at: datetime
+    anomaly_suspected: bool = False
+    implied_speed_kmh: float | None = None
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in kilometres between two WGS84 points."""
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _evaluate_location_anomaly(
+    *,
+    prev_lat,
+    prev_lng,
+    prev_updated_at: datetime | None,
+    new_lat,
+    new_lng,
+    now: datetime,
+) -> tuple[bool, float | None]:
+    """Return (anomaly_suspected, implied_speed_kmh).
+
+    Flag-only: never rejects the ping. A missing/stale prior fix is treated as
+    a fresh trip (no anomaly). Marine threat model Scenario 2 (2026-08-11).
+    """
+    if prev_lat is None or prev_lng is None or prev_updated_at is None:
+        return False, None
+    if prev_updated_at.tzinfo is None:
+        prev_updated_at = prev_updated_at.replace(tzinfo=timezone.utc)
+    elapsed_s = (now - prev_updated_at).total_seconds()
+    if elapsed_s <= 0:
+        # Clock skew or same-timestamp double-submit: treat as zero elapsed
+        # and only flag if the points themselves are far apart (handled by
+        # the tiny-elapsed branch below via a 1s floor).
+        elapsed_s = 1.0
+    if elapsed_s > settings.location_ping_plausibility_window_seconds:
+        return False, None
+    distance_km = _haversine_km(
+        float(prev_lat), float(prev_lng), float(new_lat), float(new_lng)
+    )
+    speed_kmh = distance_km / (elapsed_s / 3600.0)
+    # Short hops are dominated by GPS jitter / sub-second double-submits and
+    # must not raise a teleport alert even when the implied speed is huge.
+    # 5 km is well above consumer-GPS noise and well below a real spoofed
+    # cross-city jump.
+    min_distance_km = 5.0
+    anomaly = (
+        distance_km >= min_distance_km
+        and speed_kmh > settings.location_ping_max_plausible_speed_kmh
+    )
+    return anomaly, round(speed_kmh, 2)
+
+
 def ping_location(
     db: Session,
     company_id: uuid.UUID,
@@ -172,32 +243,83 @@ def ping_location(
     user_id: uuid.UUID,
     latitude,
     longitude,
-) -> Row:
+) -> LocationPingResult:
     """Record one `POST /users/me/location-ping` reading (Phase 11).
 
     Always self-service: a technician can only ever ping their OWN location
     (the route passes `user_id` from the authenticated principal, never from
     the request body), so there is no separate admin path to guard here the
     way `update_profile` must for `role`/`is_active`.
+
+    Reads the prior fix first so an implied-speed plausibility check can flag
+    teleport-style spoofs (flagged on the response + structured log; the new
+    coordinates are still accepted so a legitimate GPS cold-start jump is
+    never a hard failure).
     """
+    now = datetime.now(timezone.utc)
     with tenant_context(db, company_id):
+        prev = db.execute(
+            text(
+                """
+                SELECT current_latitude, current_longitude, location_updated_at
+                  FROM users
+                 WHERE id = :id
+                """
+            ),
+            {"id": user_id},
+        ).first()
+        if prev is None:
+            raise NotFound(f"user {user_id} not found")
+
+        anomaly, speed_kmh = _evaluate_location_anomaly(
+            prev_lat=prev.current_latitude,
+            prev_lng=prev.current_longitude,
+            prev_updated_at=prev.location_updated_at,
+            new_lat=latitude,
+            new_lng=longitude,
+            now=now,
+        )
+        if anomaly:
+            logger.warning(
+                "location_ping.anomaly_suspected",
+                user_id=str(user_id),
+                company_id=str(company_id),
+                implied_speed_kmh=speed_kmh,
+                prev_lat=float(prev.current_latitude) if prev.current_latitude is not None else None,
+                prev_lng=float(prev.current_longitude) if prev.current_longitude is not None else None,
+                new_lat=float(latitude),
+                new_lng=float(longitude),
+                prev_updated_at=(
+                    prev.location_updated_at.isoformat()
+                    if prev.location_updated_at is not None
+                    else None
+                ),
+            )
+
         row = db.execute(
             text(
                 """
                 UPDATE users
                    SET current_latitude = :lat,
                        current_longitude = :lng,
-                       location_updated_at = now()
+                       location_updated_at = :ts
                  WHERE id = :id
-                RETURNING *
+                RETURNING id, current_latitude, current_longitude, location_updated_at
                 """
             ),
-            {"lat": latitude, "lng": longitude, "id": user_id},
+            {"lat": latitude, "lng": longitude, "id": user_id, "ts": now},
         ).first()
         db.commit()
     if row is None:
         raise NotFound(f"user {user_id} not found")
-    return row
+    return LocationPingResult(
+        id=row.id,
+        current_latitude=row.current_latitude,
+        current_longitude=row.current_longitude,
+        location_updated_at=row.location_updated_at,
+        anomaly_suspected=anomaly,
+        implied_speed_kmh=speed_kmh,
+    )
 
 
 def list_technician_locations(db: Session, company_id: uuid.UUID) -> list[Row]:

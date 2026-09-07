@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">HarborIQ</string>
+    <string name="title_activity_main">HarborIQ</string>
+    <string name="package_name">com.harboriq.app</string>
+    <string name="custom_url_scheme">com.harboriq.app</string>
+</resources>

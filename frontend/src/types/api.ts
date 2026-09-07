@@ -666,6 +666,8 @@ export interface JobAttachmentInput {
   data: string;
   content_type?: string;
   idempotency_key?: string | null;
+  /** Original device enqueue time (ISO). Forwarded for server age audit. */
+  client_queued_at?: string | null;
 }
 
 export interface JobTimeEntry {
@@ -680,6 +682,8 @@ export interface JobTimeEntry {
 
 export interface ClockActionInput {
   idempotency_key?: string | null;
+  /** Original device enqueue time (ISO). Forwarded for server age audit. */
+  client_queued_at?: string | null;
 }
 
 // --- inventory, vendors & purchase orders (Phase 13) ---

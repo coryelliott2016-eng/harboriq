@@ -1,0 +1,10 @@
+# gitleaks fingerprint ignore file (one fingerprint per line).
+#
+# app/core/config.py (commit 1e5f22a): a prior revision hardcoded a fixed,
+# obviously-dev-only Fernet key as DEV_MFA_ENCRYPTION_KEY, enforced never to
+# be usable outside APP_ENV=development (see
+# _require_strong_mfa_key_outside_development). It has since been replaced
+# with a key generated at runtime (Fernet.generate_key() at process start),
+# so this fingerprint only matches the now-removed value in that one
+# historical commit, not any current or future file.
+1e5f22a6adf29b089e654391e6cd726f4106af6d:app/core/config.py:generic-api-key:17
