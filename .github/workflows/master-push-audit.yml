@@ -40,8 +40,9 @@ jobs:
           SHA: ${{ github.sha }}
           BEFORE: ${{ github.event.before }}
           ACTOR: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          AUDIT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -50,6 +51,24 @@ jobs:
 
           SUBJECT=$(git log -1 --format=%s "${SHA}")
           BODY=$(git log -1 --format=%b "${SHA}")
+
+          CI_RUN_TSV=""
+          for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            CI_RUN_TSV=$(
+              gh api "/repos/${REPO}/actions/workflows/ci.yml/runs?branch=${BRANCH}&event=push&per_page=20" \
+                --jq '.workflow_runs[] | select(.head_sha == env.SHA) | [.html_url, (.conclusion // .status // "unknown")] | @tsv' \
+                | head -n 1 || true
+            )
+            [ -n "${CI_RUN_TSV}" ] && break
+            sleep 5
+          done
+
+          if [ -n "${CI_RUN_TSV}" ]; then
+            IFS=$'\t' read -r CI_RUN_URL CI_RUN_STATUS <<< "${CI_RUN_TSV}"
+            CI_RUN_CELL="[${CI_RUN_STATUS}](${CI_RUN_URL})"
+          else
+            CI_RUN_CELL="not found yet (CI may still be queueing)"
+          fi
 
           if [ "${BEFORE}" = "${ZERO_SHA}" ] || [ -z "${BEFORE}" ]; then
             COMPARE_URL="${COMMIT_URL}"
@@ -71,7 +90,8 @@ jobs:
           | Subject | ${SUBJECT} |
           | Diff | [compare view]($COMPARE_URL) |
           | Files changed | ${FILES} |
-          | CI run | [$RUN_URL]($RUN_URL) |
+          | Audit run | [audit workflow]($AUDIT_RUN_URL) |
+          | CI workflow | ${CI_RUN_CELL} |
 
           <details><summary>Full commit message</summary>
 
