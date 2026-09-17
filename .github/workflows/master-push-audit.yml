@@ -22,6 +22,7 @@ on:
     branches: [master]
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
@@ -41,7 +42,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
           ACTOR: ${{ github.actor }}
           REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CI_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/ci.yml
         run: |
           set -euo pipefail
 
@@ -50,6 +51,26 @@ jobs:
 
           SUBJECT=$(git log -1 --format=%s "${SHA}")
           BODY=$(git log -1 --format=%b "${SHA}")
+
+          CI_RUN_URL=""
+          for _ in $(seq 1 12); do
+            CI_RUN_URL=$(gh run list \
+              --repo "${REPO}" \
+              --workflow ci.yml \
+              --commit "${SHA}" \
+              --json url \
+              --jq '.[0].url // ""' 2>/dev/null || true)
+            if [ -n "${CI_RUN_URL}" ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          if [ -n "${CI_RUN_URL}" ]; then
+            CI_RUN_LINK="[$CI_RUN_URL]($CI_RUN_URL)"
+          else
+            CI_RUN_LINK="[CI workflow page]($CI_WORKFLOW_URL)"
+          fi
 
           if [ "${BEFORE}" = "${ZERO_SHA}" ] || [ -z "${BEFORE}" ]; then
             COMPARE_URL="${COMMIT_URL}"
@@ -71,7 +92,7 @@ jobs:
           | Subject | ${SUBJECT} |
           | Diff | [compare view]($COMPARE_URL) |
           | Files changed | ${FILES} |
-          | CI run | [$RUN_URL]($RUN_URL) |
+          | CI run | ${CI_RUN_LINK} |
 
           <details><summary>Full commit message</summary>
 
