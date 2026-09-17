@@ -10,6 +10,9 @@ jobs:
   # Security Core Prompt v1.0, H-5 fix: static secret scanning across full
   # history diffs on every push/PR, gating the rest of the pipeline.
   secret-scan:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
