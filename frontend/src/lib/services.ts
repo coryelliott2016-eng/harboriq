@@ -83,6 +83,7 @@ export const authApi = {
     email: string;
     password: string;
     full_name?: string;
+    agreed_to_terms: boolean;
   }) => apiRequest<AuthResponse>("/auth/signup", { method: "POST", body, anonymous: true }),
 
   login: (body: { email: string; password: string }) =>
