@@ -25,6 +25,7 @@ def test_signup_never_returns_a_refresh_token_in_json(client):
             "company_name": "Cookie Co",
             "email": unique_email(),
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -40,6 +41,7 @@ def test_signup_sets_httponly_refresh_cookie_and_readable_csrf_cookie(client):
             "company_name": "Cookie Co",
             "email": unique_email(),
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -61,7 +63,12 @@ def test_login_sets_refresh_cookie_without_json_refresh_token(client):
     email = unique_email()
     client.post(
         "/api/v1/auth/signup",
-        json={"company_name": "Cookie Co", "email": email, "password": DEFAULT_PASSWORD},
+        json={
+            "company_name": "Cookie Co",
+            "email": email,
+            "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
+        },
     )
     client.cookies.clear()
     resp = client.post("/api/v1/auth/login", json={"email": email, "password": DEFAULT_PASSWORD})
@@ -74,7 +81,12 @@ def test_login_sets_refresh_cookie_without_json_refresh_token(client):
 def test_accept_invite_sets_refresh_cookie(client):
     owner_resp = client.post(
         "/api/v1/auth/signup",
-        json={"company_name": "Cookie Co", "email": unique_email(), "password": DEFAULT_PASSWORD},
+        json={
+            "company_name": "Cookie Co",
+            "email": unique_email(),
+            "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
+        },
     )
     owner = owner_resp.json()
 
@@ -101,7 +113,12 @@ def test_logout_clears_both_cookies(client):
     email = unique_email()
     signup_resp = client.post(
         "/api/v1/auth/signup",
-        json={"company_name": "Cookie Co", "email": email, "password": DEFAULT_PASSWORD},
+        json={
+            "company_name": "Cookie Co",
+            "email": email,
+            "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
+        },
     )
     created = signup_resp.json()
 

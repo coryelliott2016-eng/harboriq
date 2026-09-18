@@ -57,6 +57,7 @@ def _signup_session(client, **kw) -> tuple[dict, dict[str, str]]:
         "company_name": kw.pop("company_name", "Acme Marine"),
         "email": kw.pop("email", None),
         "password": kw.pop("password", "correct-horse-battery-staple"),
+        "agreed_to_terms": kw.pop("agreed_to_terms", True),
         **kw,
     }
     if body["email"] is None:

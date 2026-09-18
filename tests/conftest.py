@@ -146,6 +146,7 @@ def signup(client: TestClient, company_name: str = "Acme Marine",
         "company_name": company_name,
         "email": email or unique_email(),
         "password": password,
+        "agreed_to_terms": True,
         **extra,
     }
     resp = client.post("/api/v1/auth/signup", json=body)
