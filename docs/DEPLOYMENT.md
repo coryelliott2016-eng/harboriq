@@ -210,8 +210,9 @@ nothing else to configure.
   up; does not touch the database. This is what both Dockerfiles'
   `HEALTHCHECK` instructions call.
 - `GET /api/v1/readyz` — readiness. Executes `SELECT 1` against the
-  database and reports `{"status": "not_ready", ...}` (still HTTP 200,
-  check the body) if that fails. Point a load balancer's readiness probe
+  database; returns `200 {"status": "ready"}`, or `503 {"status":
+  "not_ready", "db": "unavailable"}` if that fails (since v0.2.0 — the
+  driver error is logged server-side, never returned). Point a load balancer's readiness probe
   here if you ever run more than one `app` replica, so a replica that lost
   its DB connection stops receiving new traffic instead of erroring on
   every request.
