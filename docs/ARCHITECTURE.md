@@ -107,7 +107,7 @@ Totals are always recomputed server-side from stored line items using
 - Health: `GET /api/v1/healthz` (liveness), `GET /api/v1/readyz` (DB +
   Redis readiness).
 - Metrics: Prometheus-format `GET /metrics`, protected by
-  `METRICS_BEARER_TOKEN` outside development.
+  `METRICS_TOKEN` outside development.
 - Errors: Sentry, enabled only when `SENTRY_DSN` is set.
 - Not implemented: OpenTelemetry tracing, Grafana dashboards, Loki log
   shipping. These are deferred until there is a running production host to
