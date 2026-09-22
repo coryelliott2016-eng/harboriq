@@ -6,10 +6,10 @@ launch; **Medium/Low** are accepted for a supervised pilot.
 
 | # | Limitation | Severity | Impact | Resolution path | Owner |
 |---|---|---|---|---|---|
-| L1 | No production API/web-app host is provisioned | Critical (for SaaS launch) | Customers cannot use the app; only the marketing site is live | Pick a host + managed Postgres + Redis, then follow `DEPLOYMENT.md` | Cory |
+| L1 | No production API/web-app host is running | Critical (for SaaS launch) | Customers cannot use the app; only the marketing site is live | Production Postgres is provisioned (Neon `harboriq-app-production`, migrations at 0025, RLS roles verified 2026-09-22). Remaining: connect Render and apply `render.yaml` (see `docs/DEPLOYMENT_RENDER.md`) | Cory (connect Render) |
 | L2 | Primary domain `harboriq.com` is in a Cloudflare account not reachable with current credentials; it does not serve the site | High | Canonical/OG/sitemap URLs and the listed email domain do not work | Log in to the Cloudflare account holding the zone and add the Vercel records (see release report) | Cory |
 | L3 | Company email `Cory@HarborIQ.com` bounces (no MX, SPF `-all`) | High | Privacy/terms/security contacts unreachable | Restore mail provider MX/SPF/DKIM or change published address | Cory |
-| L4 | Marketing lead capture returns 503 (no `DATABASE_URL` in Vercel) | High (conversion) | Online demo requests are refused; phone CTA shown instead | Add a Postgres `DATABASE_URL` to the Vercel project and redeploy | Cory |
+| L4 | ~~Marketing lead capture returns 503~~ **Resolved 2026-09-22** | — | Live `POST /api/leads` returned 201 and stored the row in Neon (`harboriq-marketing`); two labeled synthetic test rows (ids 1-2, `@example.invalid`) remain as evidence | Add lead-notification email once SMTP/email is restored | Cory |
 | L5 | No SMTP relay configured | High (for pilot) | Invoice/estimate/portal/password-reset emails are logged, not delivered | Configure `SMTP_*` settings | Cory |
 | L6 | Stripe live mode never exercised | High (for payments) | Real settlement/refund untested | Live keys + one real charge/refund cycle | Cory |
 | L7 | Labor tiers / rate cards not built | Medium | Rates typed per labor line | Design tier model (ADR needed) | Eng |
@@ -23,9 +23,9 @@ launch; **Medium/Low** are accepted for a supervised pilot.
 | L15 | No browser end-to-end (Playwright) suite | Medium | UI flows covered by component tests + API tests only | Add Playwright smoke in CI | Eng |
 | L16 | Manual accessibility audit not done (jsx-a11y lint only) | Medium | WCAG conformance not claimed | Keyboard/screen-reader/contrast pass | Eng |
 | L17 | Mobile store builds unsigned | Medium (mobile channel) | No App Store/Play release | Developer accounts + signing | Cory |
-| L18 | Marketing site source lives outside this repo, without CI | Medium | Site changes are not tested/reviewed like app code | Move `website/harboriq-marketing-site/` into a repo with CI | Eng |
+| L18 | Marketing site repo has CI but no enforced branch protection | Low | Site source now lives in private repo `coryelliott2016-eng/harboriq-marketing-site` with CI (type-check, API tests, build, claim guard, gitleaks); GitHub rulesets on private repos need GitHub Pro; Vercel is not yet Git-connected | Upgrade to GitHub Pro (or make the repo public), add ruleset `protect-main`; connect the repo in Vercel project settings | Cory |
 | L19 | Marketing site uses hash routing (`/#/pricing`) | Low | Weaker SEO for deep pages | Switch to path routing with rewrites | Eng |
-| L20 | Public investor page shows SAFE round terms | Needs counsel | Possible general-solicitation issue under Reg D 506(b) | Securities counsel review before further promotion | Cory |
+| L20 | Public investor page showed SAFE round terms | Needs counsel | Possible general-solicitation issue under Reg D 506(b) | Terms, EIN, allocations and use of funds removed from the page, meta, and site assistant in the site repo (CI blocks re-adding them). **Not yet live**: Vercel deploy from this environment fails TLS verification; deploy from the repo. Counsel review still required before any public promotion | Cory |
 | L21 | Estimate send commits status before issuing the portal token/email | Low | Rare failure leaves estimate "sent" without an email; staff can re-send portal invite | Accepted; documented in ADR 0004 | Eng |
 | L22 | Migration 0024 downgrade is lossy (fractional quantities rounded) | Low | Only on rollback | Take a backup before upgrading production | Eng |
 | L23 | Crypto payments and asset tokenization code exists but is disabled | Info | None while flags are off | Keep off pending legal review | Cory |
