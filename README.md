@@ -3,7 +3,7 @@
 > **Release v0.2.0 (2026-09-22).** Start here:
 > [Release register](docs/RELEASE_REGISTER.md) (what is done, with evidence) ·
 > [Known limitations](docs/KNOWN_LIMITATIONS.md) ·
-> [Changelog](CHANGELOG.md) ·
+> [Changelog](CHANGELOG.md) · [v0.2.0 release report](docs/RELEASE_REPORT_v0.2.0.md) ·
 > [Product overview](docs/PRODUCT_OVERVIEW.md) ·
 > [Architecture](docs/ARCHITECTURE.md) and [ADRs](docs/adr/) ·
 > [API reference](docs/API_REFERENCE.md) ([OpenAPI](docs/api/openapi.json)) ·
