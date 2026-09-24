@@ -5,6 +5,12 @@ AWS (off-host backups), Twilio (SMS), and Cloudflare (CDN/WAF) — but none of
 these accounts exist yet. This guide is the one place to go from "no
 account" to "credential in `.env`" for each of them.
 
+Before running any provisioning script, set these deployment-scope vars in
+`.env` and validate with `python scripts/cloud_deploy_preflight.py --env-file .env`:
+
+- `DEPLOY_TARGET_STACK=render-neon`
+- `CLOUD_BASE_PROVIDER` (`cloudflare`, `firebase`, `none`, or `other`)
+
 **What this guide is not:** none of the steps below that require creating an
 account, verifying an identity, or attaching a payment method can be
 scripted. AWS, Twilio, and Cloudflare all require a human to sign up in a
