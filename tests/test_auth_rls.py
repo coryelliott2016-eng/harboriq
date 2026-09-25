@@ -142,6 +142,7 @@ def test_the_same_email_can_be_reused_after_the_account_is_removed(client, servi
             "company_name": "Second Chance Marine",
             "email": email,
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 201
