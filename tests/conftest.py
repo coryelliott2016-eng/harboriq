@@ -59,7 +59,7 @@ def service_engine():
 
 
 @pytest.fixture(autouse=True)
-def _truncate(request, service_engine):
+def _truncate(request):
     """Truncate tenant data before each test (committed)."""
     if request.node.get_closest_marker("no_db"):
         yield
