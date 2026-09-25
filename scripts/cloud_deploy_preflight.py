@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
             or _env_value("AWS_REGION", combined_env)
         ):
             errors.append("AWS backups enabled but AWS_DEFAULT_REGION/AWS_REGION is missing.")
-        if not _has_render_aws_credentials(combined_env):
+        if deploy_stack == "render-neon" and not _has_render_aws_credentials(combined_env):
             errors.append(
                 "AWS backups enabled for Render but AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY is missing."
             )
