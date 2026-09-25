@@ -1,5 +1,10 @@
 import { api, apiRequest, downloadFile } from "./api";
 import type {
+  Estimate,
+  EstimateConvertResponse,
+  EstimateDetail,
+  EstimateInput,
+  EstimateSendResponse,
   AcceptInviteInput,
   ArAgingReport,
   AuthResponse,
@@ -206,6 +211,17 @@ export const dispatchApi = {
 };
 
 // --- invoices ---
+
+// --- estimates (owner/admin/office) ---
+
+export const estimatesApi = {
+  list: (params?: { status?: string; customer_id?: string; job_id?: string }) =>
+    api.get<Estimate[]>("/estimates", params),
+  get: (id: string) => api.get<EstimateDetail>(`/estimates/${id}`),
+  create: (body: EstimateInput) => api.post<EstimateDetail>("/estimates", body),
+  send: (id: string) => api.post<EstimateSendResponse>(`/estimates/${id}/send`),
+  convert: (id: string) => api.post<EstimateConvertResponse>(`/estimates/${id}/convert`),
+};
 
 export const invoicesApi = {
   list: (params?: { status?: string; customer_id?: string; job_id?: string }) =>
