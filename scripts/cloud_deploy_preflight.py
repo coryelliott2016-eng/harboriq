@@ -45,6 +45,13 @@ def _env_value(key: str, combined_env: dict[str, str]) -> str:
     return combined_env.get(key, "").strip()
 
 
+def _has_render_aws_credentials(combined_env: dict[str, str]) -> bool:
+    return bool(
+        _env_value("AWS_ACCESS_KEY_ID", combined_env)
+        and _env_value("AWS_SECRET_ACCESS_KEY", combined_env)
+    )
+
+
 TRUE_LITERALS = {"1", "true", "yes", "on"}
 FALSE_LITERALS = {"0", "false", "no", "off"}
 
@@ -116,7 +123,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         aws_backup_enabled_toggle = None
 
-    aws_backups_enabled = args.require_aws_backups or aws_backup_enabled_toggle is True
+    aws_backups_enabled = (
+        args.require_aws_backups
+        or aws_backup_enabled_toggle is True
+        or bool(_env_value("BACKUP_S3_BUCKET", combined_env))
+    )
 
     if aws_backups_enabled:
         if not _env_value("BACKUP_S3_BUCKET", combined_env):
@@ -126,6 +137,10 @@ def main(argv: list[str] | None = None) -> int:
             or _env_value("AWS_REGION", combined_env)
         ):
             errors.append("AWS backups enabled but AWS_DEFAULT_REGION/AWS_REGION is missing.")
+        if not _has_render_aws_credentials(combined_env):
+            errors.append(
+                "AWS backups enabled for Render but AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY is missing."
+            )
 
     if errors:
         print("❌ HarborIQ cloud deploy preflight failed:")

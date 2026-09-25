@@ -38,8 +38,9 @@ def test_cloud_preflight_passes_with_render_neon_cloudflare_and_aws_toggle(tmp_p
             "CLOUDFLARE_API_TOKEN=token",
             "CLOUDFLARE_ZONE_ID=zone",
             "AWS_BACKUP_ENABLED=true",
-            "AWS_PROFILE=harboriq-backups",
             "AWS_DEFAULT_REGION=us-east-1",
+            "AWS_ACCESS_KEY_ID=test-access-key",
+            "AWS_SECRET_ACCESS_KEY=test-secret-key",
             "BACKUP_S3_BUCKET=harboriq-backups",
         ],
     )
@@ -91,8 +92,9 @@ def test_cloud_preflight_passes_with_cli_required_aws_backups(tmp_path):
             "SMTP_USERNAME=user",
             "SMTP_PASSWORD=pass",
             "EMAIL_FROM_ADDRESS=no-reply@example.com",
-            "AWS_PROFILE=harboriq-backups",
             "AWS_DEFAULT_REGION=us-east-1",
+            "AWS_ACCESS_KEY_ID=test-access-key",
+            "AWS_SECRET_ACCESS_KEY=test-secret-key",
             "BACKUP_S3_BUCKET=harboriq-backups",
         ],
     )
@@ -170,8 +172,9 @@ def test_cloud_preflight_fails_when_aws_backup_toggle_lacks_bucket(tmp_path):
             "SMTP_PASSWORD=pass",
             "EMAIL_FROM_ADDRESS=no-reply@example.com",
             "AWS_BACKUP_ENABLED=true",
-            "AWS_PROFILE=harboriq-backups",
             "AWS_DEFAULT_REGION=us-east-1",
+            "AWS_ACCESS_KEY_ID=test-access-key",
+            "AWS_SECRET_ACCESS_KEY=test-secret-key",
         ],
     )
 
@@ -198,7 +201,8 @@ def test_cloud_preflight_fails_when_aws_backup_toggle_lacks_region(tmp_path):
             "SMTP_PASSWORD=pass",
             "EMAIL_FROM_ADDRESS=no-reply@example.com",
             "AWS_BACKUP_ENABLED=true",
-            "AWS_PROFILE=harboriq-backups",
+            "AWS_ACCESS_KEY_ID=test-access-key",
+            "AWS_SECRET_ACCESS_KEY=test-secret-key",
             "BACKUP_S3_BUCKET=harboriq-backups",
         ],
     )
@@ -226,6 +230,62 @@ def test_cloud_preflight_fails_for_invalid_aws_backup_toggle_value(tmp_path):
             "SMTP_PASSWORD=pass",
             "EMAIL_FROM_ADDRESS=no-reply@example.com",
             "AWS_BACKUP_ENABLED=treu",
+        ],
+    )
+
+    exit_code = cloud_deploy_preflight.main(["--env-file", str(env_path)])
+    assert exit_code == 1
+
+
+def test_cloud_preflight_requires_aws_checks_when_bucket_is_configured(tmp_path):
+    env_path = _write_env(
+        tmp_path,
+        [
+            "DEPLOY_TARGET_STACK=render-neon",
+            "CLOUD_BASE_PROVIDER=none",
+            "APP_ENV=production",
+            "DATABASE_URL=postgres://app",
+            "SERVICE_DATABASE_URL=postgres://service",
+            "MFA_ENCRYPTION_KEY=abc",
+            "APP_BASE_URL=https://app.example.com",
+            "CORS_ALLOW_ORIGINS=https://app.example.com",
+            "STRIPE_API_KEY=sk_live_x",
+            "STRIPE_WEBHOOK_SECRET=whsec_x",
+            "SMTP_HOST=smtp.example.com",
+            "SMTP_USERNAME=user",
+            "SMTP_PASSWORD=pass",
+            "EMAIL_FROM_ADDRESS=no-reply@example.com",
+            "AWS_BACKUP_ENABLED=false",
+            "AWS_DEFAULT_REGION=us-east-1",
+            "BACKUP_S3_BUCKET=harboriq-backups",
+        ],
+    )
+
+    exit_code = cloud_deploy_preflight.main(["--env-file", str(env_path)])
+    assert exit_code == 1
+
+
+def test_cloud_preflight_fails_when_aws_backups_lack_render_credentials(tmp_path):
+    env_path = _write_env(
+        tmp_path,
+        [
+            "DEPLOY_TARGET_STACK=render-neon",
+            "CLOUD_BASE_PROVIDER=none",
+            "APP_ENV=production",
+            "DATABASE_URL=postgres://app",
+            "SERVICE_DATABASE_URL=postgres://service",
+            "MFA_ENCRYPTION_KEY=abc",
+            "APP_BASE_URL=https://app.example.com",
+            "CORS_ALLOW_ORIGINS=https://app.example.com",
+            "STRIPE_API_KEY=sk_live_x",
+            "STRIPE_WEBHOOK_SECRET=whsec_x",
+            "SMTP_HOST=smtp.example.com",
+            "SMTP_USERNAME=user",
+            "SMTP_PASSWORD=pass",
+            "EMAIL_FROM_ADDRESS=no-reply@example.com",
+            "AWS_BACKUP_ENABLED=true",
+            "AWS_DEFAULT_REGION=us-east-1",
+            "BACKUP_S3_BUCKET=harboriq-backups",
         ],
     )
 
