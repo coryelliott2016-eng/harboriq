@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             "CLOUD_BASE_PROVIDER must be one of: cloudflare, firebase, none, other."
         )
 
-    aws_backups_enabled = False
+    aws_backups_enabled = args.require_aws_backups
     if not args.scope_only:
         app_env = _env_value("APP_ENV", combined_env).lower()
         if app_env != "production":
@@ -103,17 +103,18 @@ def main(argv: list[str] | None = None) -> int:
             if not _env_value("CLOUDFLARE_ZONE_ID", combined_env):
                 errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_ZONE_ID.")
 
-        aws_backups_enabled = args.require_aws_backups or _is_true(
+        aws_backups_enabled = aws_backups_enabled or _is_true(
             _env_value("AWS_BACKUP_ENABLED", combined_env)
         )
-        if aws_backups_enabled:
-            if not _env_value("BACKUP_S3_BUCKET", combined_env):
-                errors.append("AWS backups enabled but BACKUP_S3_BUCKET is missing.")
-            if not (
-                _env_value("AWS_DEFAULT_REGION", combined_env)
-                or _env_value("AWS_REGION", combined_env)
-            ):
-                errors.append("AWS backups enabled but AWS_DEFAULT_REGION/AWS_REGION is missing.")
+
+    if aws_backups_enabled:
+        if not _env_value("BACKUP_S3_BUCKET", combined_env):
+            errors.append("AWS backups enabled but BACKUP_S3_BUCKET is missing.")
+        if not (
+            _env_value("AWS_DEFAULT_REGION", combined_env)
+            or _env_value("AWS_REGION", combined_env)
+        ):
+            errors.append("AWS backups enabled but AWS_DEFAULT_REGION/AWS_REGION is missing.")
 
     if errors:
         print("❌ HarborIQ cloud deploy preflight failed:")
