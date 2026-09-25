@@ -124,3 +124,31 @@ def test_cloud_preflight_fails_when_aws_backup_toggle_lacks_bucket(tmp_path):
 
     exit_code = cloud_deploy_preflight.main(["--env-file", str(env_path)])
     assert exit_code == 1
+
+
+def test_cloud_preflight_fails_when_aws_backup_toggle_lacks_region(tmp_path):
+    env_path = _write_env(
+        tmp_path,
+        [
+            "DEPLOY_TARGET_STACK=render-neon",
+            "CLOUD_BASE_PROVIDER=none",
+            "APP_ENV=production",
+            "DATABASE_URL=postgres://app",
+            "SERVICE_DATABASE_URL=postgres://service",
+            "MFA_ENCRYPTION_KEY=abc",
+            "APP_BASE_URL=https://app.example.com",
+            "CORS_ALLOW_ORIGINS=https://app.example.com",
+            "STRIPE_API_KEY=sk_live_x",
+            "STRIPE_WEBHOOK_SECRET=whsec_x",
+            "SMTP_HOST=smtp.example.com",
+            "SMTP_USERNAME=user",
+            "SMTP_PASSWORD=pass",
+            "EMAIL_FROM_ADDRESS=no-reply@example.com",
+            "AWS_BACKUP_ENABLED=true",
+            "AWS_PROFILE=harboriq-backups",
+            "BACKUP_S3_BUCKET=harboriq-backups",
+        ],
+    )
+
+    exit_code = cloud_deploy_preflight.main(["--env-file", str(env_path)])
+    assert exit_code == 1
