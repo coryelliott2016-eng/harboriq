@@ -48,6 +48,31 @@ def test_cloud_preflight_passes_with_render_neon_cloudflare_and_aws_toggle(tmp_p
     assert exit_code == 0
 
 
+def test_cloud_preflight_accepts_mixed_case_render_neon_stack(tmp_path):
+    env_path = _write_env(
+        tmp_path,
+        [
+            "DEPLOY_TARGET_STACK=Render-Neon",
+            "CLOUD_BASE_PROVIDER=none",
+            "APP_ENV=production",
+            "DATABASE_URL=postgres://app",
+            "SERVICE_DATABASE_URL=postgres://service",
+            "MFA_ENCRYPTION_KEY=abc",
+            "APP_BASE_URL=https://app.example.com",
+            "CORS_ALLOW_ORIGINS=https://app.example.com",
+            "STRIPE_API_KEY=sk_live_x",
+            "STRIPE_WEBHOOK_SECRET=whsec_x",
+            "SMTP_HOST=smtp.example.com",
+            "SMTP_USERNAME=user",
+            "SMTP_PASSWORD=pass",
+            "EMAIL_FROM_ADDRESS=no-reply@example.com",
+        ],
+    )
+
+    exit_code = cloud_deploy_preflight.main(["--env-file", str(env_path)])
+    assert exit_code == 0
+
+
 def test_cloud_preflight_passes_with_cli_required_aws_backups(tmp_path):
     env_path = _write_env(
         tmp_path,

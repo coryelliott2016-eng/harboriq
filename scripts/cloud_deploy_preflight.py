@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     combined_env = {**env_file_values, **os.environ}
     errors: list[str] = []
 
-    deploy_stack = _env_value("DEPLOY_TARGET_STACK", combined_env)
+    deploy_stack = _env_value("DEPLOY_TARGET_STACK", combined_env).lower()
     if deploy_stack != "render-neon":
         errors.append(
             "DEPLOY_TARGET_STACK must be set to 'render-neon' to lock the primary runtime."
