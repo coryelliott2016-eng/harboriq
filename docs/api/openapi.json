@@ -6064,6 +6064,11 @@
       },
       "SignupRequest": {
         "properties": {
+          "agreed_to_terms": {
+            "const": true,
+            "title": "Agreed To Terms",
+            "type": "boolean"
+          },
           "company_name": {
             "maxLength": 200,
             "minLength": 1,
@@ -6110,7 +6115,8 @@
         "required": [
           "company_name",
           "email",
-          "password"
+          "password",
+          "agreed_to_terms"
         ],
         "title": "SignupRequest",
         "type": "object"

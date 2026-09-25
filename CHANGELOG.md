@@ -2,6 +2,20 @@
 
 All notable changes to HarborIQ. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Server-side Terms/Privacy consent (closes Known Limitations L25):**
+  `POST /api/v1/auth/signup` now requires `agreed_to_terms: true` (422 when
+  missing or false), records the acceptance timestamp with the database clock
+  in `users.terms_accepted_at` (migration `0026`), and stamps it into the
+  `company.signup` audit-log metadata. The signup page sends the flag; the
+  checkbox continues to gate submission in the UI.
+- `docs/launch_audit/phase4_release_verification.md`: full release-gate
+  verification record (backend 779 tests, frontend 136 tests, lint,
+  type-check, builds, dependency audits, clean + rollback migrations,
+  production-container smoke test).
+
 ## [0.2.0] — 2026-09-22
 
 ### Added

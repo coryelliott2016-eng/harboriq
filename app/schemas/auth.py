@@ -1,5 +1,6 @@
 import uuid
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -11,6 +12,11 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=1024)
     full_name: str | None = Field(default=None, max_length=200)
+    #: Explicit Terms-of-Service / Privacy-Policy consent. `Literal[True]`
+    #: makes both "missing" and `false` a 422 at the API contract level; the
+    #: server records the acceptance timestamp in `users.terms_accepted_at`
+    #: (migration 0026) as legal evidence of consent.
+    agreed_to_terms: Literal[True]
     # Optional vanity slug; generated from company_name when omitted.
     company_slug: str | None = Field(default=None, min_length=1, max_length=50)
 

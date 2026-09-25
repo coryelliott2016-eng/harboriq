@@ -369,13 +369,18 @@ def signup(
                 ),
                 {"cid": company_id, "slug": slug, "name": company_name.strip()},
             )
-            user_id = app_db.execute(
+            # Consent is captured server-side (`agreed_to_terms: Literal[True]`
+            # in SignupRequest guarantees the API validated it) and stamped
+            # with the database clock so the stored evidence (L25) cannot be
+            # client-supplied or skewed by the app host's clock.
+            row = app_db.execute(
                 text(
                     """
                     INSERT INTO users
-                        (company_id, email, password_hash, full_name, role)
-                    VALUES (:cid, :email, :hash, :name, 'owner')
-                    RETURNING id
+                        (company_id, email, password_hash, full_name, role,
+                         terms_accepted_at)
+                    VALUES (:cid, :email, :hash, :name, 'owner', now())
+                    RETURNING id, terms_accepted_at
                     """
                 ),
                 {
@@ -384,7 +389,8 @@ def signup(
                     "hash": password_hash,
                     "name": full_name,
                 },
-            ).scalar_one()
+            ).one()
+            user_id, terms_accepted_at = row.id, row.terms_accepted_at
 
             tokens = _issue_session(
                 app_db,
@@ -402,7 +408,11 @@ def signup(
                 resource_type="company",
                 resource_id=company_id,
                 ip=ip,
-                metadata={"slug": slug, "email": email},
+                metadata={
+                    "slug": slug,
+                    "email": email,
+                    "terms_accepted_at": terms_accepted_at.isoformat(),
+                },
             )
             app_db.commit()
     except IntegrityError as exc:

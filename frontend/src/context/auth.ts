@@ -28,6 +28,7 @@ export interface AuthContextValue {
     email: string;
     password: string;
     full_name?: string;
+    agreed_to_terms: boolean;
   }) => Promise<void>;
   acceptInvite: (token: string, input: { password: string; full_name?: string }) => Promise<void>;
   logout: () => Promise<void>;

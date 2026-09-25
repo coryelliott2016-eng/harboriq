@@ -28,7 +28,13 @@ export function SignupPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await signup({ company_name: companyName, email, password, full_name: fullName || undefined });
+      await signup({
+        company_name: companyName,
+        email,
+        password,
+        full_name: fullName || undefined,
+        agreed_to_terms: true,
+      });
       navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to sign up. Please try again.");

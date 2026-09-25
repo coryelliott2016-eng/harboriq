@@ -51,6 +51,7 @@ def test_signup_rejects_an_explicitly_taken_slug(client):
             "company_slug": "harbor-one",
             "email": unique_email(),
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 409
@@ -67,6 +68,7 @@ def test_signup_rejects_a_duplicate_email_across_tenants(client):
             "company_name": "Bayside Yachts",
             "email": email,
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 409
@@ -82,6 +84,7 @@ def test_signup_email_match_is_case_insensitive(client):
             "company_name": "Bayside Yachts",
             "email": email.upper(),
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 409
@@ -95,9 +98,47 @@ def test_signup_rejects_a_weak_password(client, password):
             "company_name": "Acme Marine",
             "email": unique_email(),
             "password": password,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("agreed", [None, False])
+def test_signup_requires_explicit_terms_agreement(client, agreed):
+    """L25: consent is an API-contract requirement, not just a UI checkbox."""
+    body = {
+        "company_name": "Acme Marine",
+        "email": unique_email(),
+        "password": DEFAULT_PASSWORD,
+    }
+    if agreed is not None:
+        body["agreed_to_terms"] = agreed
+    resp = client.post("/api/v1/auth/signup", json=body)
+    assert resp.status_code == 422
+
+
+def test_signup_records_terms_acceptance_timestamp(client, service_db):
+    """L25: the server stores legal evidence of consent (users.terms_accepted_at)
+    and stamps it into the company.signup audit row."""
+    body = signup(client)
+    user_id = body["user"]["id"]
+
+    accepted_at = service_db.execute(
+        text("SELECT terms_accepted_at FROM users WHERE id = :uid"), {"uid": user_id}
+    ).scalar_one()
+    assert accepted_at is not None
+
+    audit_meta = service_db.execute(
+        text(
+            """
+            SELECT metadata FROM audit_log
+            WHERE action = 'company.signup' AND actor_user_id = :uid
+            """
+        ),
+        {"uid": user_id},
+    ).scalar_one()
+    assert audit_meta["terms_accepted_at"] == accepted_at.isoformat()
 
 
 def test_login_succeeds_and_issues_a_fresh_session(client, service_db):
