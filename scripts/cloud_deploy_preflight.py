@@ -45,8 +45,19 @@ def _env_value(key: str, combined_env: dict[str, str]) -> str:
     return combined_env.get(key, "").strip()
 
 
-def _is_true(value: str) -> bool:
-    return value.lower() in {"1", "true", "yes", "on"}
+TRUE_LITERALS = {"1", "true", "yes", "on"}
+FALSE_LITERALS = {"0", "false", "no", "off"}
+
+
+def _parse_bool_literal(value: str) -> bool | None:
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    if normalized in TRUE_LITERALS:
+        return True
+    if normalized in FALSE_LITERALS:
+        return False
+    raise ValueError
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -96,9 +107,16 @@ def main(argv: list[str] | None = None) -> int:
         if not _env_value("CLOUDFLARE_ZONE_ID", combined_env):
             errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_ZONE_ID.")
 
-    aws_backups_enabled = args.require_aws_backups or _is_true(
-        _env_value("AWS_BACKUP_ENABLED", combined_env)
-    )
+    aws_backup_enabled_raw = _env_value("AWS_BACKUP_ENABLED", combined_env)
+    try:
+        aws_backup_enabled_toggle = _parse_bool_literal(aws_backup_enabled_raw)
+    except ValueError:
+        errors.append(
+            "AWS_BACKUP_ENABLED must be one of: 1, true, yes, on, 0, false, no, off."
+        )
+        aws_backup_enabled_toggle = None
+
+    aws_backups_enabled = args.require_aws_backups or aws_backup_enabled_toggle is True
 
     if aws_backups_enabled:
         if not _env_value("BACKUP_S3_BUCKET", combined_env):
