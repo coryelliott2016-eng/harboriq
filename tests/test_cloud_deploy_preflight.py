@@ -72,9 +72,7 @@ def test_cloud_preflight_passes_with_cli_required_aws_backups(tmp_path):
         ],
     )
 
-    exit_code = cloud_deploy_preflight.main(
-        ["--env-file", str(env_path), "--require-aws-backups"]
-    )
+    exit_code = cloud_deploy_preflight.main(["--env-file", str(env_path), "--require-aws-backups"])
     assert exit_code == 0
 
 
