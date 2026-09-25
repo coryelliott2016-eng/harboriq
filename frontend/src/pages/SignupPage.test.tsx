@@ -65,11 +65,11 @@ describe("SignupPage", () => {
 
     expect(screen.getByRole("link", { name: /terms of service/i })).toHaveAttribute(
       "href",
-      "https://harboriq.com/#/terms",
+      "https://harboriq-gamma.vercel.app/#/terms",
     );
     expect(screen.getByRole("link", { name: /privacy policy/i })).toHaveAttribute(
       "href",
-      "https://harboriq.com/#/privacy",
+      "https://harboriq-gamma.vercel.app/#/privacy",
     );
   });
 
