@@ -8,6 +8,7 @@ from app.api.v1.routes import (
     crypto_payments,
     customers,
     dispatch,
+    estimates,
     field_app,
     geocode_admin,
     health,
@@ -44,6 +45,7 @@ api_router.include_router(vendors.router)
 api_router.include_router(purchase_orders.router)
 api_router.include_router(slips.router)
 api_router.include_router(slip_reservations.router)
+api_router.include_router(estimates.router)
 api_router.include_router(invoices.router)
 api_router.include_router(crypto_payments.router, tags=["crypto-payments"])
 api_router.include_router(asset_tokens.router)

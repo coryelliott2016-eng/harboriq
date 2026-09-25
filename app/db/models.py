@@ -936,6 +936,9 @@ class Estimate(UUIDPKMixin, TimestampMixin, Base):
     approved_ip: Mapped[Optional[str]] = mapped_column(INET)
     approved_user_agent: Mapped[Optional[str]] = mapped_column(Text)
     estimate_pdf_version: Mapped[Optional[str]] = mapped_column(Text)
+    tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 4), default=0, server_default="0")
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     line_items: Mapped[list[EstimateLineItem]] = relationship(back_populates="estimate")
 
 
@@ -948,9 +951,23 @@ class EstimateLineItem(UUIDPKMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("inventory_items.id")
     )
     description: Mapped[Optional[str]] = mapped_column(Text)
-    quantity: Mapped[int] = mapped_column(Integer, CheckConstraint("quantity > 0"))
+    # NUMERIC since migration 0024 so labor lines can carry fractional hours.
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), CheckConstraint("quantity > 0"))
     unit_price: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), CheckConstraint("unit_price >= 0"), default=0, server_default="0"
+    )
+    kind: Mapped[str] = mapped_column(
+        Enum(
+            JobLineItemKind,
+            name="job_line_item_kind",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=JobLineItemKind.PART.value, server_default="part",
+    )
+    taxable: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
     estimate: Mapped[Estimate] = relationship(back_populates="line_items")
     # line_total is GENERATED ALWAYS AS (quantity * unit_price) STORED in the DB.
