@@ -77,11 +77,10 @@ def _truncate(request: pytest.FixtureRequest):
     if not _test_requires_db(request):
         yield
         return
-    eng = create_engine(SERVICE_URL, future=True)
+    eng = request.getfixturevalue("service_engine")
     with eng.begin() as conn:
         for t in _TENANT_TABLES:
             conn.execute(text(f"TRUNCATE TABLE {t} RESTART IDENTITY CASCADE"))
-    eng.dispose()
     yield
 
 
