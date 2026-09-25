@@ -1,0 +1,38 @@
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv if missing
+        shell: bash
+        run: |
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          uv --version
+
+      - name: Verify AWS CLI
+        shell: bash
+        run: |
+          if ! command -v aws >/dev/null 2>&1; then
+            curl -fsSL 'https://awscli.amazonaws.com/v2/install.sh' | bash
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          aws --version
