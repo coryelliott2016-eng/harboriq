@@ -17,7 +17,7 @@ def test_vercel_config_builds_the_frontend_subdir_and_preserves_spa_routing():
     assert config["outputDirectory"] == "frontend/dist"
     assert config["rewrites"] == [
         {
-            "source": "/((?!api/|.*\\..*).*)",
+            "source": "/((?!api(?:/|$)|.*\\..*).*)",
             "destination": "/index.html",
         }
     ]
