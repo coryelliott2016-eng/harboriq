@@ -219,6 +219,12 @@ export function SecuritySettingsPage() {
               <input
                 type="text"
                 required
+                // This field only mounts after the user clicks "Enable MFA",
+                // replacing the setup step with the confirmation form; the
+                // focus jump follows their own action rather than surprising
+                // them on initial page load, matching the OTP-entry pattern
+                // used by GitHub/Google's own MFA setup screens.
+                // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
                 inputMode="numeric"
                 autoComplete="one-time-code"

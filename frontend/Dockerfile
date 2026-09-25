@@ -5,7 +5,12 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-COPY package*.json ./
+COPY package*.json .npmrc ./
+# --legacy-peer-deps: eslint-plugin-jsx-a11y@6.10.2 declares an eslint peer
+# range that stops at ^9 (no v10 support tag yet), but this project is on
+# eslint@^10.8.0. .npmrc supplies the compatibility setting, but only if it's
+# actually copied into the build context before `npm ci` runs — it must be
+# copied alongside package*.json here, not later with the full `COPY . .`.
 RUN npm ci
 
 COPY . .

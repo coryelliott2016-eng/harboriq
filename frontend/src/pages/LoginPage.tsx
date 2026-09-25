@@ -79,6 +79,13 @@ export function LoginPage() {
               <input
                 type="text"
                 required
+                // This field only mounts after the user submits their
+                // password and the MFA-required step replaces the password
+                // form in place; the focus jump follows their own action
+                // rather than surprising them on initial page load, matching
+                // the OTP-entry pattern used by GitHub/Google's own MFA
+                // challenge screens.
+                // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
                 inputMode="text"
                 autoComplete="one-time-code"

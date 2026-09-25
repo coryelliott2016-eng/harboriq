@@ -10,6 +10,9 @@ jobs:
   # Security Core Prompt v1.0, H-5 fix: static secret scanning across full
   # history diffs on every push/PR, gating the rest of the pipeline.
   secret-scan:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -32,7 +35,9 @@ jobs:
       # `ruff.lint.select` in pyproject.toml includes "S" (bandit-derived
       # security rules) on top of the previous pyflakes/pycodestyle-only
       # set -- this now doubles as this repo's lightweight SAST gate.
-      - run: ruff check app tests
+      # `scripts` added 2026-08-15: operator/provisioning scripts previously
+      # had zero lint or SAST coverage (found during launch-audit Phase 2).
+      - run: ruff check app tests scripts
 
   test:
     runs-on: ubuntu-latest
@@ -68,6 +73,12 @@ jobs:
       DATABASE_URL: postgresql+psycopg://harboriq_app:harboriq_app_pass@localhost:5432/harboriq
       SERVICE_DATABASE_URL: postgresql+psycopg://harboriq_service:harboriq_service_pass@localhost:5432/harboriq
       REDIS_URL: redis://localhost:6379/0
+      # Backup / restore rehearsal gate (tests/test_backup_restore_rehearsal.py):
+      # a superuser URL pointed at the maintenance `postgres` database so
+      # the rehearsal script can CREATE / DROP its own scratch database.
+      # Not the same as SERVICE_DATABASE_URL above (which points at the
+      # `harboriq` app database and is a role without CREATEDB).
+      REHEARSAL_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -114,7 +125,9 @@ jobs:
           node-version: 20
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      # See frontend/.npmrc: jsx-a11y 6.10.2 has a stale peer range that stops
+      # at ESLint 9, while this project uses ESLint 10.
+      - run: npm ci --legacy-peer-deps
       - run: npm run lint
       - run: npm run build
       - run: npm run test

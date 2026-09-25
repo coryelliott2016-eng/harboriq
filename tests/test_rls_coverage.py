@@ -161,3 +161,31 @@ def test_no_unexpected_public_tables_without_tenant_or_global_mark(service_db):
         "service-only allowlist — add RLS, or extend GLOBAL_TABLES/"
         f"SERVICE_ONLY_TABLES in this test with a justification: {unexpected}"
     )
+
+
+def test_app_role_cannot_modify_global_reference_tables(service_db):
+    """Migration 0025: the RLS-enforced app role may read the plan catalog but
+    never write it, and has no access to migration bookkeeping."""
+    rows = service_db.execute(
+        text(
+            """
+            SELECT t.name,
+                   has_table_privilege('harboriq_app', t.name, 'SELECT') AS can_select,
+                   has_table_privilege('harboriq_app', t.name, 'INSERT') AS can_insert,
+                   has_table_privilege('harboriq_app', t.name, 'UPDATE') AS can_update,
+                   has_table_privilege('harboriq_app', t.name, 'DELETE') AS can_delete
+              FROM (VALUES ('subscription_plans'), ('alembic_version')) AS t(name)
+            """
+        )
+    ).mappings().all()
+    by_name = {r["name"]: r for r in rows}
+
+    plans = by_name["subscription_plans"]
+    assert plans["can_select"] is True
+    assert not (plans["can_insert"] or plans["can_update"] or plans["can_delete"])
+
+    version = by_name["alembic_version"]
+    assert not (
+        version["can_select"] or version["can_insert"]
+        or version["can_update"] or version["can_delete"]
+    )

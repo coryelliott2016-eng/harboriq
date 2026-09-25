@@ -21,6 +21,10 @@ if ("serviceWorker" in navigator) {
 // 404 at the static host. Building with VITE_ROUTER=hash switches to
 // fragment-based routing (#/login, #/jobs/:id) with zero server config.
 // Default (unset) remains BrowserRouter — production behavior unchanged.
+// main.tsx is the app entry point, not a component module; it is never
+// Fast-Refreshed (entry-point edits always trigger a full reload), so the
+// react-refresh/only-export-components rule doesn't apply here.
+// eslint-disable-next-line react-refresh/only-export-components
 const Router = import.meta.env.VITE_ROUTER === "hash" ? HashRouter : BrowserRouter;
 
 const queryClient = new QueryClient({
