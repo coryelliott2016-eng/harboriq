@@ -6,7 +6,7 @@ these accounts exist yet. This guide is the one place to go from "no
 account" to "credential in `.env`" for each of them.
 
 Before running any provisioning script, set these deployment-scope vars in
-`.env` and validate with `python scripts/cloud_deploy_preflight.py --env-file .env`:
+`.env`:
 
 - `DEPLOY_TARGET_STACK=render-neon`
 - `CLOUD_BASE_PROVIDER` (`cloudflare`, `firebase`, `none`, or `other`)
@@ -304,3 +304,8 @@ script automates.
 
 No script in this repo can create an AWS, Twilio, or Cloudflare account —
 that always requires Cory's own identity and payment method in a browser.
+
+After the needed production credentials are in `.env`, run
+`python scripts/cloud_deploy_preflight.py --env-file .env` before the first
+Render deployment. If off-host AWS backups are enabled, either set
+`AWS_BACKUP_ENABLED=true` in `.env` or append `--require-aws-backups`.

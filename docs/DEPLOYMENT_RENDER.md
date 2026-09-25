@@ -28,7 +28,9 @@ Everything is declared in `render.yaml`. Secrets are `sync: false` or
 ## Remaining steps
 
 1. Copy `.env.example` to `.env`, fill production values, and run:
-   `python scripts/cloud_deploy_preflight.py --env-file .env --require-aws-backups`
+   `python scripts/cloud_deploy_preflight.py --env-file .env`
+   If off-host AWS backups are enabled, either set `AWS_BACKUP_ENABLED=true` in
+   `.env` or append `--require-aws-backups` for this check.
 2. Connect Render to Computer (or in the Render dashboard, create **New > Blueprint** from this repo).
 3. Enter the `sync: false` values: the two database URLs, `MFA_ENCRYPTION_KEY` (Fernet), `APP_BASE_URL`, `CORS_ALLOW_ORIGINS`, Stripe **test** keys, SMTP settings.
 4. Deploy API + worker + Redis + static site from `render.yaml`.

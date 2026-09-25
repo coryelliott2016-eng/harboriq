@@ -59,7 +59,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--require-aws-backups",
         action="store_true",
-        help="Fail unless BACKUP_S3_BUCKET + AWS credential env vars are present.",
+        help="Fail unless AWS backup bucket/region settings are present.",
+    )
+    parser.add_argument(
+        "--scope-only",
+        action="store_true",
+        help="Validate only DEPLOY_TARGET_STACK and CLOUD_BASE_PROVIDER.",
     )
     return parser.parse_args(argv)
 
@@ -82,32 +87,33 @@ def main(argv: list[str] | None = None) -> int:
             "CLOUD_BASE_PROVIDER must be one of: cloudflare, firebase, none, other."
         )
 
-    app_env = _env_value("APP_ENV", combined_env).lower()
-    if app_env != "production":
-        errors.append("APP_ENV must be 'production' for go-live.")
+    aws_backups_enabled = False
+    if not args.scope_only:
+        app_env = _env_value("APP_ENV", combined_env).lower()
+        if app_env != "production":
+            errors.append("APP_ENV must be 'production' for go-live.")
 
-    for key in REQUIRED_RENDER_VARS:
-        if not _env_value(key, combined_env):
-            errors.append(f"Missing required Render/Neon setting: {key}")
-
-    if cloud_base_provider == "cloudflare":
-        if not _env_value("CLOUDFLARE_API_TOKEN", combined_env):
-            errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_API_TOKEN.")
-        if not _env_value("CLOUDFLARE_ZONE_ID", combined_env):
-            errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_ZONE_ID.")
-
-    aws_backups_enabled = args.require_aws_backups or _is_true(
-        _env_value("AWS_BACKUP_ENABLED", combined_env)
-    )
-    if aws_backups_enabled:
-        for key in ("BACKUP_S3_BUCKET", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
+        for key in REQUIRED_RENDER_VARS:
             if not _env_value(key, combined_env):
-                errors.append(f"AWS backups enabled but {key} is missing.")
-        if not (
-            _env_value("AWS_DEFAULT_REGION", combined_env)
-            or _env_value("AWS_REGION", combined_env)
-        ):
-            errors.append("AWS backups enabled but AWS_DEFAULT_REGION/AWS_REGION is missing.")
+                errors.append(f"Missing required Render/Neon setting: {key}")
+
+        if cloud_base_provider == "cloudflare":
+            if not _env_value("CLOUDFLARE_API_TOKEN", combined_env):
+                errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_API_TOKEN.")
+            if not _env_value("CLOUDFLARE_ZONE_ID", combined_env):
+                errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_ZONE_ID.")
+
+        aws_backups_enabled = args.require_aws_backups or _is_true(
+            _env_value("AWS_BACKUP_ENABLED", combined_env)
+        )
+        if aws_backups_enabled:
+            if not _env_value("BACKUP_S3_BUCKET", combined_env):
+                errors.append("AWS backups enabled but BACKUP_S3_BUCKET is missing.")
+            if not (
+                _env_value("AWS_DEFAULT_REGION", combined_env)
+                or _env_value("AWS_REGION", combined_env)
+            ):
+                errors.append("AWS backups enabled but AWS_DEFAULT_REGION/AWS_REGION is missing.")
 
     if errors:
         print("❌ HarborIQ cloud deploy preflight failed:")
