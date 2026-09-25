@@ -59,8 +59,11 @@ def service_engine():
 
 
 @pytest.fixture(autouse=True)
-def _truncate(service_engine):
+def _truncate(request, service_engine):
     """Truncate tenant data before each test (committed)."""
+    if request.node.get_closest_marker("no_db"):
+        yield
+        return
     eng = create_engine(SERVICE_URL, future=True)
     with eng.begin() as conn:
         for t in _TENANT_TABLES:
