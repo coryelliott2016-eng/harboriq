@@ -22,6 +22,7 @@ on:
     branches: [master]
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
@@ -41,12 +42,14 @@ jobs:
           BEFORE: ${{ github.event.before }}
           ACTOR: ${{ github.actor }}
           REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          AUDIT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
           COMMIT_URL="${{ github.server_url }}/${REPO}/commit/${SHA}"
           ZERO_SHA="0000000000000000000000000000000000000000"
+          CI_RUN_URL=""
+          CI_RUN_STATUS=""
 
           SUBJECT=$(git log -1 --format=%s "${SHA}")
           BODY=$(git log -1 --format=%b "${SHA}")
@@ -57,6 +60,30 @@ jobs:
           else
             COMPARE_URL="${{ github.server_url }}/${REPO}/compare/${BEFORE}...${SHA}"
             FILES=$(git diff --stat "${BEFORE}" "${SHA}" 2>/dev/null | tail -1 || echo "unknown (force-push rewrote history)")
+          fi
+
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            CI_MATCH=$(
+              gh api "repos/${REPO}/actions/runs?event=push&branch=master&per_page=30" \
+                --jq '.workflow_runs[]
+                  | select(.name == "CI" and .head_sha == env.SHA)
+                  | [.html_url, (if .status == "completed" then .conclusion else .status end)]
+                  | @tsv' \
+                | head -n 1
+            ) || true
+
+            if [ -n "${CI_MATCH}" ]; then
+              IFS=$'\t' read -r CI_RUN_URL CI_RUN_STATUS <<<"${CI_MATCH}"
+              break
+            fi
+
+            sleep 3
+          done
+
+          if [ -n "${CI_RUN_URL}" ]; then
+            CI_ROW="| CI workflow | [${CI_RUN_STATUS}](${CI_RUN_URL}) |"
+          else
+            CI_ROW="| CI workflow | not found yet; check the Actions tab for the push-matched CI run |"
           fi
 
           cat > /tmp/issue_body.md <<EOF
@@ -71,7 +98,8 @@ jobs:
           | Subject | ${SUBJECT} |
           | Diff | [compare view]($COMPARE_URL) |
           | Files changed | ${FILES} |
-          | CI run | [$RUN_URL]($RUN_URL) |
+          | Audit run | [$AUDIT_RUN_URL]($AUDIT_RUN_URL) |
+          ${CI_ROW}
 
           <details><summary>Full commit message</summary>
 

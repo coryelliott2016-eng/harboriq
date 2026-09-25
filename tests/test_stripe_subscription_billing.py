@@ -89,6 +89,35 @@ def test_payment_succeeded_activates_subscription_and_clears_past_due(service_db
     assert n == 1
 
 
+def test_payment_succeeded_does_not_resurrect_a_canceled_subscription(service_db, company_a):
+    plan_id = _make_plan(service_db)
+    sub_stripe_id = "sub_" + uuid.uuid4().hex[:12]
+    _make_subscription(service_db, company_a, plan_id, sub_stripe_id, status="canceled")
+    service_db.execute(
+        text(
+            "UPDATE subscriptions SET canceled_at = now() WHERE stripe_subscription_id = :sid"
+        ),
+        {"sid": sub_stripe_id},
+    )
+    service_db.commit()
+
+    eid = "evt_" + uuid.uuid4().hex
+    period_end = 1_800_000_000
+    event = _invoice_event(eid, "invoice.payment_succeeded", company_a, sub_stripe_id, period_end)
+    handle_stripe_webhook(service_db, eid, event["type"], event)
+
+    row = service_db.execute(
+        text(
+            "SELECT status, canceled_at, current_period_end "
+            "FROM subscriptions WHERE stripe_subscription_id = :sid"
+        ),
+        {"sid": sub_stripe_id},
+    ).first()
+    assert row.status == "canceled"
+    assert row.canceled_at is not None
+    assert row.current_period_end is None
+
+
 def test_payment_failed_marks_subscription_past_due(service_db, company_a):
     plan_id = _make_plan(service_db)
     sub_stripe_id = "sub_" + uuid.uuid4().hex[:12]

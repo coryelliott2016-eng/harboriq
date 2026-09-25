@@ -894,3 +894,78 @@ export interface StorageCharge {
   created_at: string;
   updated_at: string;
 }
+
+// --- estimates (staff side; migration 0024) ---
+
+export type EstimateStatus =
+  | "draft"
+  | "sent"
+  | "viewed"
+  | "approved"
+  | "declined"
+  | "expired"
+  | "invoiced";
+
+export type EstimateLineKind = "labor" | "part" | "fee";
+
+export interface EstimateLineItemInput {
+  kind: EstimateLineKind;
+  description: string;
+  quantity: string;
+  unit_price: string;
+  taxable: boolean;
+  inventory_item_id?: string | null;
+}
+
+export interface EstimateInput {
+  job_id: string;
+  tax_rate: string;
+  notes?: string | null;
+  line_items: EstimateLineItemInput[];
+}
+
+export interface EstimateLineItem {
+  id: string;
+  estimate_id: string;
+  kind: EstimateLineKind;
+  description: string | null;
+  quantity: string;
+  unit_price: string;
+  line_total: string;
+  taxable: boolean;
+  inventory_item_id: string | null;
+  position: number;
+}
+
+export interface Estimate {
+  id: string;
+  company_id: string;
+  job_id: string | null;
+  customer_id: string | null;
+  status: EstimateStatus;
+  currency: string;
+  subtotal: string;
+  tax_rate: string;
+  tax_total: string;
+  total: string;
+  notes: string | null;
+  sent_at: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EstimateDetail extends Estimate {
+  line_items: EstimateLineItem[];
+  invoice_id: string | null;
+}
+
+export interface EstimateSendResponse {
+  estimate: Estimate;
+  email_queued: boolean;
+}
+
+export interface EstimateConvertResponse {
+  estimate: Estimate;
+  invoice_id: string;
+}
