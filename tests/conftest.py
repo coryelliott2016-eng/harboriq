@@ -64,6 +64,7 @@ def _truncate(request):
     if request.node.get_closest_marker("no_db"):
         yield
         return
+    request.getfixturevalue("service_engine")
     eng = create_engine(SERVICE_URL, future=True)
     with eng.begin() as conn:
         for t in _TENANT_TABLES:
