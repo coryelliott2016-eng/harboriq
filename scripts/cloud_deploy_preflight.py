@@ -61,11 +61,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Fail unless AWS backup bucket/region settings are present.",
     )
-    parser.add_argument(
-        "--scope-only",
-        action="store_true",
-        help="Validate only DEPLOY_TARGET_STACK and CLOUD_BASE_PROVIDER.",
-    )
     return parser.parse_args(argv)
 
 
@@ -87,25 +82,23 @@ def main(argv: list[str] | None = None) -> int:
             "CLOUD_BASE_PROVIDER must be one of: cloudflare, firebase, none, other."
         )
 
-    aws_backups_enabled = args.require_aws_backups
-    if not args.scope_only:
-        app_env = _env_value("APP_ENV", combined_env).lower()
-        if app_env != "production":
-            errors.append("APP_ENV must be 'production' for go-live.")
+    app_env = _env_value("APP_ENV", combined_env).lower()
+    if app_env != "production":
+        errors.append("APP_ENV must be 'production' for go-live.")
 
-        for key in REQUIRED_RENDER_VARS:
-            if not _env_value(key, combined_env):
-                errors.append(f"Missing required Render/Neon setting: {key}")
+    for key in REQUIRED_RENDER_VARS:
+        if not _env_value(key, combined_env):
+            errors.append(f"Missing required Render/Neon setting: {key}")
 
-        if cloud_base_provider == "cloudflare":
-            if not _env_value("CLOUDFLARE_API_TOKEN", combined_env):
-                errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_API_TOKEN.")
-            if not _env_value("CLOUDFLARE_ZONE_ID", combined_env):
-                errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_ZONE_ID.")
+    if cloud_base_provider == "cloudflare":
+        if not _env_value("CLOUDFLARE_API_TOKEN", combined_env):
+            errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_API_TOKEN.")
+        if not _env_value("CLOUDFLARE_ZONE_ID", combined_env):
+            errors.append("CLOUD_BASE_PROVIDER=cloudflare requires CLOUDFLARE_ZONE_ID.")
 
-        aws_backups_enabled = aws_backups_enabled or _is_true(
-            _env_value("AWS_BACKUP_ENABLED", combined_env)
-        )
+    aws_backups_enabled = args.require_aws_backups or _is_true(
+        _env_value("AWS_BACKUP_ENABLED", combined_env)
+    )
 
     if aws_backups_enabled:
         if not _env_value("BACKUP_S3_BUCKET", combined_env):

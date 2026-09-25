@@ -124,31 +124,3 @@ def test_cloud_preflight_fails_when_aws_backup_toggle_lacks_bucket(tmp_path):
 
     exit_code = cloud_deploy_preflight.main(["--env-file", str(env_path)])
     assert exit_code == 1
-
-
-def test_cloud_preflight_scope_only_allows_pre_provisioning_env(tmp_path):
-    env_path = _write_env(
-        tmp_path,
-        [
-            "DEPLOY_TARGET_STACK=render-neon",
-            "CLOUD_BASE_PROVIDER=cloudflare",
-        ],
-    )
-
-    exit_code = cloud_deploy_preflight.main(["--env-file", str(env_path), "--scope-only"])
-    assert exit_code == 0
-
-
-def test_cloud_preflight_scope_only_with_required_backups_still_checks_aws(tmp_path):
-    env_path = _write_env(
-        tmp_path,
-        [
-            "DEPLOY_TARGET_STACK=render-neon",
-            "CLOUD_BASE_PROVIDER=none",
-        ],
-    )
-
-    exit_code = cloud_deploy_preflight.main(
-        ["--env-file", str(env_path), "--scope-only", "--require-aws-backups"]
-    )
-    assert exit_code == 1
