@@ -44,6 +44,10 @@ _TENANT_TABLES = [
 ]
 
 
+def _test_requires_db(request: pytest.FixtureRequest) -> bool:
+    return request.node.get_closest_marker("no_db") is None
+
+
 @pytest.fixture(scope="session")
 def app_engine():
     eng = create_engine(APP_URL, future=True, pool_pre_ping=True)
@@ -59,13 +63,24 @@ def service_engine():
 
 
 @pytest.fixture(autouse=True)
-def _truncate(service_engine):
+def _ensure_service_engine(request: pytest.FixtureRequest):
+    if not _test_requires_db(request):
+        yield
+        return
+    request.getfixturevalue("service_engine")
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _truncate(request: pytest.FixtureRequest):
     """Truncate tenant data before each test (committed)."""
-    eng = create_engine(SERVICE_URL, future=True)
+    if not _test_requires_db(request):
+        yield
+        return
+    eng = request.getfixturevalue("service_engine")
     with eng.begin() as conn:
         for t in _TENANT_TABLES:
             conn.execute(text(f"TRUNCATE TABLE {t} RESTART IDENTITY CASCADE"))
-    eng.dispose()
     yield
 
 
@@ -146,6 +161,7 @@ def signup(client: TestClient, company_name: str = "Acme Marine",
         "company_name": company_name,
         "email": email or unique_email(),
         "password": password,
+        "agreed_to_terms": True,
         **extra,
     }
     resp = client.post("/api/v1/auth/signup", json=body)
