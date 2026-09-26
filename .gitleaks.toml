@@ -9,6 +9,16 @@ title = "HarborIQ gitleaks config"
 [extend]
 useDefault = true
 
+# Render API keys (rnd_ + 20+ token chars). A live key was pasted into
+# vercel.json and committed in 65ae2c0 (PR #92/#94/#95 incident); gitleaks'
+# default ruleset does not cover the Render format, so without this rule a
+# repeat paste would sail through the secret-scan gate.
+[[rules]]
+id = "render-api-key"
+description = "Render API key"
+regex = '''rnd_[A-Za-z0-9]{20,}'''
+keywords = ["rnd_"]
+
 [allowlist]
 description = "Known-fake credential fixtures used only in tests/, plus one historical dev-only placeholder now removed from source"
 regexes = [

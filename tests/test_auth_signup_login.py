@@ -51,6 +51,7 @@ def test_signup_rejects_an_explicitly_taken_slug(client):
             "company_slug": "harbor-one",
             "email": unique_email(),
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 409
@@ -67,6 +68,7 @@ def test_signup_rejects_a_duplicate_email_across_tenants(client):
             "company_name": "Bayside Yachts",
             "email": email,
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 409
@@ -82,6 +84,7 @@ def test_signup_email_match_is_case_insensitive(client):
             "company_name": "Bayside Yachts",
             "email": email.upper(),
             "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
         },
     )
     assert resp.status_code == 409
@@ -95,8 +98,23 @@ def test_signup_rejects_a_weak_password(client, password):
             "company_name": "Acme Marine",
             "email": unique_email(),
             "password": password,
+            "agreed_to_terms": True,
         },
     )
+    assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("body", [
+    {"company_name": "Acme Marine", "email": unique_email(), "password": DEFAULT_PASSWORD},
+    {
+        "company_name": "Acme Marine",
+        "email": unique_email(),
+        "password": DEFAULT_PASSWORD,
+        "agreed_to_terms": False,
+    },
+])
+def test_signup_requires_explicit_terms_agreement(client, body):
+    resp = client.post("/api/v1/auth/signup", json=body)
     assert resp.status_code == 422
 
 

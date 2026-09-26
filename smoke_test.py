@@ -49,6 +49,7 @@ r = check(c.post("/auth/signup", json={
     "email": email,
     "password": "correct-horse-battery-staple",
     "full_name": "Smoke Tester",
+    "agreed_to_terms": True,
 }))
 body = r.json()
 access = body["tokens"]["access_token"]
