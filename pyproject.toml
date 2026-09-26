@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "harboriq"
-version = "0.1.0"
+version = "0.2.0"
 description = "HarborIQ v2 — marine service operating system (corrected scaffold)"
 requires-python = ">=3.11"
 dependencies = [
@@ -93,6 +93,9 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "no_db: test does not require the Postgres-backed fixture stack",
+]
 
 [tool.ruff]
 line-length = 100

@@ -191,8 +191,10 @@ def _on_subscription_payment_succeeded(db: Session, company_id: uuid.UUID, obj: 
     Stripe Invoice object carries the parent subscription id on `.subscription`)
     and marks it `active`, clearing any `past_due` state from a prior failed
     charge and advancing `current_period_end` from the invoice's line-item
-    period so trial/renewal countdowns stay accurate. Scoped to `company_id`
-    via `current_setting('app.current_company_id')` (RLS-safe even though this
+    period so trial/renewal countdowns stay accurate. Already-canceled
+    subscriptions are left untouched so a late-arriving success event cannot
+    silently reopen them. Scoped to `company_id` via
+    `current_setting('app.current_company_id')` (RLS-safe even though this
     handler runs on the service-role connection) so a cross-tenant Stripe id
     collision can never update the wrong tenant's row.
 
@@ -219,6 +221,7 @@ def _on_subscription_payment_succeeded(db: Session, company_id: uuid.UUID, obj: 
                        canceled_at = NULL
                  WHERE stripe_subscription_id = :sid
                    AND company_id::text = current_setting('app.current_company_id')
+                   AND status != 'canceled'
                  RETURNING id
                 """
             ),

@@ -1,0 +1,119 @@
+# Render Blueprint for the HarborIQ pilot deployment (see docs/DEPLOYMENT_RENDER.md).
+# Postgres is external (Neon project "harboriq-app-production", two roles:
+# harboriq_app = RLS enforced, harboriq_service = BYPASSRLS for platform ops).
+# Secrets are `sync: false`: Render prompts for them once; they are never committed.
+services:
+  - type: web
+    name: harboriq-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: virginia            # same AWS region as Neon us-east-1
+    plan: starter
+    branch: master
+    autoDeploy: false           # deploy deliberately after CI is green on master
+    healthCheckPath: /api/v1/healthz
+    preDeployCommand: alembic upgrade head
+    envVars:
+      - fromGroup: harboriq-shared
+      - key: PORT                  # Dockerfile CMD binds uvicorn to 8000
+        value: "8000"
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: harboriq-redis, property: connectionString }
+
+  - type: worker
+    name: harboriq-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: virginia
+    plan: starter
+    branch: master
+    autoDeploy: false
+    # One process runs both the worker and the beat scheduler (-B). Exactly one
+    # instance of this service must run, or periodic jobs fire twice.
+    dockerCommand: celery -A app.core.celery_app worker -B --loglevel=info --concurrency=2
+    envVars:
+      - fromGroup: harboriq-shared
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: harboriq-redis, property: connectionString }
+
+  - type: keyvalue
+    name: harboriq-redis
+    region: virginia
+    plan: starter
+    maxmemoryPolicy: noeviction   # Celery broker: never silently drop queued jobs
+    ipAllowList: []               # private network only
+
+  - type: web
+    name: harboriq-app
+    runtime: static
+    branch: master
+    autoDeploy: false
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: /                  # same-origin; /api/* is rewritten to the API below
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://harboriq-api.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains
+
+envVarGroups:
+  # Shared by API and worker so tokens, keys, and DB roles always match.
+  - name: harboriq-shared
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: DATABASE_URL          # harboriq_app via Neon pooler (RLS enforced)
+        sync: false
+      - key: SERVICE_DATABASE_URL  # harboriq_service, direct endpoint (migrations, platform ops)
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: METRICS_TOKEN
+        generateValue: true
+      - key: MFA_ENCRYPTION_KEY    # Fernet key: python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
+        sync: false
+      - key: APP_BASE_URL          # e.g. https://harboriq-app.onrender.com (later https://app.harboriq.com)
+        sync: false
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+      - key: STRIPE_API_KEY        # test mode (sk_test_...) until live launch is approved
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM_ADDRESS
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: CRYPTO_PAYMENTS_ENABLED
+        value: "false"
+      - key: ASSET_TOKENIZATION_ENABLED
+        value: "false"
