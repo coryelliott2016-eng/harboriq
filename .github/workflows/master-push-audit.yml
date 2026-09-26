@@ -79,7 +79,7 @@ jobs:
             FILES=$(git diff --stat "${BEFORE}" "${SHA}" 2>/dev/null | tail -1 || echo "unknown (force-push rewrote history)")
           fi
 
-          cat > /tmp/issue_body.md <<EOF
+          cat > /tmp/issue_body.md <<EOF2
           A commit was pushed directly to \`master\` with no branch-protection gate (H-6, still blocked pending a GitHub plan resolution -- see \`.github/CODEOWNERS\`).
 
           This issue is an automated record, not an accusation -- direct pushes are the expected workflow on this repo right now. Its only purpose is to make sure a human sees every push, quickly, so two people or sessions never silently overwrite each other's work again (this happened once already: see the 2026-08-05 security audit's "coordination note").
@@ -103,7 +103,7 @@ jobs:
           </details>
 
           Close this issue once you've confirmed the push is expected and CI is green.
-          EOF
+          EOF2
 
           gh issue create \
             --repo "${REPO}" \

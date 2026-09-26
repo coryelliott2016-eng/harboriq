@@ -74,7 +74,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(
-    async (input: { company_name: string; email: string; password: string; full_name?: string }) => {
+    async (input: {
+      company_name: string;
+      email: string;
+      password: string;
+      full_name?: string;
+      agreed_to_terms: boolean;
+    }) => {
       const resp = await authApi.signup(input);
       applyAuthResponse(resp, setUser);
     },
