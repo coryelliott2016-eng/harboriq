@@ -1,4 +1,25 @@
-# HarborIQ v2 — Working Repo Scaffold
+# HarborIQ — Marine Service Operating System
+
+> **Release v0.2.0 (2026-09-22).** Start here:
+> [Release register](docs/RELEASE_REGISTER.md) (what is done, with evidence) ·
+> [Known limitations](docs/KNOWN_LIMITATIONS.md) ·
+> [Changelog](CHANGELOG.md) · [v0.2.0 release report](docs/RELEASE_REPORT_v0.2.0.md) ·
+> [Product overview](docs/PRODUCT_OVERVIEW.md) ·
+> [Architecture](docs/ARCHITECTURE.md) and [ADRs](docs/adr/) ·
+> [API reference](docs/API_REFERENCE.md) ([OpenAPI](docs/api/openapi.json)) ·
+> [Database schema](docs/DATABASE_SCHEMA.md) ·
+> [Security overview](docs/SECURITY_OVERVIEW.md) ·
+> [Deployment](docs/DEPLOYMENT.md) · [Operations runbook](docs/OPERATIONS_RUNBOOK.md) ·
+> [Incident response](docs/INCIDENT_RESPONSE.md) · [Testing & QA](docs/TESTING_QA_PLAN.md) ·
+> [Customer onboarding](docs/CUSTOMER_ONBOARDING_SUPPORT.md) ·
+> [Sales one-pager](docs/SALES_ONE_PAGER.md) · [Marketing site review](docs/MARKETING_SITE_REVIEW.md)
+>
+> Production status: the marketing site is live at
+> https://harboriq-gamma.vercel.app; the application API/web app is **not yet
+> deployed** to a production host. The long-form notes below are the
+> historical build log and remain accurate for the code.
+
+## Historical build notes
 
 Marine service operating system. Corrected implementation of the HarborIQ
 build plan: every issue from the technical critique is fixed at the code level.

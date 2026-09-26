@@ -2,15 +2,18 @@
 uses: signup -> customer -> vessel -> job -> line items -> status transition
 -> invoice -> send -> public pay page.
 
-Not part of the automated test suite -- a throwaway script to validate the
-frontend's integration assumptions against the real running API before
-declaring Phase 4 done. Safe to delete after review.
+Not part of the automated test suite. Run it against any environment:
+
+    HARBORIQ_BASE_URL=https://harboriq-app.onrender.com python smoke_test.py
+
+It creates a uniquely named throwaway tenant; nothing touches existing tenants.
 """
+import os
 import sys
 import time
 import httpx
 
-BASE = "http://localhost:8000/api/v1"
+BASE = os.environ.get("HARBORIQ_BASE_URL", "http://localhost:8000").rstrip("/") + "/api/v1"
 c = httpx.Client(base_url=BASE, timeout=10)
 
 
