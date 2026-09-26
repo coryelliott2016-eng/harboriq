@@ -18,6 +18,7 @@ import {
 import { money } from "../lib/format";
 import { JOB_STATUS_LABELS, legalNextStatuses } from "../lib/jobStateMachine";
 import { DispatchBreakdown } from "../components/DispatchBreakdown";
+import { JobEstimates } from "../components/JobEstimates";
 import type { JobLineItem, JobLineItemInput, JobLineItemKind, JobStatus } from "../types/api";
 
 export function JobDetailPage() {
@@ -188,6 +189,8 @@ export function JobDetailPage() {
           </table>
         )}
       </Card>
+
+      {canWrite && <JobEstimates jobId={id} />}
 
       {canWrite && <DispatchSuggestions jobId={id} technicianId={job.technician_id} />}
 

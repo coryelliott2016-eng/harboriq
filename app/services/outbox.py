@@ -112,6 +112,21 @@ def _build_email(
             attachments,
         )
 
+    if event_type == "estimate.send":
+        # Staff sent an estimate: link the customer to their portal's
+        # Estimates tab, where approval issues its own short-lived scoped
+        # token. No approval capability is embedded in the email itself.
+        link = payload["portal_url"]
+        return (
+            payload.get("customer_email") or "",
+            "Your service estimate is ready for review",
+            "Your service estimate is ready. Review the line items and approve "
+            f"it in your customer portal: {link}\n\n"
+            "Nothing is charged when you approve; the shop will send an invoice "
+            "once the work is complete. Reply to this email with any questions.",
+            [],
+        )
+
     if event_type == "invoice.dunning_reminder":
         # Phase 8 dunning sweep: a lighter-weight nudge, no PDF re-attached
         # (the customer already received one when the invoice was sent).
