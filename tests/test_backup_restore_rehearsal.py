@@ -46,6 +46,79 @@ def _tool_on_path(name: str) -> bool:
     return shutil.which(name) is not None
 
 
+@pytest.fixture(autouse=True)
+def _truncate():
+    """This module shells out to scripts directly; it doesn't need DB truncation."""
+    yield
+
+
+def test_rehearsal_normalizes_sqlalchemy_urls_before_shelling_out(tmp_path):
+    """SQLAlchemy-style URL schemes must be rewritten before psql/pg_dump see them."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    url_log = tmp_path / "db_urls.log"
+
+    fake_psql = fake_bin / "psql"
+    fake_psql.write_text(
+        """#!/usr/bin/env python3
+import os
+import sys
+from pathlib import Path
+
+Path(os.environ["REHEARSAL_URL_LOG"]).open("a").write(f"psql {sys.argv[1]}\\n")
+query = " ".join(sys.argv[2:])
+if "SELECT version_num FROM alembic_version" in query:
+    print("0023_marketing_leads")
+elif "SELECT COUNT(*) FROM" in query:
+    print("1")
+"""
+    )
+    fake_psql.chmod(0o755)
+
+    fake_pg_dump = fake_bin / "pg_dump"
+    fake_pg_dump.write_text(
+        """#!/usr/bin/env python3
+import os
+import sys
+from pathlib import Path
+
+Path(os.environ["REHEARSAL_URL_LOG"]).open("a").write(f"pg_dump {sys.argv[1]}\\n")
+print("-- fake dump --")
+"""
+    )
+    fake_pg_dump.chmod(0o755)
+
+    bash_path = shutil.which("bash")
+    assert bash_path is not None
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["REHEARSAL_URL_LOG"] = str(url_log)
+    env["REHEARSAL_ADMIN_URL"] = "postgres://admin@db.example:5432/postgres?sslmode=require"
+    env["REHEARSAL_SOURCE_URL"] = (
+        "postgresql+psycopg://svc@db.example:5432/harboriq?application_name=rehearsal"
+    )
+    env["REHEARSAL_SCRATCH_DB"] = "harboriq_rehearsal_unit"
+
+    result = subprocess.run(  # noqa: S603 -- executable path is resolved up front; env is test-controlled
+        [bash_path, str(REHEARSAL_SCRIPT)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+
+    log_text = url_log.read_text()
+    assert "postgres://" not in log_text
+    assert "+psycopg" not in log_text
+    assert "pg_dump postgresql://svc@db.example:5432/harboriq?application_name=rehearsal" in log_text
+    assert "psql postgresql://admin@db.example:5432/postgres?sslmode=require" in log_text
+    assert "psql postgresql://admin@db.example:5432/harboriq_rehearsal_unit?sslmode=require" in log_text
+
+
 @pytest.mark.skipif(
     not os.environ.get("REHEARSAL_ADMIN_URL"),
     reason="REHEARSAL_ADMIN_URL not set — rehearsal gate skipped (set it in CI to keep blocking)",

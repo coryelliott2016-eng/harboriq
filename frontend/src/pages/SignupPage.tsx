@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth";
 import { ApiError } from "../lib/api";
 import { Button, ErrorBanner, Field, inputClass } from "../components/ui";
+import { PRIVACY_URL, TERMS_URL } from "../lib/marketingSite";
 
 export function SignupPage() {
   const { user, signup } = useAuth();
@@ -100,7 +101,7 @@ export function SignupPage() {
             <span>
               I agree to the{" "}
               <a
-                href="https://harboriq.com/#/terms"
+                href={TERMS_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-slate-700 underline"
@@ -109,7 +110,7 @@ export function SignupPage() {
               </a>{" "}
               and{" "}
               <a
-                href="https://harboriq.com/#/privacy"
+                href={PRIVACY_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-slate-700 underline"

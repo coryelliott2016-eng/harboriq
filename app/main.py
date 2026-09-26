@@ -21,7 +21,7 @@ init_sentry()
 
 app = FastAPI(
     title="HarborIQ",
-    version="0.1.0",
+    version="0.2.0",
     description="Marine service operating system (corrected scaffold).",
 )
 
@@ -53,7 +53,7 @@ app.include_router(api_router)
 
 @app.get("/")
 def root():
-    return {"name": "HarborIQ", "version": "0.1.0", "docs": "/docs"}
+    return {"name": "HarborIQ", "version": "0.2.0", "docs": "/docs"}
 
 
 @app.get("/metrics")
