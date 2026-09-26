@@ -42,35 +42,17 @@ jobs:
           BEFORE: ${{ github.event.before }}
           ACTOR: ${{ github.actor }}
           REPO: ${{ github.repository }}
-          CI_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/ci.yml
+          AUDIT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
           COMMIT_URL="${{ github.server_url }}/${REPO}/commit/${SHA}"
           ZERO_SHA="0000000000000000000000000000000000000000"
+          CI_RUN_URL=""
+          CI_RUN_STATUS=""
 
           SUBJECT=$(git log -1 --format=%s "${SHA}")
           BODY=$(git log -1 --format=%b "${SHA}")
-
-          CI_RUN_URL=""
-          for _ in $(seq 1 12); do
-            CI_RUN_URL=$(gh run list \
-              --repo "${REPO}" \
-              --workflow ci.yml \
-              --commit "${SHA}" \
-              --json url \
-              --jq '.[0].url // ""' 2>/dev/null || true)
-            if [ -n "${CI_RUN_URL}" ]; then
-              break
-            fi
-            sleep 5
-          done
-
-          if [ -n "${CI_RUN_URL}" ]; then
-            CI_RUN_LINK="[$CI_RUN_URL]($CI_RUN_URL)"
-          else
-            CI_RUN_LINK="[CI workflow page]($CI_WORKFLOW_URL)"
-          fi
 
           if [ "${BEFORE}" = "${ZERO_SHA}" ] || [ -z "${BEFORE}" ]; then
             COMPARE_URL="${COMMIT_URL}"
@@ -80,7 +62,31 @@ jobs:
             FILES=$(git diff --stat "${BEFORE}" "${SHA}" 2>/dev/null | tail -1 || echo "unknown (force-push rewrote history)")
           fi
 
-          cat > /tmp/issue_body.md <<EOF
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            CI_MATCH=$(
+              gh api "repos/${REPO}/actions/runs?event=push&branch=master&per_page=30" \
+                --jq '.workflow_runs[]
+                  | select(.name == "CI" and .head_sha == env.SHA)
+                  | [.html_url, (if .status == "completed" then .conclusion else .status end)]
+                  | @tsv' \
+                | head -n 1
+            ) || true
+
+            if [ -n "${CI_MATCH}" ]; then
+              IFS=$'\t' read -r CI_RUN_URL CI_RUN_STATUS <<<"${CI_MATCH}"
+              break
+            fi
+
+            sleep 3
+          done
+
+          if [ -n "${CI_RUN_URL}" ]; then
+            CI_ROW="| CI workflow | [${CI_RUN_STATUS}](${CI_RUN_URL}) |"
+          else
+            CI_ROW="| CI workflow | not found yet; check the Actions tab for the push-matched CI run |"
+          fi
+
+          cat > /tmp/issue_body.md <<EOF2
           A commit was pushed directly to \`master\` with no branch-protection gate (H-6, still blocked pending a GitHub plan resolution -- see \`.github/CODEOWNERS\`).
 
           This issue is an automated record, not an accusation -- direct pushes are the expected workflow on this repo right now. Its only purpose is to make sure a human sees every push, quickly, so two people or sessions never silently overwrite each other's work again (this happened once already: see the 2026-08-05 security audit's "coordination note").
@@ -92,7 +98,8 @@ jobs:
           | Subject | ${SUBJECT} |
           | Diff | [compare view]($COMPARE_URL) |
           | Files changed | ${FILES} |
-          | CI run | ${CI_RUN_LINK} |
+          | Audit run | [$AUDIT_RUN_URL]($AUDIT_RUN_URL) |
+          ${CI_ROW}
 
           <details><summary>Full commit message</summary>
 
@@ -103,7 +110,7 @@ jobs:
           </details>
 
           Close this issue once you've confirmed the push is expected and CI is green.
-          EOF
+          EOF2
 
           gh issue create \
             --repo "${REPO}" \

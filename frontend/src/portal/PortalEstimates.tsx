@@ -11,9 +11,11 @@ import type { PortalEstimate } from "../types/api";
 const STATUS_TONE: Record<string, "slate" | "green" | "amber" | "red" | "blue"> = {
   draft: "slate",
   sent: "blue",
+  viewed: "blue",
   approved: "green",
-  rejected: "red",
+  declined: "red",
   expired: "slate",
+  invoiced: "green",
 };
 
 export function PortalEstimates() {
