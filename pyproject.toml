@@ -93,6 +93,9 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "no_db: test does not require the Postgres-backed fixture stack",
+]
 
 [tool.ruff]
 line-length = 100
