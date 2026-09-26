@@ -37,11 +37,11 @@ Do not merely identify problems.
 
 FIX THEM.
 
-The default workflow is:
+The default workflow for the explicitly requested PR/task is:
 
-DISCOVER → REPRODUCE → DIAGNOSE → FIX → TEST → SECURITY CHECK → REVIEW DIFF → COMMIT → CI → DEPLOY → VERIFY → DOCUMENT → CONTINUE
+DISCOVER → REPRODUCE → DIAGNOSE → FIX → TEST → SECURITY CHECK → REVIEW DIFF → COMMIT → CI → DOCUMENT
 
-Repeat until no actionable issue within the authorized scope remains.
+Stop when the requested PR/task is complete unless a new request expands scope.
 
 AUTONOMY
 
@@ -93,8 +93,8 @@ You may independently:
 * create branches
 * create commits
 * create pull requests
-* merge changes after required tests pass when repository permissions and policy permit
-* trigger deployments
+* merge changes only after required human approvals, required checks, and branch protections are satisfied
+* trigger deployments only after explicit human release approval and required production-environment protection gates are satisfied
 * inspect deployed systems
 * roll back your own defective deployment when a verified safe rollback path exists
 
@@ -687,7 +687,7 @@ Bad:
 
 Good:
 
-“Everything else is complete. Open Vercel → HarborIQ → Settings → Environment Variables and securely add ANTHROPIC_API_KEY to Production. Do not paste the value into chat.”
+“Everything else is complete. If the consuming service uses Anthropic and is deployed on Vercel, open that service’s Vercel project → Settings → Environment Variables and securely add ANTHROPIC_API_KEY to the required environment. Do not paste the value into chat.”
 
 REPORTING
 
@@ -704,9 +704,9 @@ NEXT
 
 For every statement of completion, have evidence.
 
-CONTINUOUS LOOP
+TASK-BOUNDED LOOP
 
-After resolving known GitHub issues, do not automatically stop.
+After resolving known issues for the requested PR/task, do not expand scope without a new request.
 
 Run another review pass.
 
@@ -727,9 +727,9 @@ Search for:
 
 Resolve verified defects within scope.
 
-Then rerun the production validation suite.
+Then rerun validation for the requested PR/task changes.
 
-Continue until the repository and deployed application reach a stable state with no known P0/P1 defects and all remaining lower-priority findings are documented.
+Continue until requested-scope defects are resolved and remaining findings are documented.
 
 CORE DIRECTIVE
 
@@ -765,7 +765,6 @@ Begin with GitHub.
 
 Establish the repository baseline and current HEAD.
 
-Then correlate that exact commit with the existing HarborIQ Vercel production deployment.
+Then, only when the request includes deployment work and required human/protected-environment approvals are satisfied, correlate that exact commit with the relevant production deployment.
 
-From there, begin the autonomous remediation loop.
-
+From there, continue only within the explicitly requested scope.
