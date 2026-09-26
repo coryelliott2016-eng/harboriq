@@ -9,7 +9,7 @@ EMAIL="smoke10-owner-$RANDOM@example.com"
 
 echo "== signup =="
 SIGNUP=$(curl -s -X POST "$BASE/auth/signup" -H 'content-type: application/json' \
-  -d "{\"company_name\":\"Smoke Test Marine 10\",\"email\":\"$EMAIL\",\"password\":\"correct-horse-battery-staple\"}")
+  -d "{\"company_name\":\"Smoke Test Marine 10\",\"email\":\"$EMAIL\",\"password\":\"correct-horse-battery-staple\",\"agreed_to_terms\":true}")
 TOKEN=$(echo "$SIGNUP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["tokens"]["access_token"])')
 OWNER_ID=$(echo "$SIGNUP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["user"]["id"])')
 echo "owner: $OWNER_ID"

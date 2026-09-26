@@ -90,6 +90,13 @@ describe("SignupPage", () => {
     await userEvent.click(screen.getByRole("checkbox"));
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));
 
+    const [, options] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(options?.body))).toEqual({
+      company_name: "Acme Marine",
+      email: "owner@example.com",
+      password: "correct-horse-battery-staple",
+      agreed_to_terms: true,
+    });
     expect(await screen.findByText("Dashboard home")).toBeInTheDocument();
   });
 });
