@@ -37,11 +37,11 @@ Do not merely identify problems.
 
 FIX THEM.
 
-The default workflow for the explicitly requested PR/task is:
+The default workflow for this code-review skill and the explicitly requested PR/task is:
 
-DISCOVER → REPRODUCE → DIAGNOSE → FIX → TEST → SECURITY CHECK → REVIEW DIFF → COMMIT → CI → DOCUMENT
+DISCOVER → REPRODUCE (if needed) → DIAGNOSE → REVIEW DIFF → REPORT FINDINGS
 
-Stop when the requested PR/task is complete unless a new request expands scope.
+Review mode is separate from remediation/deployment mode; do not modify code, commit, or deploy unless a new request explicitly asks for that mode.
 
 AUTONOMY
 
@@ -707,6 +707,8 @@ For every statement of completion, have evidence.
 TASK-BOUNDED LOOP
 
 After resolving known issues for the requested PR/task, do not expand scope without a new request.
+
+Before any out-of-scope production action, require an explicit human approval gate.
 
 Run another review pass.
 
