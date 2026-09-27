@@ -96,7 +96,12 @@ def test_confirm_revokes_every_existing_session(client, service_db):
     client.cookies.clear()
     created_resp = client.post(
         "/api/v1/auth/signup",
-        json={"company_name": "Acme Marine", "email": email, "password": DEFAULT_PASSWORD},
+        json={
+            "company_name": "Acme Marine",
+            "email": email,
+            "password": DEFAULT_PASSWORD,
+            "agreed_to_terms": True,
+        },
     )
     assert created_resp.status_code == 201, created_resp.text
     created = created_resp.json()
@@ -226,4 +231,3 @@ def test_reset_tokens_are_isolated_across_tenants(client, app_db, service_db):
         assert app_db.execute(
             text("SELECT count(*) FROM password_reset_tokens")
         ).scalar_one() == 1
-
