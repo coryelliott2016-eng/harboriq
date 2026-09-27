@@ -21,19 +21,19 @@ Current repo/GitHub evidence:
 
 ## 2) One Vercel remediation PR only
 
-Status: **Partially complete (duplicate merges already happened)**
+Status: **Complete (all remediation PRs merged)**
 
 Requested target:
 - Keep PR #92 as the single remediation candidate and close #94/#95 as duplicates.
 
 Observed current state:
-- PR #92: open (non-draft), branch `copilot/fix-github-actions-job-again`, head SHA `d8be8c297a6a8aafbf50a89bd3a642a362f5957d`
+- PR #92: merged (closed), merged head SHA `e4ad2d4c5bbe44517a164939755b15e1c7298010`
 - PR #94: merged (closed)
 - PR #95: merged (closed)
 
 Evidence for content correctness:
 - `vercel.json` is strict valid JSON and matches guarded SPA config (`tests/test_vercel_config.py`).
-- CI success on PR #92 branch head SHA: run `36213074083` (workflow `CI`) concluded `success`.
+- CI success on the pre-merge PR #92 branch SHA: run `36213074083` (workflow `CI`) concluded `success`.
 - CI success on #95 branch head SHA: run `36169758615` concluded `success`.
 
 Remediation required:
@@ -89,12 +89,12 @@ Required additional evidence:
 Status: **Not approved yet**
 
 Release decision record (must be complete before go-live):
-- CI pass: **PARTIAL** (PR branch CI evidence exists; final release SHA still pending)
+- CI pass: **PARTIAL** (PR branch CI evidence exists for remediation commits; post-merge release verification still pending)
 - Domain verified: **FAIL/BLOCKED**
 - Runtime health checks: **BLOCKED**
 - Production migration state: **BLOCKED**
 - Smoke test results: **BLOCKED**
 - Backup/recovery test: **BLOCKED**
-- Final approved release SHA: **PENDING**
+- Final approved release SHA: `e4ad2d4c5bbe44517a164939755b15e1c7298010`
 
 Go-live decision: **NO-GO** until every gate is green with attached evidence.
