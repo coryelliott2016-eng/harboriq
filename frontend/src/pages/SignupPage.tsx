@@ -33,7 +33,7 @@ export function SignupPage() {
         email,
         password,
         full_name: fullName || undefined,
-        agreed_to_terms: true,
+        agreed_to_terms: agreedToTerms,
       });
       navigate("/", { replace: true });
     } catch (err) {

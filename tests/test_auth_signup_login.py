@@ -104,16 +104,21 @@ def test_signup_rejects_a_weak_password(client, password):
     assert resp.status_code == 422
 
 
-@pytest.mark.parametrize("body", [
-    {"company_name": "Acme Marine", "email": unique_email(), "password": DEFAULT_PASSWORD},
-    {
+@pytest.mark.parametrize(
+    ("agreed_to_terms", "include_field"),
+    [
+        (False, True),
+        (None, False),
+    ],
+)
+def test_signup_requires_explicit_terms_agreement(client, agreed_to_terms, include_field):
+    body = {
         "company_name": "Acme Marine",
         "email": unique_email(),
         "password": DEFAULT_PASSWORD,
-        "agreed_to_terms": False,
-    },
-])
-def test_signup_requires_explicit_terms_agreement(client, body):
+    }
+    if include_field:
+        body["agreed_to_terms"] = agreed_to_terms
     resp = client.post("/api/v1/auth/signup", json=body)
     assert resp.status_code == 422
 
