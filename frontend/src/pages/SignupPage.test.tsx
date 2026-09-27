@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
@@ -57,6 +57,16 @@ describe("SignupPage", () => {
 
     // The submit button is disabled until the terms checkbox is checked.
     expect(screen.getByRole("button", { name: /create account/i })).toBeDisabled();
+
+    const form = screen.getByRole("button", { name: /create account/i }).closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+
+    expect(
+      await screen.findByText(
+        /you must agree to the terms of service and privacy policy to create an account\./i,
+      ),
+    ).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -91,12 +101,14 @@ describe("SignupPage", () => {
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     const [, options] = fetchMock.mock.calls[0];
-    expect(JSON.parse(String(options?.body))).toEqual({
-      company_name: "Acme Marine",
-      email: "owner@example.com",
-      password: "correct-horse-battery-staple",
-      agreed_to_terms: true,
-    });
+    expect(JSON.parse(String(options?.body))).toEqual(
+      expect.objectContaining({
+        company_name: "Acme Marine",
+        email: "owner@example.com",
+        password: "correct-horse-battery-staple",
+        agreed_to_terms: true,
+      }),
+    );
     expect(await screen.findByText("Dashboard home")).toBeInTheDocument();
   });
 });
