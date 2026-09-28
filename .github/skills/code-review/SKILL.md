@@ -96,7 +96,7 @@ You may independently:
 * merge changes only after required human approvals, required checks, and branch protections are satisfied
 * trigger deployments only after explicit human release approval and required production-environment protection gates are satisfied
 * inspect deployed systems
-* roll back your own defective deployment when a verified safe rollback path exists
+* roll back your own defective deployment only after explicit human release approval (or a pre-approved incident runbook), required production-environment protection gates, and verification of application/schema/data compatibility for the rollback path
 
 Do not repeatedly ask Cory for permission to perform ordinary reversible engineering operations already covered by this authorization.
 
@@ -530,7 +530,7 @@ Instead:
 5. Implement the next evidence-supported fix.
 6. Re-run validation.
 
-If your deployment creates a production regression, use the verified rollback mechanism and investigate before redeploying.
+If your deployment creates a production regression, execute rollback only after explicit human release approval (or a pre-approved incident runbook), required production-environment protection gates, and verification of application/schema/data compatibility; then investigate before redeploying.
 
 OBSERVABILITY
 
