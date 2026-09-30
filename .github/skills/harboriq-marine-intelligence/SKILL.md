@@ -435,6 +435,225 @@ $$\text{MANUFACTURER} \rightarrow \text{PRODUCT FAMILY} \rightarrow \text{MODEL}
 
 ---
 
+## Accuracy, Consistency & Reliability Control System
+
+The HarborIQ Intelligence Fabric must be engineered around three non-negotiable requirements which take absolute precedence over speed, conversational fluency, convenience, and model preference:
+* **Accuracy:** Information must be supported by the strongest available evidence.
+* **Consistency:** Equivalent facts and evidence should produce materially consistent conclusions regardless of which underlying AI provider processes the request.
+* **Reliability:** The system must fail safely, expose uncertainty, preserve provenance, and remain operational when individual models, providers, integrations, or data sources fail.
+
+*A confident answer is not necessarily an accurate answer.*
+
+### 1. Evidence Before Generation
+For consequential technical questions, HarborIQ must use an evidence-first architecture. Do not ask a language model to answer from memory when authoritative information can reasonably be retrieved.
+
+$$\text{QUESTION} \rightarrow \text{IDENTIFY EQUIPMENT} \rightarrow \text{RETRIEVE AUTHORITATIVE INFORMATION} \rightarrow \text{VALIDATE SOURCE} \rightarrow \text{VERIFY MODEL / SERIAL / CONFIG RANGE} \rightarrow \text{CHECK REVISION / SUPERSESSION}$$
+$$\downarrow$$
+$$\text{RETRIEVE VESSEL HISTORY} \leftarrow \text{COLLECT DIAGNOSTIC EVIDENCE} \leftarrow \text{GENERATE ANALYSIS} \leftarrow \text{VERIFY ANALYSIS VS EVIDENCE} \leftarrow \text{RETURN ANSWER WITH PROVENANCE}$$
+
+*The AI reasons over evidence. It does not become the evidence.*
+
+### 2. Source of Truth Hierarchy
+Every fact should have an identifiable source class. For equipment-specific technical questions, prioritize:
+1. Active manufacturer safety information and recalls
+2. Current applicable manufacturer technical/service bulletins
+3. Current manufacturer service manuals
+4. Manufacturer diagnostic procedures
+5. Manufacturer installation and rigging documentation
+6. Manufacturer specifications
+7. Manufacturer parts information
+8. Applicable regulatory requirements
+9. Applicable licensed technical standards
+10. Actual diagnostic measurements from the vessel
+11. Verified HarborIQ service records
+12. Verified technician observations
+13. Validated HarborIQ machine-learning outputs
+14. Established independent technical references
+15. AI inference
+
+*AI inference must never silently override stronger evidence.*
+
+### 3. Provenance For Every Important Fact
+HarborIQ should maintain provenance internally for consequential technical claims. Store and verify:
+* Source & Publisher
+* Document, Document number, Revision
+* Publication date, Effective date, Retrieved date
+* Applicable model, Applicable serial-number range
+* Section / page / location
+* Data timestamp
+* Vessel identifier, Equipment identifier
+* Method of retrieval & Verification status
+
+$$\text{CLAIM} \rightarrow \text{EVIDENCE} \rightarrow \text{SOURCE} \rightarrow \text{EQUIPMENT} \rightarrow \text{DECISION}$$
+
+A technician must always be able to trace *why* HarborIQ made an important recommendation.
+
+### 4. Claim-Level Verification
+Do not verify only the final response. Verify important individual claims:
+* Was that specification retrieved from an authoritative source?
+* Does the document apply to this exact engine?
+* Is the document current?
+* Was the value extracted correctly?
+* Does another authoritative source conflict?
+
+Only then should the specification be presented as verified.
+
+### 5. Equipment Applicability Engine
+A technically correct document can still produce an incorrect answer if applied to the wrong equipment. Before applying model-specific information, compare available:
+* Manufacturer, Product family, Model, Model year
+* Serial number, Horsepower, Engine configuration, Production range
+* Control system, ECU version, Installed firmware, Rigging configuration, Installed options
+
+Do not automatically extrapolate between similar models. If applicability cannot be established, label it: **Applicability not verified**.
+
+### 6. Revision and Supersession Control
+Before relying on technical documentation, determine whether:
+* A newer revision exists, has been superseded, or the bulletin is canceled.
+* The procedure changed, parts numbers were superseded, or a firmware update modifies the procedure.
+* The applicable serial-number range changed.
+
+HarborIQ should prefer current applicable information while retaining historical versions for audit purposes. Never silently combine conflicting revisions.
+
+### 7. Cross-Source Validation
+For high-impact technical information, compare multiple authoritative sources (e.g., Service bulletin vs. Service manual vs. Parts catalog vs. Diagnostic measurements).
+* If sources agree, confidence increases.
+* If they conflict, HarborIQ must expose the conflict.
+* *Rule:* Do not silently choose whichever source produces the easiest answer.
+
+### 8. Multi-Model Verification
+For complex or consequential reasoning, HarborIQ may use independent AI models:
+
+$$\text{MODEL A (Candidate Analysis)} \rightarrow \text{MODEL B (Independent Review)} \rightarrow \text{VERIFICATION ENGINE (Compare both vs. Authoritative Evidence)}$$
+
+The second model is not automatically correct, and model agreement is not proof. Authoritative evidence remains controlling.
+
+### 9. Consistency Engine
+The same verified inputs should produce materially consistent technical conclusions regardless of which provider performs the reasoning. Normalize:
+* System instructions, Retrieved evidence, Structured context
+* Terminology, Units, Output schemas
+* Confidence terminology, Tool interfaces, Safety rules
+
+Provider responses should be transformed into HarborIQ’s canonical internal representation before being presented to users. This reduces provider-specific behavioral drift.
+
+### 10. Canonical Data Model
+Maintain standardized, authoritative representations for: Vessels, Engines, Equipment, Components, Fault codes, Measurements, Units, Parts, Service procedures, Bulletins, Technicians, Customers, Work orders, Repairs, Maintenance, and Diagnostic outcomes.
+
+Do not allow different AI providers to independently redefine these objects.
+
+### 11. Unit Normalization
+Technical errors caused by unit conversion can create serious consequences. Normalize and explicitly track units including: Voltage, Current, Resistance, Pressure, Temperature, Torque, Distance, Volume, Fuel consumption, Engine speed, Time, and Mass.
+* Do not silently convert measurements without preserving the original value.
+* Where precision matters, use deterministic calculation rather than language-model arithmetic.
+
+### 12. Structured AI Output
+AI systems should return machine-readable structured data for consequential workflows whenever practical. Ensure internal representations contain:
+* `diagnosis_status`, `evidence`, `candidate_causes`, `tests_required`, `measurements`
+* `manufacturer_sources`, `applicability`, `confidence_class`, `conflicting_evidence`
+* `recommended_next_action`, `human_approval_required`
+
+### 13. Deterministic Systems for Deterministic Tasks
+Do not use generative AI when ordinary software can provide a more reliable answer. Use deterministic systems for:
+* Pricing calculations, Taxes, Labor calculations, Parts markup, Invoice totals
+* Unit conversion, Permissions, Serial-number matching, Maintenance-date calculations
+* Database constraints, Financial transactions, Authorization, Business rules
+
+AI may explain these results but should not independently calculate or control them.
+
+### 14. Machine-Learning Validation
+No ML model should enter production merely because it performs well on training data. Require:
+* Training/Validation datasets, Holdout testing, Performance metrics
+* Error analysis, Bias analysis, Calibration, Versioning, Reproducibility
+* Production monitoring, Drift detection, Rollback capability
+* For predictive maintenance and failure prediction, false positives and false negatives must both be measured.
+
+### 15. Confidence Calibration
+Never invent confidence percentages. Use standardized confidence classes:
+* **VERIFIED:** Direct authoritative evidence establishes the conclusion.
+* **HIGH CONFIDENCE:** Strong evidence supports the conclusion with minimal unresolved uncertainty.
+* **MODERATE CONFIDENCE:** Evidence supports the conclusion, but meaningful uncertainty remains.
+* **LOW CONFIDENCE:** Available evidence is incomplete or weak.
+* **INSUFFICIENT EVIDENCE:** HarborIQ cannot responsibly determine the answer.
+
+Confidence should derive from evidence quality, not model tone.
+
+### 16. Contradiction Detection
+Before finalizing consequential recommendations, check:
+* Does another retrieved source disagree? Does vessel history contradict the assumption?
+* Does the measurement contradict the diagnosis? Does the serial number fall outside the bulletin range?
+* Does a newer document supersede this procedure? Does the recommended part fit the identified equipment?
+* Does another AI-generated statement conflict with established evidence?
+
+If a contradiction remains unresolved, surface it immediately.
+
+### 17. Hallucination Firewall
+Before exposing high-impact generated information, validate factual entities (e.g., Part numbers, Fault codes, Torque specifications, Serial ranges, Bulletin numbers, Technical specs, Maintenance intervals, Manufacturer procedures, Regulatory requirements). If HarborIQ cannot verify them, label them accordingly or omit them. Never fabricate a plausible-looking identifier.
+
+### 18. Fail Closed for Safety-Critical Information
+When critical information cannot be verified, HarborIQ should stop rather than improvise. This applies to: Fuel systems, High-current electrical, Shore power, Battery banks, High-pressure injection, Steering, Throttle controls, Shift controls, Fire suppression, Carbon monoxide, Propulsion safety, and Critical structural systems.
+* *Standard Response:* *"Insufficient verified information to recommend this procedure safely. Manufacturer documentation or additional diagnostic information is required."*
+
+### 19. Freshness Control
+Track and validate freshness metadata:
+* Retrieved date, Publication date, Revision, Expiration, Last validation
+* Supersession status, API synchronization status
+
+Technical information that may have changed should be revalidated before consequential use.
+
+### 20. Provider Health Monitoring
+Continuously monitor AI-provider and integration reliability. Track: Availability, Latency, Timeouts, Malformed responses, Tool-call/Structured-output/Retrieval failures, Error rates, Fallback frequency, and Provider-specific accuracy benchmarks.
+
+If a provider degrades, routing should automatically move workloads to a validated alternative.
+
+### 21. Circuit Breakers
+If a provider, connector, or model begins returning abnormal results:
+
+$$\text{Detect Anomaly} \rightarrow \text{Stop Routing affected workloads} \rightarrow \text{Switch to Validated Fallback} \rightarrow \text{Record Incident} \rightarrow \text{Preserve Evidence} \rightarrow \text{Require Health Check Success}$$
+
+Do not continue using a failing provider merely because it returns HTTP success responses.
+
+### 22. Fallback Without Quality Collapse
+Fallback routing must be capability-aware:
+
+$$\text{PRIMARY MODEL FAILURE} \rightarrow \text{CHECK TASK REQUIREMENTS} \rightarrow \text{SELECT VALIDATED COMPATIBLE MODEL} \rightarrow \text{RE-RUN REQUIRED VERIFICATION} \rightarrow \text{RETURN RESULT}$$
+
+If no validated alternative exists, state that the capability is temporarily unavailable. Do not silently substitute an incapable model.
+
+### 23. Golden Test Dataset
+Maintain a HarborIQ evaluation dataset containing known correct examples of marine diagnostics, fault-code interpretation, bulletin applicability, manual retrieval, parts identification, electrical/network troubleshooting, maintenance schedules, estimate calculations, and service documentation.
+
+Run this dataset against new models, prompts, retrieval/embedding systems, agent versions, connector changes, and production releases.
+
+### 24. Regression Testing
+Evaluate every significant AI-system change against previous production. Measure accuracy, citation correctness, retrieval precision/recall, tool-use accuracy, structured-output validity, hallucination rate, latency, cost, safety behavior, and consistency. Do not promote a model that improves conversational quality at the cost of technical accuracy.
+
+### 25. Shadow Evaluation
+New models should run in parallel alongside production models without controlling the user's result to evaluate new AI technology using real task distributions without immediately trusting it:
+
+$$\text{PRODUCTION MODEL (User Response)} + \text{CANDIDATE MODEL (Shadow Response)} \rightarrow \text{EVALUATION ENGINE (Compare)}$$
+
+### 26. Audit Trail
+For consequential AI-assisted decisions, preserve: User request, authorized context, retrieved evidence, sources, model/provider details, prompt/system version, tool calls, generated recommendation, confidence classification, human approval, final technician decision, repair performed, verified outcome, and corrections.
+
+### 27. Correction System
+When HarborIQ is wrong, preserve the correction. Do not simply regenerate and erase the error. Record: Original recommendation, evidence originally available, what was incorrect, correct result, who verified it, supporting evidence, and repair outcome.
+
+### 28. Production Reliability Targets
+Monitor system/retrieval/provider availability, latency, error rates, tool-call success, citation completeness, structured-output validity, fallback success, technical-answer verification rate, and critical hallucination incidents on operational dashboards.
+
+### 29. Observability
+Every request must generate sufficient telemetry to answer: What happened? Which model/tools? What evidence? Latency? Failures? Fallback activated? Cost? Answer verified? User corrected? Repair outcome?
+* Observability must never unnecessarily expose customer data, credentials, or secrets.
+
+### 30. Human Authority
+AI supports professional judgment. Polish must not conceal uncertainty. The technician must always clearly see:
+* **What HarborIQ knows**
+* **What HarborIQ found**
+* **What HarborIQ inferred**
+* **What HarborIQ does not know**
+* **What should be verified next**
+
+---
+
 ## Technical Source Priority
 
 For equipment-specific technical questions, prioritize evidence approximately as follows:
@@ -546,6 +765,43 @@ Every interaction should make the vessel’s digital service record more useful,
 * **When evidence conflicts, expose the conflict.**
 * **When a technician verifies the physical system, preserve the result.**
 * **Never convert uncertainty into certainty merely to provide an answer.**
+
+---
+
+## Reliability Principle
+
+HarborIQ should prefer:
+* **"I don’t have enough verified information yet."** over *"This sounds like the answer."*
+* **"Here is Yamaha’s applicable procedure."** over *"Based on general knowledge..."*
+* **"These two authoritative sources conflict."** over silently selecting one.
+* **"Let’s measure it."** over *"Replace the part."*
+
+---
+
+## HarborIQ Trust Pipeline
+
+Every consequential technical answer should conceptually pass through:
+
+$$\text{IDENTITY} \rightarrow \text{AUTHORIZATION} \rightarrow \text{EQUIPMENT ID} \rightarrow \text{SOURCE RETRIEVAL} \rightarrow \text{SOURCE AUTHENTICATION} \rightarrow \text{APPLICABILITY CHECK} \rightarrow \text{FRESHNESS CHECK}$$
+$$\downarrow$$
+$$\text{AUDIT RECORD} \leftarrow \text{HUMAN-READABLE RESPONSE} \leftarrow \text{SAFETY CHECK} \leftarrow \text{CONFIDENCE CALIBRATION} \leftarrow \text{CLAIM VERIFICATION} \leftarrow \text{REASONING} \leftarrow \text{CONTRADICTION CHECK}$$
+$$\downarrow$$
+$$\text{REAL-WORLD OUTCOME} \rightarrow \text{FEEDBACK / EVALUATION}$$
+
+This pipeline applies regardless of whether the underlying intelligence comes from OpenAI, Anthropic, Gemini, AWS, Azure, an open-source model, a HarborIQ machine-learning model, or another future provider.
+
+---
+
+## Non-Negotiable Design Rule
+
+HarborIQ owns the **truth layer**.
+* **External AI models** provide reasoning capabilities.
+* **Manufacturers** provide authoritative equipment information.
+* **Technicians** provide real-world observations and measurements.
+
+HarborIQ connects those elements, verifies their relationships, preserves provenance, manages uncertainty, and maintains the system of record. **No individual AI provider is HarborIQ’s source of truth.**
+
+The ultimate objective is not for HarborIQ AI to sound intelligent. The objective is for technicians and marine businesses to be able to trust the information because HarborIQ can demonstrate where it came from, why it applies, how current it is, what evidence supports it, and what remains uncertain.
 
 ---
 
