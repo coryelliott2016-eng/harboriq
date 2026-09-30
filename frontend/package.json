@@ -65,6 +65,14 @@
       "uuid": "^11.1.1"
     },
     "@xmldom/xmldom": "0.9.12",
-    "fast-uri": "3.1.8"
+    "fast-uri": "3.1.8",
+    "undici": "7.29.1",
+    "eslint-plugin-jsx-a11y": {
+      "brace-expansion": "1.1.21"
+    },
+    "filelist": {
+      "brace-expansion": "2.1.7"
+    },
+    "brace-expansion": "5.0.12"
   }
 }
