@@ -48,6 +48,17 @@ order for a mobile-marine-mechanic-first wedge strategy (see
 `concepts/harboriq-deferred-items` in the project wiki for the raw backlog
 this is organized from).
 
+The product trajectory expands from **Marine Service OS → Marina/Facility OS
+→ Operational Intelligence → Connected Marine Network**. Build and validate
+the single-facility operations product before making cross-facility network
+liquidity a dependency of commercial launch.
+
+**Trust requirement across every phase:** HarborIQ must never present
+simulated, stale, inferred, or manually entered information as “real-time.”
+Occupancy, ETAs, predictions, and AI recommendations must expose their source,
+freshness, confidence, and provenance, and distinguish observed data from
+estimates or manual entries.
+
 ## Phase 8 — Payments & Billing Parity — **COMPLETE**
 - [x] Stripe Connect (Standard accounts, direct-charge pattern) so each
       onboarded tenant is its own merchant of record; falls back to the
@@ -489,7 +500,7 @@ this is organized from).
       existing table made it a small addition. Closes the gap flagged under
       Phase 13: "no archived/inactive flag or filter yet."
 
-## Phase 18 — Crypto Payment Rail (MVP) — **COMPLETE**
+## Phase 18 — Crypto Payment Rail (MVP) — **CRYPTO COMPLETE; RELEASE READINESS OPEN**
 - [x] **Licensed-processor stablecoin checkout, not custody.** `POST
       /invoices/{id}/crypto-payment-intent` (`app/api/v1/routes/
       crypto_payments.py`) is `require_operations`-gated and creates a
@@ -527,6 +538,19 @@ this is organized from).
       confirmed partial payment and duplicate replay idempotency, failed
       outcome isolation from the invoice, and cross-tenant read isolation.
 
+- [ ] **Audit the facility-intelligence branch.** Review
+      `copilot/harboriq-facility-operations-intelligence` and document
+      which facility-operations capabilities are implemented, tested, and
+      production-ready versus scaffolding, placeholders, or unverified
+      assumptions. Treat the audit as a gate before expanding that work.
+- [ ] **Establish protected-main governance.** Configure actual branch
+      protection or repository rules requiring review and passing status
+      checks before changes land on `master`. The post-push audit issue is
+      a compensating visibility control, not a gate; verify the protection
+      is active rather than treating audit issues as equivalent. Keep live
+      customer, payment, facility, and operational data behind this
+      release-control gate.
+
 ## Phase 19 — Asset Tokenization Layer (Exploratory) — **COMPLETE (draft-only, pending legal review)**
 - [x] **Draft-registration only; no financialized token behavior.** `POST
       /asset-tokens` lets an owner/admin record intent to possibly tokenize a
@@ -551,6 +575,79 @@ this is organized from).
       response, owner/admin authorization boundary, draft registration and
       ledger write, vessel validation, tenant isolation, absent mutation
       routes, and the database `status = 'draft'` check rejection.
+
+## Phase 20 — Facility Tenant Isolation & RLS Verification
+- [ ] Extend tenant-isolation and forced-RLS coverage to facilities, docks,
+      slips, appointments, and assets/equipment. Verify same-tenant access
+      and cross-tenant read/write denial at API and database boundaries.
+- [ ] Define and test explicit sharing boundaries for future HarborIQ
+      Network data; no tenant's operational or customer-level records become
+      visible to another tenant by default.
+
+## Phase 24 — Scheduling, Dispatch & Capacity Intelligence
+- [ ] Extend scheduling and dispatch from service jobs to facility
+      appointments, arrivals, queues, and dock/resource assignments.
+- [ ] Add predictive wait times and capacity optimization based on
+      operational data, clearly distinguishing estimates from observations
+      and exposing their freshness, confidence, and source.
+
+## Phase 27 — Marina, Vessel & Live Dock Operations
+- [ ] Connect vessel, slip, appointment, arrival, and departure workflows for
+      fixed-location marine facilities.
+- [ ] Add real-time dock occupancy only where supported by a verified live
+      source; display source and last-update time, and label manual or stale
+      occupancy accordingly.
+
+## Phase 28 — Facility Inventory, Assets & Maintenance
+- [ ] Extend existing inventory to facility assets and equipment, including
+      location, availability, utilization, and maintenance state.
+- [ ] Keep manually maintained, inferred, and sensor-reported status
+      distinguishable, with provenance and freshness visible to operators.
+
+## Phase 30 — Driver & Operator Notifications
+- [ ] Add reliable, configurable notifications for relevant appointment,
+      arrival, queue, dock-assignment, and operational status changes.
+- [ ] Provide automated driver/operator updates with delivery status and
+      safeguards against duplicate or misleading stale updates.
+
+## Phase 31 — Facility Reporting & Performance
+- [ ] Report facility throughput, dwell time, utilization, and operational
+      bottlenecks from traceable source data.
+- [ ] Add carrier/operator performance scoring with clear metric definitions,
+      data coverage, and source/freshness context; avoid presenting
+      incomplete data as a definitive score.
+
+## Phase 32 — AI Operational Assistant & Recommendations
+- [ ] Provide explainable recommendations for queue management, capacity,
+      scheduling, staffing, and maintenance.
+- [ ] Show supporting data, provenance, freshness, and confidence for each
+      recommendation; keep recommendations distinct from completed actions
+      and require appropriate operator approval for consequential changes.
+
+## Phase 33 — Marine Data & Integration Foundation
+- [ ] Establish integration patterns for AIS, GPS, IoT, and other relevant
+      marine-data sources, based on verified facility needs and providers.
+- [ ] Preserve tenant boundaries and source, timestamp, freshness, and
+      confidence metadata through ingestion; degrade transparently when a
+      source is unavailable or stale.
+
+## Phase 36 — Commercial Launch: Verified Single-Facility Product
+- [ ] Launch the verified single-facility Marina/Facility OS without requiring
+      HarborIQ Network participation or cross-facility liquidity.
+- [ ] Gate launch on the facility-branch audit, tenant/RLS verification,
+      protected-main controls, trustworthy presentation of operational data,
+      and applicable deployment and release checks.
+
+## Phase 37 — HarborIQ Network / Marketplace
+- [ ] Add cross-facility discovery, referrals, and capacity exchange as a
+      distinct network product after the single-facility product is
+      commercially usable.
+- [ ] Build on explicit sharing boundaries and opt-in participation; do not
+      expose facility, customer, or operational data outside its authorized
+      scope.
+- [ ] Validate participating-facility supply, demand, and marketplace
+      liquidity independently; keep marketplace readiness out of the Phase
+      36 single-facility launch gate.
 
 ## Differentiators to preserve/lean into throughout (not incumbents' turf)
 - Fully explainable AI dispatch scoring (factor-by-factor breakdown) vs.
