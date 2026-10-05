@@ -88,6 +88,20 @@ export function AppShell() {
               Messages
             </NavLink>
           )}
+          {canManageOperations(user?.role) && (
+            <NavLink
+              to="/marine-signals"
+              className={({ isActive }) =>
+                `rounded-md px-3 py-2 text-sm font-medium ${
+                  isActive
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`
+              }
+            >
+              Marine Signals
+            </NavLink>
+          )}
           {canManageUsers(user?.role) && (
             <NavLink
               to="/settings/billing"

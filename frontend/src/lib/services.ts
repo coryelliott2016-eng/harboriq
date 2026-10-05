@@ -43,6 +43,11 @@ import type {
   JobTimeEntry,
   LocationPingInput,
   LocationPingOut,
+  MarineSignal,
+  MarineSignalCategory,
+  MarineSignalMetrics,
+  MarineSignalProfile,
+  MarineSignalSource,
   Message,
   MessageCreate,
   OnMyWayResponse,
@@ -368,6 +373,60 @@ export const purchaseOrdersApi = {
   receive: (id: string, body: ReceivePurchaseOrderInput) =>
     api.post<PurchaseOrder>(`/purchase-orders/${id}/receive`, body),
   cancel: (id: string) => api.post<PurchaseOrder>(`/purchase-orders/${id}/cancel`, {}),
+};
+
+export const marineSignalsApi = {
+  sources: () => api.get<MarineSignalSource[]>("/marine-signals/sources"),
+  createSource: (body: {
+    name: string;
+    category: MarineSignalCategory;
+    source_url: string;
+    feed_url: string;
+    terms_url: string;
+    terms_confirmed: true;
+  }) => api.post<MarineSignalSource>("/marine-signals/sources", body),
+  setSourceEnabled: (id: string, enabled: boolean) =>
+    apiRequest<MarineSignalSource>(`/marine-signals/sources/${id}/enabled`, {
+      method: "PATCH",
+      query: { enabled },
+    }),
+  signals: (includeReview = true, category?: MarineSignalCategory) =>
+    api.get<MarineSignal[]>("/marine-signals/signals", { include_review: includeReview, category }),
+  createSignal: (body: {
+    source_id: string;
+    category: MarineSignalCategory;
+    title: string;
+    citation_url: string;
+    published_at?: string | null;
+    effective_until?: string | null;
+    geography?: string;
+    priority?: "normal" | "urgent";
+  }) => api.post<MarineSignal>("/marine-signals/signals", body),
+  review: (
+    id: string,
+    body: {
+      summary: string;
+      why_it_matters: string;
+      suggested_action: string;
+      uncertainty: string;
+      geography: string;
+      priority: "normal" | "urgent";
+    },
+  ) => api.post<MarineSignal>(`/marine-signals/signals/${id}/review`, body),
+  setStatus: (id: string, signalStatus: "stale" | "superseded") =>
+    apiRequest<MarineSignal>(`/marine-signals/signals/${id}/status`, {
+      method: "PATCH",
+      query: { status: signalStatus },
+    }),
+  feedback: (id: string, feedback: "saved" | "dismissed" | "flagged" | "useful" | "acted") =>
+    apiRequest(`/marine-signals/signals/${id}/feedback`, {
+      method: "PUT",
+      body: { feedback },
+    }),
+  profile: () => api.get<MarineSignalProfile>("/marine-signals/profile"),
+  saveProfile: (body: MarineSignalProfile) =>
+    apiRequest<MarineSignalProfile>("/marine-signals/profile", { method: "PUT", body }),
+  metrics: () => api.get<MarineSignalMetrics>("/marine-signals/metrics"),
 };
 
 export const slipsApi = {

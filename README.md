@@ -62,6 +62,17 @@ build plan: every issue from the technical critique is fixed at the code level.
 - **Docker Compose** for local Postgres + app
 - **GitHub Actions** CI (lint + migrate + test against a real Postgres service)
 
+## Marine Signals pilot
+
+Operations teams can configure licensed primary-source RSS/Atom feeds and
+receive shop-filtered, source-linked briefs at `/marine-signals`. Sources are
+polled every six hours only after an owner/admin confirms review of the feed's
+terms. Feed content is not customer-delivered: it requires human review,
+shop-specific context, and a suggested action before publishing. Weekly digests
+and reviewed urgent alerts are opt-in and require SMTP. This is operational
+awareness, not regulatory/safety advice or comprehensive recall coverage.
+See `docs/PRODUCT_OVERVIEW.md` for source limits and pilot details.
+
 ## What's fixed (vs. the original plan)
 
 | Problem | Fix |

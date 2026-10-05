@@ -552,6 +552,28 @@ this is organized from).
       ledger write, vessel validation, tenant isolation, absent mutation
       routes, and the database `status = 'draft'` check rejection.
 
+## Phase 20 — Marine Signals Pilot — **IMPLEMENTED (source coverage is opt-in)**
+- [x] **Tenant-scoped sources and relevance profiles.** Forced-RLS tables
+      store each shop's service area, specialties, topic interests, licensed
+      source configuration, and item feedback. Sources require HTTPS on the
+      approved primary-source host list and an explicit terms-review
+      acknowledgment; no feed is enabled by default.
+- [x] **Reviewed, cited items only.** RSS/Atom refresh runs every six hours.
+      Ingested items are `needs_review`; owners/admins must verify the source
+      and complete the change summary, shop impact, suggested action,
+      geography, and uncertainty before publication. Changed feed content
+      returns a published item to review. Expired/long-absent items go stale,
+      and staff can mark an item superseded.
+- [x] **Delivery and pilot measurement.** The authenticated `/marine-signals`
+      workspace supports an opt-in weekly email digest and immediate urgent
+      email only after review. It reports source freshness, citation coverage,
+      useful feedback, and actions taken; saved/dismissed/flagged responses
+      are captured per staff user.
+- [ ] **Expand coverage only after source review.** No source feeds are
+      preconfigured. Confirm terms, API/feed stability, and licensing before
+      adding other providers or broadening beyond RSS/Atom; the pilot is not
+      comprehensive recall intelligence or regulatory/safety advice.
+
 ## Differentiators to preserve/lean into throughout (not incumbents' turf)
 - Fully explainable AI dispatch scoring (factor-by-factor breakdown) vs.
   DockMaster's marketing-only "AI-powered scheduling" claim.
