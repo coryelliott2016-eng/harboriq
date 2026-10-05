@@ -615,3 +615,12 @@ Dockerfiles), not an actual local `docker build`/`docker compose up`. The
 image is actually built, on GitHub's own runners. Treat a green
 `docker-build` run as the real confirmation that these files are
 syntactically and structurally correct — not this document's prose.
+
+## Immutable Artifact Promotion Model (September 30, 2026 Brief)
+
+HarborIQ enforces a strict "build-once, promote-everywhere" artifact delivery model:
+
+1. **Single-Build Releasing:** The CI/CD pipeline compiles a single, digest-addressed, immutable container image during the initial integration stage. We do not rebuild images separately for staging and production, preventing the introduction of untested code/dependency drift.
+2. **Promote Unaltered Image:** The exact digest-tagged container image is scanned, audited, and tested on the staging tier. Once verified, that identical, unaltered image is promoted directly into production.
+3. **Runtime Secret Injection:** To preserve absolute image digest identity across all deployment tiers, no secrets or environment-specific configs are embedded during build time. All database credentials, Stripe API keys, SMTP passwords, and JWT secrets must remain runtime configurations injected exclusively as environment variables at process launch/runtime.
+
