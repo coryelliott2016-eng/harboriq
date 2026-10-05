@@ -18,8 +18,14 @@ SignalFeedbackKind = Literal["saved", "dismissed", "flagged", "useful", "acted"]
 # The first pilot only polls feeds hosted by these known primary/official domains.
 CURATED_SOURCE_HOSTS = frozenset(
     {
-        "noaa.gov", "weather.gov", "fwc.gov", "uscg.mil",
-        "abycinc.org", "aaa.com", "conference-board.org", "yanmar.com",
+        "noaa.gov", "www.noaa.gov", "www.nhc.noaa.gov",
+        "weather.gov", "www.weather.gov",
+        "fwc.gov", "myfwc.com", "www.myfwc.com",
+        "uscg.mil", "www.uscg.mil",
+        "abycinc.org", "www.abycinc.org",
+        "aaa.com", "www.aaa.com", "gasprices.aaa.com",
+        "conference-board.org", "www.conference-board.org",
+        "yanmar.com", "www.yanmar.com",
     }
 )
 
@@ -33,7 +39,10 @@ def _validated_https_url(value: str | HttpUrl) -> str:
         or not host
         or parsed.username
         or parsed.password
-        or not any(host == domain or host.endswith(f".{domain}") for domain in CURATED_SOURCE_HOSTS)
+        or parsed.port not in (None, 443)
+        or host not in CURATED_SOURCE_HOSTS
+        or parsed.query
+        or parsed.fragment
     ):
         raise ValueError("URL must use HTTPS and belong to an approved pilot source domain")
     return url
@@ -95,6 +104,11 @@ class MarineSignalCreate(BaseModel):
     uncertainty: str = Field(default="", max_length=1000)
     priority: SignalPriority = "normal"
 
+    @field_validator("title", mode="before")
+    @classmethod
+    def strip_title(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
     @field_validator("citation_url")
     @classmethod
     def citation_must_be_https(cls, value: HttpUrl) -> str:
@@ -112,6 +126,13 @@ class MarineSignalCreate(BaseModel):
             raise ValueError("effective_until must be after published_at")
         return self
 
+    @field_validator("published_at", "effective_until")
+    @classmethod
+    def timestamps_must_be_timezone_aware(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            raise ValueError("timestamp must include a timezone")
+        return value
+
 
 class MarineSignalReview(BaseModel):
     summary: str = Field(min_length=1, max_length=2000)
@@ -120,6 +141,18 @@ class MarineSignalReview(BaseModel):
     uncertainty: str = Field(default="", max_length=1000)
     geography: str = Field(default="", max_length=200)
     priority: SignalPriority = "normal"
+
+    @field_validator(
+        "summary",
+        "why_it_matters",
+        "suggested_action",
+        "uncertainty",
+        "geography",
+        mode="before",
+    )
+    @classmethod
+    def strip_review_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 class MarineSignalOut(BaseModel):

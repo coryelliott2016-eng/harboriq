@@ -21,6 +21,14 @@ def refresh_all_sources() -> dict[str, int]:
                 "SELECT company_id, id FROM marine_signal_sources WHERE enabled ORDER BY company_id"
             )
         ).all()
+        companies_with_expired_signals = service_db.execute(
+            text(
+                """
+                SELECT DISTINCT company_id FROM marine_signals
+                WHERE status = 'published' AND effective_until <= now()
+                """
+            )
+        ).scalars().all()
     finally:
         service_db.close()
 
@@ -29,10 +37,18 @@ def refresh_all_sources() -> dict[str, int]:
         db = AppSession()
         try:
             set_tenant(db, company_id)
-            result["signals_seen"] += marine_signals.refresh_source(
-                db, company_id, source_id
-            )
-            result["expired"] += marine_signals.expire_signals(db, company_id)
+            result["signals_seen"] += marine_signals.refresh_source(db, company_id, source_id)
+            last_error = db.execute(
+                text(
+                    """
+                    SELECT last_error FROM marine_signal_sources
+                    WHERE company_id = :company_id AND id = :source_id
+                    """
+                ),
+                {"company_id": company_id, "source_id": source_id},
+            ).scalar_one_or_none()
+            if last_error:
+                result["errors"] += 1
             db.commit()
             result["sources_checked"] += 1
         except Exception:  # noqa: BLE001
@@ -41,6 +57,21 @@ def refresh_all_sources() -> dict[str, int]:
             logger.exception(
                 "marine_signals.refresh_task_failed",
                 extra={"company_id": str(company_id), "source_id": str(source_id)},
+            )
+        finally:
+            db.close()
+    for company_id in companies_with_expired_signals:
+        db = AppSession()
+        try:
+            set_tenant(db, company_id)
+            result["expired"] += marine_signals.expire_signals(db, company_id)
+            db.commit()
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            result["errors"] += 1
+            logger.exception(
+                "marine_signals.expiration_task_failed",
+                extra={"company_id": str(company_id)},
             )
         finally:
             db.close()
@@ -56,7 +87,7 @@ def send_weekly_digests(now: datetime | None = None) -> dict[str, int]:
         profiles = service_db.execute(
             text(
                 """
-                SELECT company_id, digest_email, interests
+                SELECT company_id, digest_email, interests, service_area
                 FROM marine_signal_profiles
                 WHERE digest_enabled AND digest_email IS NOT NULL
                 """
@@ -74,7 +105,21 @@ def send_weekly_digests(now: datetime | None = None) -> dict[str, int]:
             signals = marine_signals.list_digest_signals(db, company_id)
             interests = set(profile["interests"] or [])
             if interests:
-                signals = [item for item in signals if item["category"] in interests]
+                signals = [
+                    item
+                    for item in signals
+                    if item["priority"] == "urgent" or item["category"] in interests
+                ]
+            service_area = str(profile.get("service_area") or "").strip().casefold()
+            if service_area:
+                signals = [
+                    item
+                    for item in signals
+                    if item["priority"] == "urgent"
+                    or not item["geography"]
+                    or service_area in item["geography"].casefold()
+                    or item["geography"].casefold() in service_area
+                ]
             if not signals:
                 db.rollback()
                 result["skipped"] += 1

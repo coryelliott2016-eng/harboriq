@@ -212,19 +212,19 @@ function MessagesRoute() {
       </div>
     );
   }
-
-  function MarineSignalsRoute() {
-    const { user } = useAuth();
-    if (!canManageOperations(user?.role)) {
-      return (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Marine Signals is limited to owners, admins, and office staff.
-        </div>
-      );
-    }
-    return <MarineSignalsPage />;
-  }
   return <MessagesPage />;
+}
+
+function MarineSignalsRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Marine Signals is limited to owners, admins, and office staff.
+      </div>
+    );
+  }
+  return <MarineSignalsPage />;
 }
 
 // Phase 13: inventory, vendors, and purchase orders are all

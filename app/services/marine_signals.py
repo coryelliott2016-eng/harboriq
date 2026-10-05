@@ -4,11 +4,13 @@ from __future__ import annotations
 import email.utils
 import html
 import logging
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
-from urllib.parse import urlsplit
-from xml.etree import ElementTree
+from urllib.parse import urljoin, urlsplit
+from defusedxml import ElementTree as SafeElementTree
+from defusedxml.common import DefusedXmlException
 
 import httpx
 from sqlalchemy import text
@@ -97,6 +99,18 @@ def set_source_enabled(
     ).mappings().first()
     if row is None:
         raise LookupError("source not found")
+    if not enabled:
+        db.execute(
+            text(
+                """
+                UPDATE marine_signals
+                SET status = 'stale', updated_at = now()
+                WHERE company_id = :company_id AND source_id = :source_id
+                  AND status = 'published'
+                """
+            ),
+            {"company_id": company_id, "source_id": source_id},
+        )
     return dict(row)
 
 
@@ -157,6 +171,10 @@ def list_signals(
     params: dict = {"company_id": company_id, "user_id": user_id}
     if not include_review:
         query += " AND s.status = 'published'"
+    query += """
+        AND (s.status <> 'published' OR s.effective_until IS NULL
+             OR s.effective_until > now())
+    """
     if category:
         query += " AND s.category = :category"
         params["category"] = category
@@ -369,7 +387,7 @@ def _plain_text(value: str, limit: int = 10000) -> str:
     return html.unescape(parsed)[:limit]
 
 
-def _child_text(element: ElementTree.Element, *names: str) -> str:
+def _child_text(element: SafeElementTree.Element, *names: str) -> str:
     for child in element:
         local_name = child.tag.rsplit("}", 1)[-1].lower()
         if local_name in names:
@@ -377,12 +395,12 @@ def _child_text(element: ElementTree.Element, *names: str) -> str:
     return ""
 
 
-def _entry_url(element: ElementTree.Element, feed_url: str) -> str:
+def _entry_url(element: SafeElementTree.Element, feed_url: str) -> str:
     for child in element:
         if child.tag.rsplit("}", 1)[-1].lower() == "link":
             href = child.attrib.get("href") or (child.text or "").strip()
-            if href.startswith("https://"):
-                return href[:2000]
+            if href:
+                return urljoin(feed_url, href)[:2000]
     return feed_url
 
 
@@ -405,7 +423,10 @@ def _parse_feed(content: bytes, feed_url: str) -> list[dict]:
     upper = content.upper()
     if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
         raise ValueError("feed may not contain a document type or entity declaration")
-    root = ElementTree.fromstring(content)
+    try:
+        root = SafeElementTree.fromstring(content, forbid_dtd=True)
+    except DefusedXmlException as exc:
+        raise ValueError("feed may not contain DTD or entity declarations") from exc
     elements = [
         element
         for element in root.iter()
@@ -420,7 +441,8 @@ def _parse_feed(content: bytes, feed_url: str) -> list[dict]:
             entry, "description", "summary", "content", "encoded"
         )
         link = _entry_url(entry, feed_url)
-        if (urlsplit(link).hostname or "").lower().rstrip(".") not in CURATED_SOURCE_HOSTS:
+        link_host = (urlsplit(link).hostname or "").lower().rstrip(".")
+        if link_host not in CURATED_SOURCE_HOSTS:
             link = feed_url
         external_id = (
             _child_text(entry, "guid", "id") or link or title
@@ -455,7 +477,7 @@ def refresh_source(db: Session, company_id: uuid.UUID, source_id: uuid.UUID) -> 
         return 0
     feed_url = source["feed_url"]
     host = (urlsplit(feed_url).hostname or "").lower().rstrip(".")
-    if not any(host == domain or host.endswith(f".{domain}") for domain in CURATED_SOURCE_HOSTS):
+    if host not in CURATED_SOURCE_HOSTS:
         raise ValueError("feed URL is not on the curated pilot source allowlist")
 
     try:
@@ -469,7 +491,10 @@ def refresh_source(db: Session, company_id: uuid.UUID, source_id: uuid.UUID) -> 
             ) as response:
                 response.raise_for_status()
                 body = bytearray()
+                deadline = time.monotonic() + 12
                 for chunk in response.iter_bytes():
+                    if time.monotonic() > deadline:
+                        raise TimeoutError("feed download exceeded the 12-second limit")
                     body.extend(chunk)
                     if len(body) > FEED_MAX_BYTES:
                         raise ValueError("feed exceeded the 2 MB size limit")
@@ -492,7 +517,8 @@ def refresh_source(db: Session, company_id: uuid.UUID, source_id: uuid.UUID) -> 
                         citation_url = EXCLUDED.citation_url,
                         published_at = EXCLUDED.published_at,
                         status = CASE
-                          WHEN marine_signals.title IS DISTINCT FROM EXCLUDED.title
+                          WHEN marine_signals.status = 'stale'
+                            OR marine_signals.title IS DISTINCT FROM EXCLUDED.title
                             OR marine_signals.source_content
                                IS DISTINCT FROM EXCLUDED.source_content
                             OR marine_signals.citation_url
@@ -501,7 +527,8 @@ def refresh_source(db: Session, company_id: uuid.UUID, source_id: uuid.UUID) -> 
                           ELSE marine_signals.status
                         END,
                         reviewed_by = CASE
-                          WHEN marine_signals.title IS DISTINCT FROM EXCLUDED.title
+                          WHEN marine_signals.status = 'stale'
+                            OR marine_signals.title IS DISTINCT FROM EXCLUDED.title
                             OR marine_signals.source_content
                                IS DISTINCT FROM EXCLUDED.source_content
                             OR marine_signals.citation_url
@@ -509,7 +536,8 @@ def refresh_source(db: Session, company_id: uuid.UUID, source_id: uuid.UUID) -> 
                           THEN NULL ELSE marine_signals.reviewed_by
                         END,
                         reviewed_at = CASE
-                          WHEN marine_signals.title IS DISTINCT FROM EXCLUDED.title
+                          WHEN marine_signals.status = 'stale'
+                            OR marine_signals.title IS DISTINCT FROM EXCLUDED.title
                             OR marine_signals.source_content
                                IS DISTINCT FROM EXCLUDED.source_content
                             OR marine_signals.citation_url
@@ -592,7 +620,8 @@ def list_digest_signals(db: Session, company_id: uuid.UUID) -> list[dict]:
             _signal_query()
             + """
               AND s.status = 'published'
-              AND s.published_at >= now() - interval '7 days'
+              AND COALESCE(s.published_at, s.created_at) >= now() - interval '7 days'
+              AND (s.effective_until IS NULL OR s.effective_until > now())
               ORDER BY CASE WHEN s.priority = 'urgent' THEN 0 ELSE 1 END,
                        s.published_at DESC NULLS LAST
               LIMIT 100
@@ -653,6 +682,11 @@ def finish_weekly_digest(
 
 def send_digest_email(to: str, week_start, signals: list[dict]) -> bool:
     from app.services import email as email_service
+    from app.core.config import settings
+
+    if not settings.smtp_host:
+        logger.warning("marine_signal.digest_skipped_no_smtp")
+        return False
 
     lines = [
         "Your HarborIQ Marine Signals weekly digest",
@@ -679,22 +713,4 @@ def send_digest_email(to: str, week_start, signals: list[dict]) -> bool:
         to=to,
         subject="[HarborIQ] Marine Signals weekly digest",
         text_body="\n".join(lines),
-    )
-
-
-def send_urgent_alert_email(to: str, signal: dict) -> bool:
-    from app.services import email as email_service
-
-    body = (
-        "A human-reviewed urgent Marine Signal is available.\n\n"
-        f"{signal['title']}\n\n"
-        f"What changed: {signal['summary']}\n"
-        f"Why it matters: {signal['why_it_matters']}\n"
-        f"Suggested action: {signal['suggested_action']}\n"
-        f"Uncertainty: {signal['uncertainty'] or 'Verify current details at the source.'}\n"
-        f"Primary source: {signal['citation_url']}\n\n"
-        "Verify safety and regulatory details with the cited source before acting."
-    )
-    return email_service.send_email(
-        to=to, subject=f"[HarborIQ] Urgent Marine Signal: {signal['title']}", text_body=body
     )

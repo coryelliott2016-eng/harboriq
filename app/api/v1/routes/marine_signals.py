@@ -26,6 +26,8 @@ from app.schemas.marine_signals import (
     MarineSignalSourceOut,
     SignalCategory,
 )
+from app.services import outbox
+from app.services.outbox_dispatch import dispatch_outbox_soon
 from app.services import marine_signals as service
 
 router = APIRouter(
@@ -111,10 +113,20 @@ def list_signals(
     area = profile["service_area"].strip().casefold()
     relevant = []
     for signal in signals:
-        if interests and signal["category"] not in interests:
+        if (
+            signal["priority"] != "urgent"
+            and interests
+            and signal["category"] not in interests
+        ):
             continue
         geography = (signal["geography"] or "").casefold()
-        if area and geography and area not in geography and geography not in area:
+        if (
+            signal["priority"] != "urgent"
+            and area
+            and geography
+            and area not in geography
+            and geography not in area
+        ):
             continue
         relevant.append(signal)
     return relevant
@@ -155,12 +167,25 @@ def review_signal(
     except LookupError as exc:
         raise _not_found(exc) from exc
     profile = service.get_profile(db, company_id) if result["priority"] == "urgent" else None
+    notify = bool(profile and profile["digest_enabled"] and profile["digest_email"])
+    if notify:
+        outbox.enqueue(
+            db,
+            company_id,
+            "marine_signal.urgent_alert",
+            {
+                "to": profile["digest_email"],
+                "title": result["title"],
+                "summary": result["summary"],
+                "why_it_matters": result["why_it_matters"],
+                "suggested_action": result["suggested_action"],
+                "uncertainty": result["uncertainty"],
+                "citation_url": result["citation_url"],
+            },
+        )
     db.commit()
-    if profile:
-        if profile["digest_enabled"] and profile["digest_email"]:
-            background_tasks.add_task(
-                service.send_urgent_alert_email, profile["digest_email"], result
-            )
+    if notify:
+        dispatch_outbox_soon(background_tasks)
     return result
 
 

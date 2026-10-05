@@ -1,6 +1,6 @@
 # HarborIQ Live Completion Register — v0.2.0
 
-Last updated: 2026-09-22. Owner key: **Eng** = execution team (this repo),
+Last updated: 2026-10-05. Owner key: **Eng** = execution team (this repo),
 **Cory** = founder decision/account action required.
 
 Status vocabulary (strict):
@@ -46,7 +46,7 @@ Status vocabulary (strict):
 | Reports & history | A/R aging, P&L, cash flow, CSV/PDF exports | `test_pnl_report`, `test_report_*` | Eng | — | Numbers reconcile to invoices/payments | **Verified (not deployed)** |
 | Audit logs | Auth, estimate approval, estimate lifecycle | `audit_log`; `test_estimates.py` asserts sequence | Eng | — | All money and permission events logged; viewer | **Partial** (no invoice/refund audit rows, no viewer) |
 | AI-assisted diagnostics | None | code search: no LLM/diagnostic module | Cory | Product + safety decision | Suggestions with source, confidence, human confirmation, fallback | **Not built** |
-| Recall / service-bulletin intelligence | None | code search | Cory | Data source licensing decision | Match vessel/engine to bulletins | **Not built** |
+| Marine Signals / recall intelligence | Tenant-configured official RSS/Atom monitoring, reviewed briefs, citation links, relevance profiles, feedback, weekly digest, urgent outbox alerts | `app/services/marine_signals.py`, `tests/test_marine_signals.py`, `frontend/src/pages/MarineSignalsPage.tsx` | Eng + Cory | Configure and verify permitted feeds; comprehensive recall/service-bulletin matching and SMTP delivery remain incomplete | Keep all feed items private until an owner/admin verifies the source and enters shop impact/action; only reviewed urgent alerts may email staff | **Partial** (pilot, not deployed or comprehensive) |
 | Mobile / PWA | PWA + Capacitor shell | `docs/mobile-launch-runbook.md` | Cory | Apple/Google developer accounts + signing | Signed build installs and syncs | **Partial** (PWA built; store release blocked) |
 | Marina slips / storage billing | Slips, reservations, dry-stack, recurring billing | `test_slip_*` | Eng | — | — | **Verified (not deployed)** |
 | Crypto payments / asset tokenization | Code present, **disabled by default** | `app/core/config.py` flags | Cory | Legal review | Stays off in production | **Deferred (off)** |

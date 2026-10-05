@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../context/auth";
@@ -38,8 +38,6 @@ export function MarineSignalsPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
-  const [profile, setProfile] = useState<MarineSignalProfile>(emptyProfile);
-  const [specialtiesText, setSpecialtiesText] = useState("");
   const [sourceForm, setSourceForm] = useState({
     name: "",
     category: "weather" as MarineSignalCategory,
@@ -86,13 +84,6 @@ export function MarineSignalsPage() {
     queryFn: marineSignalsApi.profile,
   });
 
-  useEffect(() => {
-    if (profileQuery.data) {
-      setProfile(profileQuery.data);
-      setSpecialtiesText(profileQuery.data.specialties.join(", "));
-    }
-  }, [profileQuery.data]);
-
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["marine-signals"] });
   };
@@ -110,16 +101,6 @@ export function MarineSignalsPage() {
       marineSignalsApi.setSourceEnabled(id, enabled),
     onSuccess: refresh,
     onError: (reason) => setError(reason instanceof Error ? reason.message : "Could not update source."),
-  });
-  const profileMutation = useMutation({
-    mutationFn: marineSignalsApi.saveProfile,
-    onSuccess: (saved) => {
-      setProfile(saved);
-      setSpecialtiesText(saved.specialties.join(", "));
-      setError("");
-      refresh();
-    },
-    onError: (reason) => setError(reason instanceof Error ? reason.message : "Could not save shop profile."),
   });
   const signalMutation = useMutation({
     mutationFn: marineSignalsApi.createSignal,
@@ -192,60 +173,7 @@ export function MarineSignalsPage() {
         </div>
       )}
 
-      <Card className="p-5">
-        <h2 className="text-lg font-semibold text-slate-900">Shop relevance & delivery</h2>
-        <p className="mb-4 mt-1 text-sm text-slate-500">
-          Choose the area and topics that should shape your brief. Weekly email includes only published
-          items from the last seven days; urgent reviewed items are emailed immediately.
-        </p>
-        <form
-          className="grid gap-4 md:grid-cols-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            profileMutation.mutate({
-              ...profile,
-              specialties: specialtiesText.split(",").map((value) => value.trim()).filter(Boolean),
-            });
-          }}
-        >
-          <Field label="Service area">
-            <input className={inputClass} value={profile.service_area} onChange={(event) => setProfile({ ...profile, service_area: event.target.value })} placeholder="Sarasota, Bradenton, Venice" />
-          </Field>
-          <Field label="Specialties (comma-separated)">
-            <input className={inputClass} value={specialtiesText} onChange={(event) => setSpecialtiesText(event.target.value)} placeholder="electrical, fiberglass, trailers" />
-          </Field>
-          <fieldset className="md:col-span-2">
-            <legend className="mb-2 text-sm font-medium text-slate-700">Topics of interest (leave all unchecked for every category)</legend>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {categories.map((category) => (
-                <label className="flex items-center gap-2 text-sm text-slate-600" key={category.value}>
-                  <input
-                    type="checkbox"
-                    checked={profile.interests.includes(category.value)}
-                    onChange={(event) => setProfile({
-                      ...profile,
-                      interests: event.target.checked
-                        ? [...profile.interests, category.value]
-                        : profile.interests.filter((value) => value !== category.value),
-                    })}
-                  />
-                  {category.label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <Field label="Digest / urgent-alert email">
-            <input className={inputClass} type="email" value={profile.digest_email ?? ""} onChange={(event) => setProfile({ ...profile, digest_email: event.target.value || null })} placeholder="operations@example.com" />
-          </Field>
-          <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
-            <input type="checkbox" checked={profile.digest_enabled} onChange={(event) => setProfile({ ...profile, digest_enabled: event.target.checked })} />
-            Enable weekly digest and urgent alerts
-          </label>
-          <div className="md:col-span-2">
-            <Button type="submit" disabled={profileMutation.isPending}>Save shop profile</Button>
-          </div>
-        </form>
-      </Card>
+      <ProfileForm initial={profileQuery.data ?? emptyProfile} onSaved={refresh} />
 
       <Card className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -253,6 +181,11 @@ export function MarineSignalsPage() {
             <h2 className="text-lg font-semibold text-slate-900">Curated sources</h2>
             <p className="mt-1 text-sm text-slate-500">
               Feeds refresh every six hours. Only HTTPS feeds on the approved primary-source domains are accepted.
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Pilot hosts: NOAA/NWS, FWC, USCG, ABYC, AAA, The Conference Board, and Yanmar. Find a
+              public feed and terms page on the same approved host; availability and polling rights are
+              not implied by this list.
             </p>
           </div>
         </div>
@@ -331,6 +264,10 @@ export function MarineSignalsPage() {
       {reviewing && isAdmin && (
         <Card className="p-5">
           <h2 className="text-lg font-semibold text-slate-900">Review: {reviewing.title}</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Shop profile: {profileQuery.data?.service_area || "service area not set"} · Specialties:{" "}
+            {profileQuery.data?.specialties.join(", ") || "not set"}
+          </p>
           <p className="my-2 text-sm"><a className="text-blue-700 underline" href={reviewing.citation_url} target="_blank" rel="noreferrer">Open primary-source citation</a></p>
           <p className="mb-4 text-sm text-slate-600">{reviewing.source_content || "No feed summary was provided. Read the source and enter a checked summary."}</p>
           <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); reviewMutation.mutate({ id: reviewing.id, values: reviewFields }); }}>
@@ -364,6 +301,86 @@ export function MarineSignalsPage() {
         ))}
       </section>
     </div>
+  );
+}
+
+function ProfileForm({
+  initial,
+  onSaved,
+}: {
+  initial: MarineSignalProfile;
+  onSaved: () => void;
+}) {
+  const [profile, setProfile] = useState(initial);
+  const [specialtiesText, setSpecialtiesText] = useState(initial.specialties.join(", "));
+  const [error, setError] = useState("");
+  const save = useMutation({
+    mutationFn: marineSignalsApi.saveProfile,
+    onSuccess: (saved) => {
+      setProfile(saved);
+      setSpecialtiesText(saved.specialties.join(", "));
+      setError("");
+      onSaved();
+    },
+    onError: (reason) => setError(reason instanceof Error ? reason.message : "Could not save shop profile."),
+  });
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-lg font-semibold text-slate-900">Shop relevance & delivery</h2>
+      <p className="mb-4 mt-1 text-sm text-slate-500">
+        Choose the area and topics that should shape your brief. Weekly email includes only published
+        items from the last seven days; urgent reviewed items are emailed immediately.
+      </p>
+      {error && <ErrorBanner message={error} />}
+      <form
+        className="mt-3 grid gap-4 md:grid-cols-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          save.mutate({
+            ...profile,
+            specialties: specialtiesText.split(",").map((value) => value.trim()).filter(Boolean),
+          });
+        }}
+      >
+        <Field label="Service area">
+          <input className={inputClass} value={profile.service_area} onChange={(event) => setProfile({ ...profile, service_area: event.target.value })} placeholder="Sarasota, Bradenton, Venice" />
+        </Field>
+        <Field label="Specialties (comma-separated)">
+          <input className={inputClass} value={specialtiesText} onChange={(event) => setSpecialtiesText(event.target.value)} placeholder="electrical, fiberglass, trailers" />
+        </Field>
+        <fieldset className="md:col-span-2">
+          <legend className="mb-2 text-sm font-medium text-slate-700">Topics of interest (leave all unchecked for every category)</legend>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {categories.map((category) => (
+              <label className="flex items-center gap-2 text-sm text-slate-600" key={category.value}>
+                <input
+                  type="checkbox"
+                  checked={profile.interests.includes(category.value)}
+                  onChange={(event) => setProfile({
+                    ...profile,
+                    interests: event.target.checked
+                      ? [...profile.interests, category.value]
+                      : profile.interests.filter((value) => value !== category.value),
+                  })}
+                />
+                {category.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <Field label="Digest / urgent-alert email">
+          <input className={inputClass} type="email" value={profile.digest_email ?? ""} onChange={(event) => setProfile({ ...profile, digest_email: event.target.value || null })} placeholder="operations@example.com" />
+        </Field>
+        <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
+          <input type="checkbox" checked={profile.digest_enabled} onChange={(event) => setProfile({ ...profile, digest_enabled: event.target.checked })} />
+          Enable weekly digest and urgent alerts
+        </label>
+        <div className="md:col-span-2">
+          <Button type="submit" disabled={save.isPending}>Save shop profile</Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 

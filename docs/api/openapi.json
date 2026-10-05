@@ -4485,6 +4485,690 @@
         "title": "LogoutResponse",
         "type": "object"
       },
+      "MarineSignalCreate": {
+        "properties": {
+          "category": {
+            "enum": [
+              "weather",
+              "environment",
+              "safety_recall",
+              "regulation",
+              "season",
+              "training",
+              "fuel",
+              "market"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "citation_url": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Citation Url",
+            "type": "string"
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until"
+          },
+          "geography": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Geography",
+            "type": "string"
+          },
+          "priority": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "urgent"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "source_content": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Source Content",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "suggested_action": {
+            "default": "",
+            "maxLength": 1500,
+            "title": "Suggested Action",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 250,
+            "minLength": 3,
+            "title": "Title",
+            "type": "string"
+          },
+          "uncertainty": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Uncertainty",
+            "type": "string"
+          },
+          "why_it_matters": {
+            "default": "",
+            "maxLength": 1500,
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "category",
+          "title",
+          "citation_url"
+        ],
+        "title": "MarineSignalCreate",
+        "type": "object"
+      },
+      "MarineSignalFeedbackInput": {
+        "properties": {
+          "feedback": {
+            "enum": [
+              "saved",
+              "dismissed",
+              "flagged",
+              "useful",
+              "acted"
+            ],
+            "title": "Feedback",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback"
+        ],
+        "title": "MarineSignalFeedbackInput",
+        "type": "object"
+      },
+      "MarineSignalMetrics": {
+        "properties": {
+          "acted_feedback": {
+            "title": "Acted Feedback",
+            "type": "integer"
+          },
+          "citation_coverage": {
+            "title": "Citation Coverage",
+            "type": "number"
+          },
+          "feedback_count": {
+            "title": "Feedback Count",
+            "type": "integer"
+          },
+          "fresh_sources": {
+            "title": "Fresh Sources",
+            "type": "integer"
+          },
+          "needs_review": {
+            "title": "Needs Review",
+            "type": "integer"
+          },
+          "source_count": {
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "stale_sources": {
+            "title": "Stale Sources",
+            "type": "integer"
+          },
+          "useful_feedback": {
+            "title": "Useful Feedback",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_count",
+          "fresh_sources",
+          "stale_sources",
+          "needs_review",
+          "citation_coverage",
+          "useful_feedback",
+          "acted_feedback",
+          "feedback_count"
+        ],
+        "title": "MarineSignalMetrics",
+        "type": "object"
+      },
+      "MarineSignalOut": {
+        "properties": {
+          "category": {
+            "enum": [
+              "weather",
+              "environment",
+              "safety_recall",
+              "regulation",
+              "season",
+              "training",
+              "fuel",
+              "market"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "citation_url": {
+            "title": "Citation Url",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "enum": [
+                  "saved",
+                  "dismissed",
+                  "flagged",
+                  "useful",
+                  "acted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "feedback_note": {
+            "default": "",
+            "title": "Feedback Note",
+            "type": "string"
+          },
+          "geography": {
+            "title": "Geography",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_checked_at": {
+            "format": "date-time",
+            "title": "Last Checked At",
+            "type": "string"
+          },
+          "priority": {
+            "enum": [
+              "normal",
+              "urgent"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "source_content": {
+            "title": "Source Content",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "needs_review",
+              "published",
+              "stale",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suggested_action": {
+            "title": "Suggested Action",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uncertainty": {
+            "title": "Uncertainty",
+            "type": "string"
+          },
+          "why_it_matters": {
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "source_name",
+          "category",
+          "title",
+          "source_content",
+          "summary",
+          "why_it_matters",
+          "suggested_action",
+          "citation_url",
+          "published_at",
+          "effective_until",
+          "geography",
+          "uncertainty",
+          "priority",
+          "status",
+          "reviewed_by",
+          "reviewed_at",
+          "last_checked_at",
+          "created_at"
+        ],
+        "title": "MarineSignalOut",
+        "type": "object"
+      },
+      "MarineSignalProfileInput": {
+        "properties": {
+          "digest_email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest Email"
+          },
+          "digest_enabled": {
+            "default": false,
+            "title": "Digest Enabled",
+            "type": "boolean"
+          },
+          "interests": {
+            "items": {
+              "enum": [
+                "weather",
+                "environment",
+                "safety_recall",
+                "regulation",
+                "season",
+                "training",
+                "fuel",
+                "market"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Interests",
+            "type": "array"
+          },
+          "service_area": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Service Area",
+            "type": "string"
+          },
+          "specialties": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Specialties",
+            "type": "array"
+          }
+        },
+        "title": "MarineSignalProfileInput",
+        "type": "object"
+      },
+      "MarineSignalProfileOut": {
+        "properties": {
+          "digest_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest Email"
+          },
+          "digest_enabled": {
+            "title": "Digest Enabled",
+            "type": "boolean"
+          },
+          "interests": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Interests",
+            "type": "array"
+          },
+          "service_area": {
+            "title": "Service Area",
+            "type": "string"
+          },
+          "specialties": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Specialties",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "service_area",
+          "specialties",
+          "interests",
+          "digest_email",
+          "digest_enabled"
+        ],
+        "title": "MarineSignalProfileOut",
+        "type": "object"
+      },
+      "MarineSignalReview": {
+        "properties": {
+          "geography": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Geography",
+            "type": "string"
+          },
+          "priority": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "urgent"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "suggested_action": {
+            "maxLength": 1500,
+            "minLength": 1,
+            "title": "Suggested Action",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "uncertainty": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Uncertainty",
+            "type": "string"
+          },
+          "why_it_matters": {
+            "maxLength": 1500,
+            "minLength": 1,
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "why_it_matters",
+          "suggested_action"
+        ],
+        "title": "MarineSignalReview",
+        "type": "object"
+      },
+      "MarineSignalSourceCreate": {
+        "properties": {
+          "category": {
+            "enum": [
+              "weather",
+              "environment",
+              "safety_recall",
+              "regulation",
+              "season",
+              "training",
+              "fuel",
+              "market"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "feed_url": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Feed Url",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 2,
+            "title": "Name",
+            "type": "string"
+          },
+          "source_url": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Source Url",
+            "type": "string"
+          },
+          "terms_confirmed": {
+            "const": true,
+            "title": "Terms Confirmed",
+            "type": "boolean"
+          },
+          "terms_url": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Terms Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "source_url",
+          "feed_url",
+          "terms_url",
+          "terms_confirmed"
+        ],
+        "title": "MarineSignalSourceCreate",
+        "type": "object"
+      },
+      "MarineSignalSourceOut": {
+        "properties": {
+          "category": {
+            "enum": [
+              "weather",
+              "environment",
+              "safety_recall",
+              "regulation",
+              "season",
+              "training",
+              "fuel",
+              "market"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "feed_url": {
+            "title": "Feed Url",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": "string"
+          },
+          "terms_reviewed_at": {
+            "format": "date-time",
+            "title": "Terms Reviewed At",
+            "type": "string"
+          },
+          "terms_url": {
+            "title": "Terms Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "category",
+          "source_url",
+          "feed_url",
+          "terms_url",
+          "terms_reviewed_at",
+          "enabled",
+          "last_checked_at",
+          "last_error",
+          "created_at"
+        ],
+        "title": "MarineSignalSourceOut",
+        "type": "object"
+      },
       "MarketingLeadCreate": {
         "description": "Body for POST /api/v1/public/leads.\n\n`website` is a honeypot \u2014 real browsers leave it blank; bots that fill\nevery field are accepted with a fake success so they do not learn the\ntrap. Never stored.",
         "properties": {
@@ -12189,6 +12873,547 @@
         "summary": "List Time Entries",
         "tags": [
           "field-app"
+        ]
+      }
+    },
+    "/api/v1/marine-signals/metrics": {
+      "get": {
+        "operationId": "get_metrics_api_v1_marine_signals_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarineSignalMetrics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Metrics",
+        "tags": [
+          "marine-signals"
+        ]
+      }
+    },
+    "/api/v1/marine-signals/profile": {
+      "get": {
+        "operationId": "get_profile_api_v1_marine_signals_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarineSignalProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Profile",
+        "tags": [
+          "marine-signals"
+        ]
+      },
+      "put": {
+        "operationId": "save_profile_api_v1_marine_signals_profile_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarineSignalProfileInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarineSignalProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Save Profile",
+        "tags": [
+          "marine-signals"
+        ]
+      }
+    },
+    "/api/v1/marine-signals/signals": {
+      "get": {
+        "operationId": "list_signals_api_v1_marine_signals_signals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_review",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Review",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "weather",
+                    "environment",
+                    "safety_recall",
+                    "regulation",
+                    "season",
+                    "training",
+                    "fuel",
+                    "market"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "feedback",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(saved|dismissed|flagged|useful|acted)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Feedback"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MarineSignalOut"
+                  },
+                  "title": "Response List Signals Api V1 Marine Signals Signals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Signals",
+        "tags": [
+          "marine-signals"
+        ]
+      },
+      "post": {
+        "operationId": "create_signal_api_v1_marine_signals_signals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarineSignalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarineSignalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Signal",
+        "tags": [
+          "marine-signals"
+        ]
+      }
+    },
+    "/api/v1/marine-signals/signals/{signal_id}/feedback": {
+      "put": {
+        "operationId": "feedback_signal_api_v1_marine_signals_signals__signal_id__feedback_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Signal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarineSignalFeedbackInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Feedback Signal",
+        "tags": [
+          "marine-signals"
+        ]
+      }
+    },
+    "/api/v1/marine-signals/signals/{signal_id}/review": {
+      "post": {
+        "operationId": "review_signal_api_v1_marine_signals_signals__signal_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Signal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarineSignalReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarineSignalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Review Signal",
+        "tags": [
+          "marine-signals"
+        ]
+      }
+    },
+    "/api/v1/marine-signals/signals/{signal_id}/status": {
+      "patch": {
+        "operationId": "set_signal_status_api_v1_marine_signals_signals__signal_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Signal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": true,
+            "schema": {
+              "enum": [
+                "stale",
+                "superseded"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarineSignalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Signal Status",
+        "tags": [
+          "marine-signals"
+        ]
+      }
+    },
+    "/api/v1/marine-signals/sources": {
+      "get": {
+        "operationId": "list_sources_api_v1_marine_signals_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MarineSignalSourceOut"
+                  },
+                  "title": "Response List Sources Api V1 Marine Signals Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Sources",
+        "tags": [
+          "marine-signals"
+        ]
+      },
+      "post": {
+        "operationId": "create_source_api_v1_marine_signals_sources_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarineSignalSourceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarineSignalSourceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Source",
+        "tags": [
+          "marine-signals"
+        ]
+      }
+    },
+    "/api/v1/marine-signals/sources/{source_id}/enabled": {
+      "patch": {
+        "operationId": "set_source_enabled_api_v1_marine_signals_sources__source_id__enabled_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "enabled",
+            "required": true,
+            "schema": {
+              "title": "Enabled",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarineSignalSourceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Source Enabled",
+        "tags": [
+          "marine-signals"
         ]
       }
     },
