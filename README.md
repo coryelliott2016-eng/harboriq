@@ -19,6 +19,20 @@
 > deployed** to a production host. The long-form notes below are the
 > historical build log and remain accurate for the code.
 
+## Target direction: Facility Operations Intelligence
+
+HarborIQ's [target architecture](docs/ARCHITECTURE.md#target-architecture-facility-operations-intelligence)
+adds eight planned capabilities alongside service management: real-time dock/slip
+occupancy, appointment scheduling, automated driver/operator notifications,
+predictive wait/dwell times, explainable carrier/operator scoring, asset/equipment
+tracking, evidence-backed AI operational recommendations with human approval,
+and an opt-in multi-facility discovery/referral network.
+
+These are **target scope, not claims of implemented or production-verified
+functionality**. The [engineering epic](docs/COMPETITIVE_PARITY_ROADMAP.md#facility-operations-intelligence--engineering-epic-planned)
+defines the shared operational event lifecycle, delivery sequence, data-source/
+freshness requirements, security controls, and release acceptance gates.
+
 ## Historical build notes
 
 Marine service operating system. Corrected implementation of the HarborIQ

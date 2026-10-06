@@ -552,6 +552,119 @@ this is organized from).
       ledger write, vessel validation, tenant isolation, absent mutation
       routes, and the database `status = 'draft'` check rejection.
 
+## Facility Operations Intelligence — engineering epic (PLANNED)
+
+**Target scope, not implemented or verified.** Expand HarborIQ from marine
+service management toward a marine operations network and intelligence platform.
+All eight capabilities are required target-architecture components; existing
+slip reservations, dispatch, vessels, and messaging do not establish completion
+of this epic. This is an in-repository backlog, not a claim that a GitHub issue
+has been created. See the
+[target architecture](ARCHITECTURE.md#target-architecture-facility-operations-intelligence)
+for boundaries, event contracts, freshness targets, and data-sharing policy.
+
+### Delivery sequence and capability acceptance
+
+1. **Foundation → Live Operations + Scheduling**
+   - [ ] Model facilities within company tenants and link appointments, visits,
+         dock/slip resources, jobs, assets, and carriers/operators; reuse existing
+         reservations and service workflows without duplicate sources of truth.
+   - [ ] Implement the shared appointment → arrival → queue → dock assignment →
+         service → completion → departure event lifecycle, including walk-ins,
+         corrections, reassignment, cancellations, and no-shows.
+   - [ ] Provide authenticated operator updates and tenant/facility-scoped
+         occupancy, arrivals/departures, queue, and assignment APIs/screens.
+         Every live screen shows source and freshness; stale/conflicting data
+         becomes unknown. Verify the architecture's pilot latency/expiry targets
+         with measured load and reconnect tests before any “real-time” claim.
+   - [ ] Support appointment creation, rescheduling, cancellation, and no-show
+         recording; coordinate dock capacity, technicians, equipment, and
+         maintenance windows. Prove conflict prevention under concurrent booking,
+         reassignment, and approval, with facility time-zone/DST tests.
+2. **Automated Notifications + Asset Intelligence**
+   - [ ] Deliver arrival instructions, dock assignments, delays, schedule
+         changes, completion, and pickup notices to drivers/operators through
+         configured SMS/email/push adapters. Test consent/opt-out, scoped
+         recipients, deduplication, provider callbacks, retry/dead-letter states,
+         and provider outage recovery; console fallback cannot count as delivery.
+   - [ ] Track vessels, trailers, service vehicles, lifts, forklifts, tools, and
+         equipment with location/source/freshness, assignment/status, maintenance,
+         inspection, and utilization history. Prevent allocation of unavailable,
+         conflicting, or maintenance-blocked equipment; retain audit history.
+3. **Predictive Operations + Performance Intelligence**
+   - [ ] Forecast wait and dwell times from queue, capacity, staffing, historical
+         service duration, and arrival patterns; show horizon, interval/confidence,
+         input age, version, and an insufficient-data fallback.
+   - [ ] Backtest against a transparent baseline using time-based holdouts without
+         future-data leakage. Establish documented pilot error/calibration/drift
+         thresholds before enablement; monitor realized outcomes by facility and
+         automatically suppress/fall back when input or model gates fail.
+   - [ ] Produce carrier/operator scorecards for on-time performance, dwell,
+         cancellations, no-shows, completion reliability, and exceptions. Define
+         denominators, weights, windows, versioning, exception attribution, and
+         minimum samples; show evidence and insufficient-data states. Scores
+         remain tenant-private unless explicitly authorized for sharing.
+4. **HarborIQ AI Operations Engine**
+   - [ ] Recommend dock allocation, scheduling, staffing, queue optimization,
+         preventive maintenance, and capacity adjustments with evidence,
+         provenance, confidence, alternatives, and expected-impact assumptions.
+   - [ ] Require authorized human approval for consequential actions; revalidate
+         live capacity and constraints at execution. Record approvals, rejection/
+         override reasons and outcomes; prove duplicate approval cannot execute
+         twice and stale recommendations cannot bypass scheduling or RBAC.
+5. **HarborIQ Network**
+   - [ ] Enable opt-in capacity/service discovery and referrals for marinas,
+         boatyards, service companies, docks, technicians, carriers/operators,
+         and customers using explicitly published fields and expiring listings.
+   - [ ] Demonstrate discovery and an accepted/completed referral across two
+         independently isolated facilities/companies. Test nonparticipants,
+         sharing revocation, listing expiry, cache invalidation, and recipient
+         consent; never bypass tenant RLS to expose private operational data.
+   - [ ] Measure participating facilities/providers, discovery-to-referral
+         conversion, referral completion, and fulfilled shared capacity to
+         evaluate network value; do not claim network effects from registration
+         counts alone.
+
+### Cross-cutting engineering and release gates
+
+- [ ] **PostgreSQL + RLS:** Alembic migrations with tenant-safe foreign keys,
+      FORCE RLS, indexes, lifecycle checks, and concurrency-safe resource
+      constraints. Test missing/wrong tenant context and cross-tenant read/write
+      denial against the application DB role, including workers and exports.
+- [ ] **RBAC + FastAPI:** typed/versioned contracts, validated transitions,
+      pagination, idempotent commands, tenant/facility authorization, rate limits,
+      and tenant-bound streaming or polling. Cover owner/admin/operations/
+      technician permissions and narrowly scoped driver/customer access.
+      Regenerate the existing OpenAPI artifact when APIs actually change.
+- [ ] **Async events + Celery/Redis:** atomically persist domain state, operational
+      events, and outbox intent; implement registered consumers with tenant
+      context, ordering, deduplication, bounded retries, dead-letter monitoring,
+      and safe replay. Prove rollback emits nothing, duplicate/late events do not
+      corrupt projections, and replay does not resend side effects.
+- [ ] **Predictive-model monitoring + AI provenance:** retained input/version/
+      outcome lineage, leakage-free evaluation, quality/drift alerts, baseline
+      fallback, reproducible score explanations, and auditable human decisions.
+      Test unavailable intelligence workers without breaking core operations.
+- [ ] **Integration security + privacy:** source authentication, signed webhook
+      verification/replay defense where applicable, input validation, retention
+      and deletion rules for telemetry/contact data, consent enforcement, and
+      minimized network publication. No new external AI data flow without an
+      approved processing boundary.
+- [ ] **Feature flags + operations:** default-off server-side capability flags,
+      per-tenant pilots, independent notification/AI/network kill switches,
+      observability for lag/freshness/worker failures and provider delivery, plus
+      documented recovery, migration, rollback, and replay procedures.
+- [ ] **CI + tests:** extend existing backend/PostgreSQL and frontend suites with
+      lifecycle, RLS/RBAC, concurrency, idempotency, out-of-order events, source
+      freshness, reconnect, notification delivery, prediction quality, approval,
+      and two-facility sharing cases. All existing lint/build/test/security checks
+      pass; provider-dependent behavior needs sandbox/pilot evidence, not mocks
+      alone.
+- [ ] **Release evidence:** map each capability to implementation, deployment,
+      acceptance-test results, supported sources/channels, known limitations, and
+      operator sign-off. Update the release register and product/marketing claims
+      only for verified enabled scope; all unchecked work remains planned.
+
 ## Differentiators to preserve/lean into throughout (not incumbents' turf)
 - Fully explainable AI dispatch scoring (factor-by-factor breakdown) vs.
   DockMaster's marketing-only "AI-powered scheduling" claim.
