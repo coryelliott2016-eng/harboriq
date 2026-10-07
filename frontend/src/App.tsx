@@ -67,6 +67,9 @@ const LoginPage = lazy(() =>
 const MessagesPage = lazy(() =>
   import("./pages/MessagesPage").then((m) => ({ default: m.MessagesPage })),
 );
+const MarineSignalsPage = lazy(() =>
+  import("./pages/MarineSignalsPage").then((m) => ({ default: m.MarineSignalsPage })),
+);
 const PublicInvoicePage = lazy(() =>
   import("./pages/PublicInvoicePage").then((m) => ({
     default: m.PublicInvoicePage,
@@ -212,6 +215,18 @@ function MessagesRoute() {
   return <MessagesPage />;
 }
 
+function MarineSignalsRoute() {
+  const { user } = useAuth();
+  if (!canManageOperations(user?.role)) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Marine Signals is limited to owners, admins, and office staff.
+      </div>
+    );
+  }
+  return <MarineSignalsPage />;
+}
+
 // Phase 13: inventory, vendors, and purchase orders are all
 // require_operations-gated to match their backend routes
 // (app/api/v1/routes/{inventory,vendors,purchase_orders}.py).
@@ -339,6 +354,7 @@ export default function App() {
             <Route path="/reports/ar-aging" element={<ArAgingRoute />} />
             <Route path="/reports" element={<ReportsRoute />} />
             <Route path="/messages" element={<MessagesRoute />} />
+            <Route path="/marine-signals" element={<MarineSignalsRoute />} />
             <Route
               path="/settings/billing"
               element={<BillingSettingsRoute />}

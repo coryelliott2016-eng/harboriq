@@ -3,6 +3,74 @@
 // so they are typed `string` here, not `number`.
 
 export type UserRole = "owner" | "admin" | "office" | "technician";
+export type MarineSignalCategory =
+  | "weather"
+  | "environment"
+  | "safety_recall"
+  | "regulation"
+  | "season"
+  | "training"
+  | "fuel"
+  | "market";
+
+export interface MarineSignalSource {
+  id: string;
+  name: string;
+  category: MarineSignalCategory;
+  source_url: string;
+  feed_url: string;
+  terms_url: string;
+  terms_reviewed_at: string;
+  enabled: boolean;
+  last_checked_at: string | null;
+  last_error: string | null;
+  created_at: string;
+}
+
+export interface MarineSignal {
+  id: string;
+  source_id: string;
+  source_name: string;
+  category: MarineSignalCategory;
+  title: string;
+  source_content: string;
+  summary: string;
+  why_it_matters: string;
+  suggested_action: string;
+  citation_url: string;
+  published_at: string | null;
+  effective_until: string | null;
+  geography: string;
+  uncertainty: string;
+  priority: "normal" | "urgent";
+  status: "needs_review" | "published" | "stale" | "superseded";
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  last_checked_at: string;
+  created_at: string;
+  feedback: "saved" | "dismissed" | "flagged" | "useful" | "acted" | null;
+  feedback_note: string;
+}
+
+export interface MarineSignalProfile {
+  service_area: string;
+  specialties: string[];
+  interests: MarineSignalCategory[];
+  digest_email: string | null;
+  digest_enabled: boolean;
+  updated_at: string | null;
+}
+
+export interface MarineSignalMetrics {
+  source_count: number;
+  fresh_sources: number;
+  stale_sources: number;
+  needs_review: number;
+  citation_coverage: number;
+  useful_feedback: number;
+  acted_feedback: number;
+  feedback_count: number;
+}
 
 export interface User {
   id: string;

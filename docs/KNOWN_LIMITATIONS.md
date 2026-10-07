@@ -14,7 +14,7 @@ launch; **Medium/Low** are accepted for a supervised pilot.
 | L6 | Stripe live mode never exercised | High (for payments) | Real settlement/refund untested | Live keys + one real charge/refund cycle | Cory |
 | L7 | Labor tiers / rate cards not built | Medium | Rates typed per labor line | Design tier model (ADR needed) | Eng |
 | L8 | AI-assisted diagnostics not built | Medium | Must not be marketed | Product + safety design | Cory/Eng |
-| L9 | Recall / service-bulletin intelligence not built | Medium | Must not be marketed | Data-source decision | Cory |
+| L9 | Marine Signals is a limited RSS pilot, not comprehensive recall/service-bulletin intelligence | Medium | Shops must configure each feed and verify terms; no feeds are preloaded, and non-RSS/recall coverage is incomplete | Verify source licenses and refresh reliability before expanding coverage; configure SMTP for delivery | Cory/Eng |
 | L10 | Dispatch is rule-based, not AI | Medium (copy accuracy) | Site says "AI-assisted dispatch" | Change copy to "smart, rule-based dispatch suggestions" | Cory |
 | L11 | Audit log misses invoice send/void/refund and role changes; no viewer | Medium | Weaker forensic trail for money events | Add audit rows + read endpoint | Eng |
 | L12 | MFA optional for owner/admin | Medium | Account-takeover risk | Company MFA policy exists; consider default-on for owners | Eng |

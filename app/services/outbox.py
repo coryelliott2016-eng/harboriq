@@ -196,6 +196,21 @@ def _build_email(
             [],
         )
 
+    if event_type == "marine_signal.urgent_alert":
+        return (
+            payload["to"],
+            f"[HarborIQ] Urgent Marine Signal: {payload['title']}",
+            "A human-reviewed urgent Marine Signal is available.\n\n"
+            f"{payload['title']}\n\n"
+            f"What changed: {payload['summary']}\n"
+            f"Why it matters: {payload['why_it_matters']}\n"
+            f"Suggested action: {payload['suggested_action']}\n"
+            f"Uncertainty: {payload.get('uncertainty') or 'Verify current details at the source.'}\n"
+            f"Primary source: {payload['citation_url']}\n\n"
+            "Verify safety and regulatory details with the cited source before acting.",
+            [],
+        )
+
     return None
 
 

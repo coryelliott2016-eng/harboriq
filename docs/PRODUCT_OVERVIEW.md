@@ -40,7 +40,7 @@ Authoritative per-feature status, evidence, and acceptance criteria live in
 | R11 Reports & exports | Verified (not deployed) |
 | R12 Labor rate tiers | Not built |
 | R13 AI-assisted diagnostics (with safe fallbacks) | Not built |
-| R14 Recall / service-bulletin intelligence | Not built |
+| R14 Recall / service-bulletin intelligence | Marine Signals pilot: curated RSS feeds, reviewed briefs, and source citations; not comprehensive |
 | R15 Native mobile store apps | Partial (unsigned) |
 
 ## Non-goals for the pilot
@@ -57,4 +57,28 @@ Multi-region hosting, Kubernetes, crypto payments or asset tokenization
 1. Labor tier model: per-shop rate card vs. per-technician vs. per-job-type.
 2. Whether and how to add AI diagnostics: data sources, liability language,
    human-confirmation UX, fallback when the model is unavailable.
-3. Recall/bulletin data source (manufacturer feeds, USCG recalls) and licensing.
+3. Expand Marine Signals beyond the pilot's approved-host RSS feeds only after
+   each source's terms/license and refresh reliability are verified; licensed
+   manufacturer feeds and comprehensive recall coverage remain open decisions.
+
+## Marine Signals pilot
+
+Marine Signals is an operations-facing, Sarasota-first briefing workflow for
+weather, environment, safety/recalls, regulation, season calendars, training,
+fuel, and market updates. Owners/admins configure HTTPS RSS/Atom sources from
+the approved primary-source host allowlist and explicitly confirm that they
+reviewed the source terms before polling is enabled. Feeds refresh every six
+hours; feed entries remain private to the shop and in `needs_review` until an
+owner/admin verifies the citation and supplies the summary, shop impact, action,
+geography, and uncertainty. Published entries expire when their effective date
+passes or when they disappear from a feed for 21 days. Shop profile topics and
+service area filter published briefs; feedback records saved, dismissed,
+flagged, useful, and acted-on signals. Opt-in email delivers a weekly digest
+and urgent alerts only after human review.
+
+This pilot does not scrape pages, provide legal/safety advice, or claim
+comprehensive recall coverage. It has no preconfigured feeds: each shop must
+identify the official feed and terms page, and a source domain being allowlisted
+does not by itself grant permission to poll it. Delivery requires configured
+SMTP. Source freshness, citation coverage, review backlog, and feedback/action
+counts are visible to operations staff.

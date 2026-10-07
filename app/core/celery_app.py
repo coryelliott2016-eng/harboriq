@@ -34,7 +34,11 @@ celery_app = Celery(
     "harboriq",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.outbox_tasks", "app.tasks.sweep_tasks"],
+    include=[
+        "app.tasks.outbox_tasks",
+        "app.tasks.sweep_tasks",
+        "app.tasks.marine_signals_tasks",
+    ],
 )
 
 celery_app.conf.update(
@@ -88,6 +92,14 @@ celery_app.conf.update(
         "slip-storage-billing-daily": {
             "task": "app.tasks.sweep_tasks.slip_storage_billing_sweep_task",
             "schedule": crontab(minute=30, hour=1),
+        },
+        "marine-signals-refresh-every-6-hours": {
+            "task": "app.tasks.marine_signals_tasks.refresh_marine_signals_task",
+            "schedule": crontab(minute=45, hour="*/6"),
+        },
+        "marine-signals-weekly-digest-monday": {
+            "task": "app.tasks.marine_signals_tasks.weekly_marine_signals_digest_task",
+            "schedule": crontab(minute=0, hour=13, day_of_week=1),
         },
     },
 )

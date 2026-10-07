@@ -55,7 +55,7 @@ flowchart LR
 | Mobile shell | Capacitor 8 wrapping the web app | `frontend/` (see `docs/mobile-launch-runbook.md`) | No (store signing pending) |
 | API | FastAPI, SQLAlchemy 2, Pydantic 2, Python 3.12 | `app/` | No |
 | Background jobs | Celery worker + beat on Redis | `app/core/celery_app.py`, `app/tasks/` | No |
-| Database | PostgreSQL with Alembic migrations `0001`–`0025` (raw SQL in `alembic/sql/`) | `alembic/` | No (local/CI only) |
+| Database | PostgreSQL with Alembic migrations `0001`–`0027` (raw SQL in `alembic/sql/`) | `alembic/` | No (local/CI only) |
 | Payments | Stripe SDK; Connect for shop payouts; subscriptions for HarborIQ plans | `app/services/stripe_*.py` | Test mode only |
 
 ## Request path and tenancy
@@ -80,6 +80,22 @@ delivered by the Celery beat/worker loop (`app/services/outbox_dispatch.py`)
 with retries and a `dead_letter` state after 5 attempts. This keeps "invoice
 sent" and "email queued" atomic. Without SMTP credentials the dispatcher logs
 emails instead of sending them.
+
+## Marine Signals
+
+`app/api/v1/routes/marine_signals.py` exposes a tenant-scoped source registry,
+shop relevance profile, review/publish workflow, and feedback. Migrations
+`0026`–`0027` apply FORCE RLS to each company-owned table. Owners/admins can
+register only HTTPS feeds on the explicit primary-source allowlist, with feed
+and source on the same host and a recorded terms-review acknowledgment.
+`app.tasks.marine_signals_tasks` refreshes feeds every six hours using HTTPS,
+no redirects, a 12-second timeout, and a 2 MB response limit; entries are
+deduplicated by feed ID and remain in `needs_review`. Updates to published
+source content return the item to review. Effective-date expiry and 21 days
+without a feed update move published items to stale; staff can mark items
+superseded. Reviewed urgent items can trigger an opted-in email alert, and a
+weekly Celery task sends the previous week's published, interest-filtered
+digest. Nothing is sent to boat-owner portal customers.
 
 ## Money workflow
 
