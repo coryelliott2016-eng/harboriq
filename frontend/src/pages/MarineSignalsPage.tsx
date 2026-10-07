@@ -173,7 +173,7 @@ export function MarineSignalsPage() {
         </div>
       )}
 
-      <ProfileForm initial={profileQuery.data ?? emptyProfile} onSaved={refresh} />
+      {isAdmin && <ProfileForm initial={profileQuery.data ?? emptyProfile} onSaved={refresh} />}
 
       <Card className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -275,10 +275,10 @@ export function MarineSignalsPage() {
             <Field label="Why it matters to this shop"><textarea className={inputClass} required rows={2} value={reviewFields.why_it_matters} onChange={(event) => setReviewFields({ ...reviewFields, why_it_matters: event.target.value })} /></Field>
             <Field label="Suggested action"><textarea className={inputClass} required rows={2} value={reviewFields.suggested_action} onChange={(event) => setReviewFields({ ...reviewFields, suggested_action: event.target.value })} /></Field>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Geography"><input className={inputClass} value={reviewFields.geography} onChange={(event) => setReviewFields({ ...reviewFields, geography: event.target.value })} /></Field>
+              <Field label="Geography"><input className={inputClass} required value={reviewFields.geography} onChange={(event) => setReviewFields({ ...reviewFields, geography: event.target.value })} /></Field>
               <Field label="Priority"><select className={inputClass} value={reviewFields.priority} onChange={(event) => setReviewFields({ ...reviewFields, priority: event.target.value as "normal" | "urgent" })}><option value="normal">Normal</option><option value="urgent">Urgent alert</option></select></Field>
             </div>
-            <Field label="Uncertainty / verification caveat"><textarea className={inputClass} rows={2} value={reviewFields.uncertainty} onChange={(event) => setReviewFields({ ...reviewFields, uncertainty: event.target.value })} /></Field>
+            <Field label="Uncertainty / verification caveat"><textarea className={inputClass} required rows={2} value={reviewFields.uncertainty} onChange={(event) => setReviewFields({ ...reviewFields, uncertainty: event.target.value })} /></Field>
             <div className="flex gap-2">
               <Button type="submit" disabled={reviewMutation.isPending}>Publish reviewed item</Button>
               <Button type="button" variant="secondary" onClick={() => setReviewing(null)}>Cancel</Button>
@@ -418,7 +418,7 @@ function SignalCard({
       {signal.status === "published" && (
         <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
           {(["saved", "useful", "acted", "flagged", "dismissed"] as const).map((feedback) => (
-            <Button key={feedback} variant={signal.feedback === feedback ? "primary" : "secondary"} onClick={() => onFeedback(feedback)}>
+            <Button key={feedback} variant={signal.feedback === feedback ? "primary" : "secondary"} aria-pressed={signal.feedback === feedback} onClick={() => onFeedback(feedback)}>
               {feedback === "acted" ? "Action taken" : feedback[0]!.toUpperCase() + feedback.slice(1)}
             </Button>
           ))}

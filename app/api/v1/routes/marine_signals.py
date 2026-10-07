@@ -113,21 +113,22 @@ def list_signals(
     area = profile["service_area"].strip().casefold()
     relevant = []
     for signal in signals:
-        if (
-            signal["priority"] != "urgent"
-            and interests
-            and signal["category"] not in interests
-        ):
-            continue
-        geography = (signal["geography"] or "").casefold()
-        if (
-            signal["priority"] != "urgent"
-            and area
-            and geography
-            and area not in geography
-            and geography not in area
-        ):
-            continue
+        if signal["status"] == "published":
+            if (
+                signal["priority"] != "urgent"
+                and interests
+                and signal["category"] not in interests
+            ):
+                continue
+            geography = (signal["geography"] or "").casefold()
+            if (
+                signal["priority"] != "urgent"
+                and area
+                and geography
+                and area not in geography
+                and geography not in area
+            ):
+                continue
         relevant.append(signal)
     return relevant
 

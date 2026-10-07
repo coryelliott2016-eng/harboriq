@@ -76,7 +76,7 @@ class MarineSignalSourceCreate(BaseModel):
 class MarineSignalSourceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
+    id: uuid.UUID
     name: str
     category: SignalCategory
     source_url: str
@@ -138,8 +138,8 @@ class MarineSignalReview(BaseModel):
     summary: str = Field(min_length=1, max_length=2000)
     why_it_matters: str = Field(min_length=1, max_length=1500)
     suggested_action: str = Field(min_length=1, max_length=1500)
-    uncertainty: str = Field(default="", max_length=1000)
-    geography: str = Field(default="", max_length=200)
+    uncertainty: str = Field(min_length=1, max_length=1000)
+    geography: str = Field(min_length=1, max_length=200)
     priority: SignalPriority = "normal"
 
     @field_validator(
@@ -158,8 +158,8 @@ class MarineSignalReview(BaseModel):
 class MarineSignalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
-    source_id: str
+    id: uuid.UUID
+    source_id: uuid.UUID
     source_name: str
     category: SignalCategory
     title: str
@@ -174,7 +174,7 @@ class MarineSignalOut(BaseModel):
     uncertainty: str
     priority: SignalPriority
     status: Literal["needs_review", "published", "stale", "superseded"]
-    reviewed_by: str | None
+    reviewed_by: uuid.UUID | None
     reviewed_at: datetime | None
     last_checked_at: datetime
     created_at: datetime

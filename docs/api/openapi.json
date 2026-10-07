@@ -4737,6 +4737,7 @@
             "type": "string"
           },
           "id": {
+            "format": "uuid",
             "title": "Id",
             "type": "string"
           },
@@ -4780,6 +4781,7 @@
           "reviewed_by": {
             "anyOf": [
               {
+                "format": "uuid",
                 "type": "string"
               },
               {
@@ -4793,6 +4795,7 @@
             "type": "string"
           },
           "source_id": {
+            "format": "uuid",
             "title": "Source Id",
             "type": "string"
           },
@@ -4972,8 +4975,8 @@
       "MarineSignalReview": {
         "properties": {
           "geography": {
-            "default": "",
             "maxLength": 200,
+            "minLength": 1,
             "title": "Geography",
             "type": "string"
           },
@@ -4999,8 +5002,8 @@
             "type": "string"
           },
           "uncertainty": {
-            "default": "",
             "maxLength": 1000,
+            "minLength": 1,
             "title": "Uncertainty",
             "type": "string"
           },
@@ -5014,7 +5017,9 @@
         "required": [
           "summary",
           "why_it_matters",
-          "suggested_action"
+          "suggested_action",
+          "uncertainty",
+          "geography"
         ],
         "title": "MarineSignalReview",
         "type": "object"
@@ -5109,6 +5114,7 @@
             "type": "string"
           },
           "id": {
+            "format": "uuid",
             "title": "Id",
             "type": "string"
           },

@@ -100,6 +100,7 @@ def send_weekly_digests(now: datetime | None = None) -> dict[str, int]:
     for profile in profiles:
         company_id = profile["company_id"]
         db = AppSession()
+        claimed_at = None
         try:
             set_tenant(db, company_id)
             signals = marine_signals.list_digest_signals(db, company_id)
@@ -124,7 +125,8 @@ def send_weekly_digests(now: datetime | None = None) -> dict[str, int]:
                 db.rollback()
                 result["skipped"] += 1
                 continue
-            if not marine_signals.claim_weekly_digest(db, company_id, week_start):
+            claimed_at = marine_signals.claim_weekly_digest(db, company_id, week_start)
+            if claimed_at is None:
                 db.rollback()
                 result["skipped"] += 1
                 continue
@@ -135,12 +137,25 @@ def send_weekly_digests(now: datetime | None = None) -> dict[str, int]:
             )
             set_tenant(db, company_id)
             marine_signals.finish_weekly_digest(
-                db, company_id, week_start, sent=sent
+                db, company_id, week_start, sent=sent, claimed_at=claimed_at
             )
             db.commit()
             result["sent" if sent else "failed"] += 1
         except Exception:  # noqa: BLE001
             db.rollback()
+            if claimed_at is not None:
+                try:
+                    set_tenant(db, company_id)
+                    marine_signals.release_weekly_digest(
+                        db, company_id, week_start, claimed_at
+                    )
+                    db.commit()
+                except Exception:  # noqa: BLE001
+                    db.rollback()
+                    logger.exception(
+                        "marine_signals.digest_claim_release_failed",
+                        extra={"company_id": str(company_id)},
+                    )
             result["failed"] += 1
             logger.exception(
                 "marine_signals.digest_delivery_failed",

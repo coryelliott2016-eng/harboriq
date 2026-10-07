@@ -336,6 +336,7 @@ def metrics(db: Session, company_id: uuid.UUID) -> dict:
                WHERE company_id = :company_id) AS source_count,
               (SELECT count(*) FROM marine_signal_sources
                WHERE company_id = :company_id AND enabled
+                 AND last_error IS NULL
                  AND last_checked_at >= now() - interval '36 hours') AS fresh_sources,
               (SELECT count(*) FROM marine_signal_sources
                WHERE company_id = :company_id AND enabled
@@ -444,9 +445,9 @@ def _parse_feed(content: bytes, feed_url: str) -> list[dict]:
         link_host = (urlsplit(link).hostname or "").lower().rstrip(".")
         if link_host not in CURATED_SOURCE_HOSTS:
             link = feed_url
-        external_id = (
-            _child_text(entry, "guid", "id") or link or title
-        )[:2000]
+        external_id = (_child_text(entry, "guid", "id") or (link if link != feed_url else title))[
+            :2000
+        ]
         parsed_entries.append(
             {
                 "external_id": external_id,
@@ -620,10 +621,10 @@ def list_digest_signals(db: Session, company_id: uuid.UUID) -> list[dict]:
             _signal_query()
             + """
               AND s.status = 'published'
-              AND COALESCE(s.published_at, s.created_at) >= now() - interval '7 days'
+              AND s.reviewed_at >= now() - interval '7 days'
               AND (s.effective_until IS NULL OR s.effective_until > now())
               ORDER BY CASE WHEN s.priority = 'urgent' THEN 0 ELSE 1 END,
-                       s.published_at DESC NULLS LAST
+                       s.reviewed_at DESC
               LIMIT 100
             """
         ),
@@ -634,7 +635,7 @@ def list_digest_signals(db: Session, company_id: uuid.UUID) -> list[dict]:
 
 def claim_weekly_digest(
     db: Session, company_id: uuid.UUID, week_start
-) -> bool:
+) -> datetime | None:
     claim = db.execute(
         text(
             """
@@ -645,16 +646,40 @@ def claim_weekly_digest(
                 status = 'sending', claimed_at = now(), sent_at = NULL
             WHERE marine_signal_digest_deliveries.status <> 'sent'
               AND marine_signal_digest_deliveries.claimed_at < now() - interval '3 hours'
-            RETURNING company_id
+            RETURNING claimed_at
             """
         ),
         {"company_id": company_id, "week_start": week_start},
-    ).first()
-    return claim is not None
+    ).scalar_one_or_none()
+    return claim
+
+
+def release_weekly_digest(
+    db: Session, company_id: uuid.UUID, week_start, claimed_at: datetime
+) -> None:
+    db.execute(
+        text(
+            """
+            DELETE FROM marine_signal_digest_deliveries
+            WHERE company_id = :company_id AND week_start = :week_start
+              AND status = 'sending' AND claimed_at = :claimed_at
+            """
+        ),
+        {
+            "company_id": company_id,
+            "week_start": week_start,
+            "claimed_at": claimed_at,
+        },
+    )
 
 
 def finish_weekly_digest(
-    db: Session, company_id: uuid.UUID, week_start, *, sent: bool
+    db: Session,
+    company_id: uuid.UUID,
+    week_start,
+    *,
+    sent: bool,
+    claimed_at: datetime,
 ) -> None:
     if sent:
         db.execute(
@@ -663,9 +688,14 @@ def finish_weekly_digest(
                 UPDATE marine_signal_digest_deliveries
                 SET status = 'sent', sent_at = now()
                 WHERE company_id = :company_id AND week_start = :week_start
+                  AND status = 'sending' AND claimed_at = :claimed_at
                 """
             ),
-            {"company_id": company_id, "week_start": week_start},
+            {
+                "company_id": company_id,
+                "week_start": week_start,
+                "claimed_at": claimed_at,
+            },
         )
     else:
         db.execute(
@@ -673,10 +703,14 @@ def finish_weekly_digest(
                 """
                 DELETE FROM marine_signal_digest_deliveries
                 WHERE company_id = :company_id AND week_start = :week_start
-                  AND status = 'sending'
+                  AND status = 'sending' AND claimed_at = :claimed_at
                 """
             ),
-            {"company_id": company_id, "week_start": week_start},
+            {
+                "company_id": company_id,
+                "week_start": week_start,
+                "claimed_at": claimed_at,
+            },
         )
 
 
