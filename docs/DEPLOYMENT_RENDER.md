@@ -32,7 +32,7 @@ Everything is declared in `render.yaml`. Secrets are `sync: false` or
    If off-host AWS backups are enabled, either set `AWS_BACKUP_ENABLED=true` in
    `.env` or append `--require-aws-backups` for this check.
 2. Connect Render to Computer (or in the Render dashboard, create **New > Blueprint** from this repo).
-3. Enter the `sync: false` values: the two database URLs, `MFA_ENCRYPTION_KEY` (Fernet), `APP_BASE_URL`, `CORS_ALLOW_ORIGINS`, Stripe **test** keys, SMTP settings.
+3. Enter the `sync: false` values: the two database URLs, `MFA_ENCRYPTION_KEY` (Fernet), `APP_BASE_URL`, `CORS_ALLOW_ORIGINS`, Stripe **test** keys, SMTP settings. If off-host AWS backups are enabled, also set `BACKUP_S3_BUCKET`, `AWS_DEFAULT_REGION` (or `AWS_REGION`), `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` in Render before go-live.
 4. Deploy API + worker + Redis + static site from `render.yaml`.
 5. Run `HARBORIQ_BASE_URL=https://harboriq-app.onrender.com python smoke_test.py` and the manual checklist in `TESTING_QA_PLAN.md`.
 6. After harboriq.com DNS is recovered: add `app.harboriq.com` as a custom domain on `harboriq-app` and `api.harboriq.com` on `harboriq-api`, then update `APP_BASE_URL`/`CORS_ALLOW_ORIGINS` and the rewrite destination.
