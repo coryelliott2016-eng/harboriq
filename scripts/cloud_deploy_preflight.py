@@ -77,7 +77,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--require-aws-backups",
         action="store_true",
-        help="Fail unless AWS backup bucket/region settings are present.",
+        help=(
+            "Fail unless AWS backup bucket/region settings are present, plus "
+            "AWS access-key env vars for Render deployments."
+        ),
     )
     return parser.parse_args(argv)
 
