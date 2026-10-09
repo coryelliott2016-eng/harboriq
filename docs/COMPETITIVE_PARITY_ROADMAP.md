@@ -538,11 +538,12 @@ estimates or manual entries.
       confirmed partial payment and duplicate replay idempotency, failed
       outcome isolation from the invoice, and cross-tenant read isolation.
 
-- [ ] **Audit the facility-intelligence branch.** Review
-      `copilot/harboriq-facility-operations-intelligence` and document
-      which facility-operations capabilities are implemented, tested, and
-      production-ready versus scaffolding, placeholders, or unverified
-      assumptions. Treat the audit as a gate before expanding that work.
+- [ ] **Review facility-intelligence design and repository status.** Review
+      the facility-operations proposals against the current repository code
+      and tests, classifying capabilities as implemented, tested,
+      production-ready, scaffolded, or planned/unverified based on repository
+      evidence. This is a design-document and current-repository review, not an
+      audit of a separate branch or a claim that planned capabilities exist.
 - [ ] **Establish protected-main governance.** Configure actual branch
       protection or repository rules requiring review and passing status
       checks before changes land on `master`. The post-push audit issue is
@@ -584,12 +585,27 @@ estimates or manual entries.
       Network data; no tenant's operational or customer-level records become
       visible to another tenant by default.
 
+## Phase 21 — Reserved
+Intentionally unassigned; scope will be defined in a future roadmap update.
+
+## Phase 22 — Reserved
+Intentionally unassigned; scope will be defined in a future roadmap update.
+
+## Phase 23 — Reserved
+Intentionally unassigned; scope will be defined in a future roadmap update.
+
 ## Phase 24 — Scheduling, Dispatch & Capacity Intelligence
 - [ ] Extend scheduling and dispatch from service jobs to facility
       appointments, arrivals, queues, and dock/resource assignments.
 - [ ] Add predictive wait times and capacity optimization based on
       operational data, clearly distinguishing estimates from observations
       and exposing their freshness, confidence, and source.
+
+## Phase 25 — Reserved
+Intentionally unassigned; scope will be defined in a future roadmap update.
+
+## Phase 26 — Reserved
+Intentionally unassigned; scope will be defined in a future roadmap update.
 
 ## Phase 27 — Marina, Vessel & Live Dock Operations
 - [ ] Connect vessel, slip, appointment, arrival, and departure workflows for
@@ -603,6 +619,9 @@ estimates or manual entries.
       location, availability, utilization, and maintenance state.
 - [ ] Keep manually maintained, inferred, and sensor-reported status
       distinguishable, with provenance and freshness visible to operators.
+
+## Phase 29 — Reserved
+Intentionally unassigned; scope will be defined in a future roadmap update.
 
 ## Phase 30 — Driver & Operator Notifications
 - [ ] Add reliable, configurable notifications for relevant appointment,
@@ -631,12 +650,19 @@ estimates or manual entries.
       confidence metadata through ingestion; degrade transparently when a
       source is unavailable or stale.
 
+## Phase 34 — Reserved
+Intentionally unassigned; scope will be defined in a future roadmap update.
+
+## Phase 35 — Reserved
+Intentionally unassigned; scope will be defined in a future roadmap update.
+
 ## Phase 36 — Commercial Launch: Verified Single-Facility Product
 - [ ] Launch the verified single-facility Marina/Facility OS without requiring
       HarborIQ Network participation or cross-facility liquidity.
-- [ ] Gate launch on the facility-branch audit, tenant/RLS verification,
-      protected-main controls, trustworthy presentation of operational data,
-      and applicable deployment and release checks.
+- [ ] Gate launch on the facility-intelligence design/repository review,
+      tenant/RLS verification, protected-main controls, trustworthy
+      presentation of operational data, and applicable deployment and release
+      checks.
 
 ## Phase 37 — HarborIQ Network / Marketplace
 - [ ] Add cross-facility discovery, referrals, and capacity exchange as a
