@@ -25,12 +25,10 @@ happen as one atomic unit, or two concurrent requests could each see a
 uninterruptible step server-side, which plain `INCR` + `EXPIRE` (two round
 trips) cannot guarantee under concurrency.
 
-Fail-open on Redis errors: if Redis is unreachable, requests are allowed
-through rather than raising a 500 for every login attempt. A rate limiter
-that is down should not become an outage for the feature it protects —
-this mirrors the "graceful degradation" principle used everywhere else in
-this codebase (SMTP, Twilio, Sentry, geocoding). The failure is logged so
-it is visible in observability, not silent.
+Auth limiters fail open on Redis errors, preserving login availability.
+Public marketing leads fail closed with 503 instead: an unprotected
+unauthenticated signup must not store leads or send notification emails.
+Failures are logged by bucket only, without request content.
 """
 from __future__ import annotations
 
@@ -71,10 +69,13 @@ return {count, ttl}
 
 
 class _RedisFixedWindowLimiter:
-    def __init__(self, bucket: str, limit: int, window_seconds: int) -> None:
+    def __init__(
+        self, bucket: str, limit: int, window_seconds: int, *, fail_closed: bool = False
+    ) -> None:
         self.bucket = bucket
         self.limit = limit
         self.window_seconds = window_seconds
+        self.fail_closed = fail_closed
 
     def _key(self, identity: str) -> str:
         return f"{_KEY_PREFIX}:{self.bucket}:{identity}"
@@ -87,6 +88,15 @@ class _RedisFixedWindowLimiter:
                 _LUA_FIXED_WINDOW, 1, self._key(identity), self.window_seconds
             )
         except RedisError:
+            if self.fail_closed:
+                logger.warning(
+                    "rate_limit.redis_unavailable_failing_closed",
+                    bucket=self.bucket,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Request protection is unavailable. Please try again later.",
+                ) from None
             logger.warning(
                 "rate_limit.redis_unavailable_failing_open",
                 bucket=self.bucket,
@@ -136,6 +146,7 @@ _marketing_lead_limiter = _RedisFixedWindowLimiter(
     "marketing_lead",
     settings.marketing_lead_rate_limit_per_window,
     settings.marketing_lead_rate_limit_window_seconds,
+    fail_closed=True,
 )
 
 

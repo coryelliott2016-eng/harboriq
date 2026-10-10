@@ -1,9 +1,8 @@
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, HashRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { registerSW } from "virtual:pwa-register";
-import App from "./App.tsx";
 import { AuthProvider } from "./context/AuthContext.tsx";
 import "./index.css";
 
@@ -12,7 +11,7 @@ import "./index.css";
 // `registerSW` is a no-op outside a real browser (e.g. under Vitest/jsdom)
 // because vite-plugin-pwa only injects `navigator.serviceWorker` support
 // checks -- still guarded explicitly here for clarity and testability.
-if ("serviceWorker" in navigator) {
+if (import.meta.env.VITE_SITE_MODE !== "marketing" && "serviceWorker" in navigator) {
   registerSW({ immediate: true });
 }
 
@@ -24,6 +23,10 @@ if ("serviceWorker" in navigator) {
 // main.tsx is the app entry point, not a component module; it is never
 // Fast-Refreshed (entry-point edits always trigger a full reload), so the
 // react-refresh/only-export-components rule doesn't apply here.
+// eslint-disable-next-line react-refresh/only-export-components
+const MarketingApp = lazy(() => import("./marketing/MarketingApp"));
+// eslint-disable-next-line react-refresh/only-export-components
+const App = lazy(() => import("./App"));
 // eslint-disable-next-line react-refresh/only-export-components
 const Router = import.meta.env.VITE_ROUTER === "hash" ? HashRouter : BrowserRouter;
 
@@ -40,9 +43,11 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <Router>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        {import.meta.env.VITE_SITE_MODE === "marketing" ? (
+          <Suspense fallback={<p role="status">Loading HarborIQ…</p>}><MarketingApp /></Suspense>
+        ) : (
+          <AuthProvider><Suspense fallback={<p role="status">Loading HarborIQ…</p>}><App /></Suspense></AuthProvider>
+        )}
       </Router>
     </QueryClientProvider>
   </StrictMode>,

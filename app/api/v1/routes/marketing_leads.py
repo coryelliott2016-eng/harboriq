@@ -79,6 +79,7 @@ def _notify_and_mark(lead_id: uuid.UUID, lead_snapshot: dict) -> None:
     "/public/leads",
     response_model=MarketingLeadCreateResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={400: {}, 429: {}, 503: {}},
 )
 def create_marketing_lead(
     body: MarketingLeadCreate,
@@ -89,22 +90,14 @@ def create_marketing_lead(
 ):
     """Public trial / demo signup from the marketing site.
 
-    Honeypot: if `website` is non-empty, return a fake success without storing.
+    Honeypot: if `website` is non-empty, reject without storing.
     Soft de-dupe: same email within 24h returns the existing lead without a
     second notification email.
     """
     enforce_marketing_lead_rate_limit(request)
 
     if body.website.strip():
-        # Bot trap — do not reveal detection.
-        return MarketingLeadCreateResponse(
-            id=uuid.uuid4(),
-            duplicate=False,
-            message=(
-                "Thanks — we've got your request. Our team will follow up "
-                "within one business day."
-            ),
-        )
+        raise HTTPException(status_code=400, detail="Unable to accept this request.")
 
     existing = leads_service.find_recent_duplicate(db, body.email)
     if existing:
@@ -113,7 +106,7 @@ def create_marketing_lead(
             id=existing["id"],
             duplicate=True,
             message=(
-                "Thanks — we've already got your request and will follow up soon."
+                "Thanks — your request is already saved. Follow-up is not guaranteed."
             ),
         )
 
@@ -135,8 +128,7 @@ def create_marketing_lead(
         id=lead["id"],
         duplicate=False,
         message=(
-            "Thanks — we've got your request. Our team will follow up "
-            "within one business day."
+            "Thanks — your request is saved. Follow-up is not guaranteed."
         ),
     )
 

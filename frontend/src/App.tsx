@@ -3,6 +3,11 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { canManageOperations, canManageUsers, useAuth } from "./context/auth";
+const MarketingLayout = lazy(() => import("./marketing/MarketingPages").then((m) => ({ default: m.MarketingLayout })));
+const MarketingHome = lazy(() => import("./marketing/MarketingPages").then((m) => ({ default: m.MarketingHome })));
+const AiDemoPage = lazy(() => import("./marketing/MarketingPages").then((m) => ({ default: m.AiDemoPage })));
+const MarketingContactPage = lazy(() => import("./marketing/MarketingPages").then((m) => ({ default: m.MarketingContactPage })));
+const DemoDisclosurePage = lazy(() => import("./marketing/MarketingPages").then((m) => ({ default: m.DemoDisclosurePage })));
 
 // Phase 22 (bundle-size P2): every route-level page is code-split via
 // React.lazy so the initial bundle only ships the app shell + router, not
@@ -300,6 +305,12 @@ export default function App() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         {/* Unauthenticated */}
+        <Route element={<MarketingLayout />}>
+          <Route path="/explore" element={<MarketingHome />} />
+          <Route path="/ai-demo" element={<AiDemoPage />} />
+          <Route path="/contact" element={<MarketingContactPage />} />
+          <Route path="/demo-disclosure" element={<DemoDisclosurePage />} />
+        </Route>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/pay/:token" element={<PublicInvoicePage />} />

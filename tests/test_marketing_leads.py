@@ -26,7 +26,8 @@ def test_create_lead_stores_row_and_notifies(client, service_db):
     body = resp.json()
     assert body["ok"] is True
     assert body["duplicate"] is False
-    assert "follow up" in body["message"].lower()
+    assert "request is saved" in body["message"].lower()
+    assert "not guaranteed" in body["message"].lower()
     send.assert_called_once()
     assert send.call_args.kwargs["to"]  # notify address configured
 
@@ -46,8 +47,8 @@ def test_honeypot_does_not_store(client, service_db):
         "/api/v1/public/leads",
         json=_payload(website="http://spam.example"),
     )
-    assert resp.status_code == 201
-    assert resp.json()["ok"] is True
+    assert resp.status_code == 400
+    assert resp.json() == {"detail": "Unable to accept this request."}
     count = service_db.execute(text("SELECT count(*) FROM marketing_leads")).scalar()
     assert count == 0
 
