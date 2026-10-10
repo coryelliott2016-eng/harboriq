@@ -64,6 +64,9 @@ const JobsPage = lazy(() =>
 const LoginPage = lazy(() =>
   import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })),
 );
+const IndustryPage = lazy(() =>
+  import("./pages/IndustryPage").then((m) => ({ default: m.IndustryPage })),
+);
 const MessagesPage = lazy(() =>
   import("./pages/MessagesPage").then((m) => ({ default: m.MessagesPage })),
 );
@@ -141,6 +144,13 @@ function RouteFallback() {
       Loading…
     </div>
   );
+}
+
+function HomeRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <RouteFallback />;
+  if (!user) return <IndustryPage />;
+  return <AppShell />;
 }
 
 function TeamRoute() {
@@ -300,6 +310,11 @@ export default function App() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         {/* Unauthenticated */}
+        <Route path="/discover" element={<IndustryPage />} />
+        <Route path="/industries/:industry" element={<IndustryPage />} />
+        <Route element={<HomeRoute />}>
+          <Route path="/" element={<DashboardPage />} />
+        </Route>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/pay/:token" element={<PublicInvoicePage />} />
@@ -328,7 +343,6 @@ export default function App() {
         {/* Authenticated app shell */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
-            <Route path="/" element={<DashboardPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/jobs" element={<JobsPage />} />

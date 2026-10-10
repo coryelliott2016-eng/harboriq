@@ -19,6 +19,7 @@ from app.api.v1.routes import (
     messages,
     portal,
     public,
+    public_demo,
     purchase_orders,
     reports,
     slip_reservations,
@@ -52,6 +53,7 @@ api_router.include_router(asset_tokens.router)
 api_router.include_router(billing.router)
 api_router.include_router(reports.router)
 api_router.include_router(public.router, tags=["public"])
+api_router.include_router(public_demo.router, tags=["public"])
 api_router.include_router(marketing_leads.router, tags=["public", "marketing-leads"])
 api_router.include_router(portal.router)
 api_router.include_router(messages.router)

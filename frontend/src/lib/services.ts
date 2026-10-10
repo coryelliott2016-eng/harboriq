@@ -102,7 +102,7 @@ export const authApi = {
   loginMfa: (body: { pre_auth_token: string; code: string }) =>
     apiRequest<AuthResponse>("/auth/login/mfa", { method: "POST", body, anonymous: true }),
 
-  me: () => api.get<User>("/auth/me"),
+  me: () => apiRequest<User>("/auth/me", { redirectOnAuthFailure: false }),
 
   logout: (allDevices = false) =>
     api.post<{ revoked_sessions: number }>("/auth/logout", { all_devices: allDevices }),

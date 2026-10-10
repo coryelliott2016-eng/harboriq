@@ -1,4 +1,4 @@
-# HarborIQ — Marine Service Operating System
+# HarborIQ — Marine Industry Intelligence & Operations
 
 > **Release v0.2.0 (2026-09-22).** Start here:
 > [Release register](docs/RELEASE_REGISTER.md) (what is done, with evidence) ·
@@ -18,6 +18,157 @@
 > https://harboriq-gamma.vercel.app; the application API/web app is **not yet
 > deployed** to a production host. The long-form notes below are the
 > historical build log and remain accurate for the code.
+
+## Marine ecosystem discovery and controlled rollout
+
+**One Marine Industry. One Intelligent Platform.**
+
+This repository now contains a public industry-discovery experience alongside
+the existing service and marina application. This is an incremental foundation,
+not a claim that every specialist SaaS module is complete or deployed.
+
+### Verified baseline and implemented scope
+
+The pre-expansion repository contained authenticated customer/vessel records,
+repair orders, estimates, invoicing, technician coordination, inventory,
+marina slips/reservations, and platform-level public marketing leads.
+Dispatch scoring is rule-based. No public LLM gateway, industry selector, or
+sector-specific public pages existed in this repository. The separately hosted
+marketing site's source and deployment are outside this change; historical
+website observations above are not a fresh verification of the live domain.
+
+Anonymous visitors to `/` now see industry discovery; signed-in visitors keep
+their existing dashboard. `/discover` is public regardless of login state.
+Dedicated public routes use a shared sector catalog:
+
+- `/industries/marinas`
+- `/industries/marine-towing`
+- `/industries/commercial-fishing`
+- `/industries/recreational-fishing`
+- `/industries/marine-service`
+- `/industries/charters` (including fishing charter businesses)
+- `/industries/boat-owners`
+- `/industries/dealers`
+- `/industries/suppliers`
+- `/industries/surveyors`
+- `/industries/commercial-fleets`
+- `/industries/other` (requirements discovery, not additional launch-day modules)
+
+Selection changes the route, copy, relevant workflows, example AI question,
+qualification question, commercial discussion and conversion links. Pages have
+individual titles/descriptions, labeled forms, keyboard-accessible controls,
+responsive layouts and skip navigation. BrowserRouter path routes are the
+default; existing hash-router builds remain supported. Content is client-rendered:
+prerendering, sitemap publication and a manual accessibility audit remain
+deployment work, not completed SEO/WCAG certifications.
+
+### Shared public intelligence
+
+`POST /api/v1/public/demo` accepts an allowlisted industry and bounded question.
+All sectors use the same server-side provider integration and sector policy
+loader. The public frontend deliberately omits authentication credentials;
+no private tenant records, operational tools, retrieval corpora, fishing
+locations, confidential claims or supplier catalogs are connected to the demo.
+Questions are sent to the configured external AI provider; the UI warns visitors
+not to enter sensitive information. Provider data-processing and retention terms
+must be reviewed before enablement. No local prompt/answer storage or raw-prompt
+logging is added.
+
+Responses are **unverified, AI-generated informational guidance**, not licensed
+technical documentation, professional inspection judgments, compliance
+certification, warranties, valuations or executed operations. Emergency guidance
+does not dispatch assistance. Public copy states that nothing has been dispatched
+and claims no Sea Tow or TowBoatUS affiliation. No real emergency integration
+is introduced.
+
+The gateway is disabled by default and returns an honest unavailable response
+until explicitly configured; the UI does not substitute canned AI answers.
+There are per-client and shared usage budgets, bounded provider calls and
+responses, and fail-closed protection for cost-bearing calls when the shared
+limiter is unavailable. Existing API status/latency observability remains in use.
+This is not yet domain-aware retrieval, model-quality certification, subscriber
+entitlements, billable AI metering or a complete commercial intelligence engine.
+
+### Permission-aware acquisition
+
+The existing `POST /api/v1/public/leads` now classifies sector, stated need and
+product interest (`operations`, `ai`, or `partnership`). The public form requires
+a separate requested email response; email marketing is optional and unchecked.
+Marketing permission evidence is stored separately from the requested response.
+Legacy requests retain their existing contract with an `other` classification
+and no inferred marketing permission.
+
+Leads remain platform records accessible through the existing protected admin
+list, not through tenant-facing customer records. Internal notifications include
+classification and permissions to support sector-specific internal follow-up.
+No automated marketing campaign, cross-company lead distribution, partner
+referral, compensation or commercial analytics export is launched. A marketing
+checkbox never authorizes partner data sharing. Operational customer records
+remain separate; the lead store is not an authorized analytics dataset.
+
+### Controlled deployment gates and deferred scope
+
+1. Apply the new Alembic migration before deploying the lead API; verify service
+   role access, protected admin listing and existing tenant isolation in staging.
+   Back up first; downgrading removes the new classification/permission fields.
+2. Build with `VITE_API_URL` pointing to the actual backend and configure its
+   CORS allowlist and ingress request-size/time limits. Use trusted reverse-proxy
+   handling for client IPs; do not trust arbitrary forwarded headers. Verify deep
+   links using the existing SPA rewrite.
+3. Configure Redis and explicitly enable the gateway only after provider
+   credentials, model access, data-processing terms, budgets and sector safety
+   evaluation are reviewed. Server-only settings are listed in `.env.example`;
+   never expose provider keys through `VITE_*`.
+4. Verify genuine provider responses and emergency handling in a controlled
+   environment, then verify lead persistence, consent evidence and notification
+   delivery. Configure email delivery and a monitored internal recipient.
+5. Confirm the marketing domain and Privacy/Terms destinations actually serve
+   current policies describing the AI provider and permission choices. This
+   includes approved lead retention/deletion procedures and permission management
+   before any marketing campaign. This change does not attach `harboriq.com` or
+   replace another repository's site.
+6. Resolve the existing dependency audit gate before production launch, perform
+   browser/mobile and accessibility checks, and obtain human deployment approval.
+
+Specialized towing/fishing/charter/fleet/dealer/supplier/survey modules, voluntary
+consumer vessel profiles, provider discovery and service quotes remain deferred.
+Referrals require purpose-specific authorization, named recipients, access
+controls, delivery/status tracking and reviewed commercial agreements.
+Aggregated intelligence requires provenance, retention and contractual
+restrictions, independently validated data rights, methodology, quality,
+effective de-identification and buyer demand. Fishing grounds, live vessel
+tracking, confidential pricing, claims and private service records must not
+become marketable datasets by default. No prices or revenue forecasts are invented.
+
+### Validation record
+
+The expansion includes regression coverage for every industry page, selector
+personalization, anonymous gateway requests, safe text rendering, unavailable/
+limited demos, cancellation across sector changes, classified lead requests,
+explicit marketing choice and preservation of the authenticated dashboard.
+Backend tests exercise provider transport with mocks rather than claiming a
+live model deployment.
+
+- Frontend `npm run lint` and `npm run build` passed. The full `npm test` suite
+  passed: **35 test files, 164 tests**, including 28 new discovery/routing and
+  session regressions. Hash-router CTAs keep the current route and focus their
+  target; expired hydration sessions do not force public visitors to log in.
+- Backend targeted validation passed **115 tests**, covering sector policy
+  loading, every catalog prompt reaching the provider, prompt bounds, emergency
+  handling, dispatch/affiliation output rejection, Redis outage and usage limits,
+  provider failure, telemetry privacy, classified leads and consent defaults.
+  Migration `0026` was applied to local PostgreSQL; legacy-row upgrade/downgrade
+  preservation was tested. API/database references were regenerated with the
+  existing generator: **142 operations, 35 tables**, database revision `0026`.
+- The existing `npm run audit:ci` gate currently fails on **five pre-existing
+  vulnerable packages (two critical, three high)**: `@capacitor/android`,
+  `@capacitor/ios`, `brace-expansion`, `source-map-js`, and `undici`.
+  No dependency manifests or lockfiles were changed; these are release blockers,
+  not newly introduced dependencies or advisories silently allowlisted here.
+- Browser smoke tooling was unavailable in this session (Playwright transport
+  closed); no browser/mobile or manual accessibility pass is claimed.
+- Live provider access, production deployment, real notification delivery,
+  referral delivery and paid analytics have not been exercised or launched.
 
 ## Historical build notes
 

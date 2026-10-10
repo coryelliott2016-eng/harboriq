@@ -71,10 +71,13 @@ return {count, ttl}
 
 
 class _RedisFixedWindowLimiter:
-    def __init__(self, bucket: str, limit: int, window_seconds: int) -> None:
+    def __init__(
+        self, bucket: str, limit: int, window_seconds: int, *, fail_closed: bool = False,
+    ) -> None:
         self.bucket = bucket
         self.limit = limit
         self.window_seconds = window_seconds
+        self.fail_closed = fail_closed
 
     def _key(self, identity: str) -> str:
         return f"{_KEY_PREFIX}:{self.bucket}:{identity}"
@@ -87,6 +90,10 @@ class _RedisFixedWindowLimiter:
                 _LUA_FIXED_WINDOW, 1, self._key(identity), self.window_seconds
             )
         except RedisError:
+            if self.fail_closed:
+                raise HTTPException(
+                    status_code=503, detail="public demo rate budget unavailable",
+                ) from None
             logger.warning(
                 "rate_limit.redis_unavailable_failing_open",
                 bucket=self.bucket,
@@ -191,9 +198,24 @@ def enforce_marketing_lead_rate_limit(request: Request) -> None:
     enforce_rate_limit(_marketing_lead_limiter, request)
 
 
+def enforce_public_ai_rate_limit(request: Request) -> None:
+    """Shared Redis budgets; fail closed so outages cannot bypass provider spend limits."""
+    window = settings.public_ai_rate_limit_window_seconds
+    per_ip = _RedisFixedWindowLimiter(
+        "public_ai_ip", settings.public_ai_rate_limit_per_window, window, fail_closed=True,
+    )
+    global_budget = _RedisFixedWindowLimiter(
+        "public_ai_global", settings.public_ai_global_rate_limit_per_window, window, fail_closed=True,
+    )
+    enforce_rate_limit(per_ip, request)
+    enforce_rate_limit_for_identity(global_budget, "all")
+
+
 def _reset_all_for_tests() -> None:
     """Test-only: clear all limiters so test order does not bleed state."""
     _login_limiter.reset()
     _password_reset_limiter.reset()
     _location_ping_limiter.reset()
     _marketing_lead_limiter.reset()
+    _RedisFixedWindowLimiter("public_ai_ip", 1, 1).reset()
+    _RedisFixedWindowLimiter("public_ai_global", 1, 1).reset()

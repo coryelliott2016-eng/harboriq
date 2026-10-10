@@ -6,7 +6,9 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+
+from app.schemas.industry import Industry, ProductInterest
 
 TeamSize = Literal["solo", "team", "business", "enterprise"]
 
@@ -27,8 +29,13 @@ class MarketingLeadCreate(BaseModel):
     team_size: TeamSize = "solo"
     source: str = Field(default="marketing-signup", max_length=64)
     website: str = Field(default="", max_length=200)
+    industry: Industry = Industry.OTHER
+    business_need: str = Field(default="", max_length=2000)
+    product_interest: ProductInterest = ProductInterest.OPERATIONS
+    email_marketing_opt_in: StrictBool = False
+    contact_requested: StrictBool = True
 
-    @field_validator("full_name", "business_name", "email", "source", mode="before")
+    @field_validator("full_name", "business_name", "email", "source", "business_need", mode="before")
     @classmethod
     def _strip(cls, v: object) -> object:
         if isinstance(v, str):
@@ -52,6 +59,14 @@ class MarketingLeadOut(BaseModel):
     email: str
     team_size: str
     source: str
+    industry: Industry = Industry.OTHER
+    business_need: str = ""
+    product_interest: ProductInterest = ProductInterest.OPERATIONS
+    email_marketing_opt_in: bool = False
+    contact_requested: bool = True
+    email_marketing_consented_at: datetime | None = None
+    email_marketing_consent_version: str | None = None
+    classification: str
     notified_at: datetime | None = None
     created_at: datetime
 

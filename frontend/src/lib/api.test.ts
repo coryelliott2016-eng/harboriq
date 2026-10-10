@@ -121,6 +121,21 @@ describe("api client 401-refresh-retry logic", () => {
     expect(assignMock).toHaveBeenCalledWith("/login");
   });
 
+  it("clears an expired hydration session without redirecting a public visitor", async () => {
+    const { apiRequest } = await freshApi();
+    const { setAccessToken, getAccessToken } = await import("./tokenStore");
+    setAccessToken("expired-token");
+    setCsrfCookie("stale-csrf-token");
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ detail: "expired" }, 401))
+      .mockResolvedValueOnce(jsonResponse({ detail: "expired" }, 401));
+
+    await expect(apiRequest("/auth/me", { redirectOnAuthFailure: false }))
+      .rejects.toMatchObject({ status: 401 });
+    expect(getAccessToken()).toBeNull();
+    expect(assignMock).not.toHaveBeenCalled();
+  });
+
   it("does not attempt a refresh for anonymous (public) requests", async () => {
     const { apiRequest } = await freshApi();
 

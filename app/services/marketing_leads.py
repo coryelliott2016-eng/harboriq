@@ -18,6 +18,17 @@ from app.services import email as email_service
 logger = logging.getLogger("harboriq.marketing_leads")
 
 DUPLICATE_WINDOW = timedelta(hours=24)
+EMAIL_MARKETING_CONSENT_VERSION = "2026-10-01-v1"
+
+LEAD_COLUMNS = """id, full_name, business_name, email, team_size, source,
+    industry, business_need, product_interest, email_marketing_opt_in, contact_requested,
+    email_marketing_consented_at, email_marketing_consent_version, notified_at, created_at"""
+
+
+def _classified(row) -> dict:
+    lead = dict(row)
+    lead["classification"] = f"{lead['industry']}:{lead['product_interest']}"
+    return lead
 
 TEAM_SIZE_LABELS = {
     "solo": "Just me (Solo)",
@@ -27,14 +38,17 @@ TEAM_SIZE_LABELS = {
 }
 
 
-def find_recent_duplicate(db: Session, email: str) -> dict | None:
-    """Return the most recent lead for this email within 24h, if any."""
+def find_recent_duplicate(
+    db: Session, email: str, *, industry: str = "other", business_need: str = "",
+    product_interest: str = "operations", email_marketing_opt_in: bool = False,
+    contact_requested: bool = True,
+) -> dict | None:
+    """De-duplicate the latest submission only when classification and permissions match."""
     cutoff = datetime.now(timezone.utc) - DUPLICATE_WINDOW
     row = db.execute(
         text(
-            """
-            SELECT id, full_name, business_name, email, team_size, source,
-                   notified_at, created_at
+            f"""
+            SELECT {LEAD_COLUMNS}
             FROM marketing_leads
             WHERE lower(email::text) = lower(:email)
               AND created_at >= :cutoff
@@ -44,7 +58,14 @@ def find_recent_duplicate(db: Session, email: str) -> dict | None:
         ),
         {"email": email, "cutoff": cutoff},
     ).mappings().first()
-    return dict(row) if row else None
+    expected = {
+        "industry": industry, "business_need": business_need,
+        "product_interest": product_interest, "email_marketing_opt_in": email_marketing_opt_in,
+        "contact_requested": contact_requested,
+    }
+    if row and all(row[key] == value for key, value in expected.items()):
+        return _classified(row)
+    return None
 
 
 def create_lead(
@@ -57,6 +78,11 @@ def create_lead(
     source: str,
     ip_hint: str | None,
     user_agent: str | None,
+    industry: str = "other",
+    business_need: str = "",
+    product_interest: str = "operations",
+    email_marketing_opt_in: bool = False,
+    contact_requested: bool = True,
 ) -> dict:
     """Insert a marketing lead. Caller commits."""
     # Explicit casts on every parameter so psycopg's server-side type
@@ -65,10 +91,12 @@ def create_lead(
     # caller normalises empty strings to None above.
     row = db.execute(
         text(
-            """
+            f"""
             INSERT INTO marketing_leads (
                 full_name, business_name, email, team_size, source,
-                ip_hint, user_agent
+                ip_hint, user_agent, industry, business_need, product_interest,
+                email_marketing_opt_in, contact_requested,
+                email_marketing_consented_at, email_marketing_consent_version
             )
             VALUES (
                 CAST(:full_name AS text),
@@ -77,10 +105,14 @@ def create_lead(
                 CAST(:team_size AS text),
                 CAST(:source AS text),
                 CAST(:ip_hint AS inet),
-                CAST(:user_agent AS text)
+                CAST(:user_agent AS text),
+                CAST(:industry AS text), CAST(:business_need AS text),
+                CAST(:product_interest AS text), CAST(:email_marketing_opt_in AS boolean),
+                CAST(:contact_requested AS boolean),
+                CAST(:email_marketing_consented_at AS timestamptz),
+                CAST(:email_marketing_consent_version AS text)
             )
-            RETURNING id, full_name, business_name, email, team_size, source,
-                      notified_at, created_at
+            RETURNING {LEAD_COLUMNS}
             """
         ),
         {
@@ -91,9 +123,16 @@ def create_lead(
             "source": source or "marketing-signup",
             "ip_hint": ip_hint or None,
             "user_agent": (user_agent or "")[:500] or None,
+            "industry": industry,
+            "business_need": business_need,
+            "product_interest": product_interest,
+            "email_marketing_opt_in": email_marketing_opt_in,
+            "contact_requested": contact_requested,
+            "email_marketing_consented_at": datetime.now(timezone.utc) if email_marketing_opt_in else None,
+            "email_marketing_consent_version": EMAIL_MARKETING_CONSENT_VERSION if email_marketing_opt_in else None,
         },
     ).mappings().one()
-    return dict(row)
+    return _classified(row)
 
 
 def mark_notified(db: Session, lead_id: uuid.UUID) -> None:
@@ -113,9 +152,8 @@ def list_leads(db: Session, *, limit: int = 100) -> list[dict]:
     limit = max(1, min(limit, 500))
     rows = db.execute(
         text(
-            """
-            SELECT id, full_name, business_name, email, team_size, source,
-                   notified_at, created_at
+            f"""
+            SELECT {LEAD_COLUMNS}
             FROM marketing_leads
             ORDER BY created_at DESC
             LIMIT :limit
@@ -123,7 +161,7 @@ def list_leads(db: Session, *, limit: int = 100) -> list[dict]:
         ),
         {"limit": limit},
     ).mappings().all()
-    return [dict(r) for r in rows]
+    return [_classified(r) for r in rows]
 
 
 def notify_new_lead(lead: dict) -> bool:
@@ -134,6 +172,11 @@ def notify_new_lead(lead: dict) -> bool:
         return False
 
     team_label = TEAM_SIZE_LABELS.get(lead.get("team_size", ""), lead.get("team_size", ""))
+    contact_permission = (
+        "Requested follow-up contact allowed; email marketing consent is separate."
+        if lead.get("contact_requested", True)
+        else "No permission to contact for sales/demo follow-up; do not send unsolicited follow-up."
+    )
     subject = f"[HarborIQ] New trial signup — {lead.get('business_name', 'unknown')}"
     body = (
         "New HarborIQ marketing signup\n"
@@ -143,6 +186,16 @@ def notify_new_lead(lead: dict) -> bool:
         f"Email:    {lead.get('email')}\n"
         f"Team:     {team_label}\n"
         f"Source:   {lead.get('source')}\n"
+        f"Industry: {lead.get('industry')}\n"
+        f"Interest: {lead.get('product_interest')}\n"
+        f"Routing:  {lead.get('classification')}\n"
+        f"Need (untrusted user text): {lead.get('business_need')}\n"
+        f"Contact requested: {lead.get('contact_requested')}\n"
+        f"Contact permission: {contact_permission}\n"
+        f"Email marketing opt-in: {lead.get('email_marketing_opt_in')}\n"
+        f"Consent timestamp: {lead.get('email_marketing_consented_at')}\n"
+        f"Consent version: {lead.get('email_marketing_consent_version')}\n"
+        "Internal routing only. No automated marketing or partner sharing authorized.\n"
         f"Lead ID:  {lead.get('id')}\n"
         f"Created:  {lead.get('created_at')}\n"
     )

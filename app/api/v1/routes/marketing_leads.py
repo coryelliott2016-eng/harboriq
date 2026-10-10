@@ -44,12 +44,7 @@ def _client_ip(request: Request) -> str | None:
     literal `"testclient"` host), so we validate before returning. Any
     unparseable value collapses to None.
     """
-    candidate: str | None = None
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        candidate = forwarded.split(",")[0].strip()[:64] or None
-    elif request.client is not None:
-        candidate = request.client.host
+    candidate = request.client.host if request.client is not None else None
 
     if not candidate:
         return None
@@ -101,19 +96,25 @@ def create_marketing_lead(
             id=uuid.uuid4(),
             duplicate=False,
             message=(
-                "Thanks — we've got your request. Our team will follow up "
-                "within one business day."
+                "Thanks — we've got your request."
+                + (" Our team will follow up within one business day." if body.contact_requested else "")
             ),
         )
 
-    existing = leads_service.find_recent_duplicate(db, body.email)
+    existing = leads_service.find_recent_duplicate(
+        db, body.email, industry=body.industry, business_need=body.business_need,
+        product_interest=body.product_interest,
+        email_marketing_opt_in=body.email_marketing_opt_in,
+        contact_requested=body.contact_requested,
+    )
     if existing:
         db.commit()  # no writes, but keep session lifecycle clean
         return MarketingLeadCreateResponse(
             id=existing["id"],
             duplicate=True,
             message=(
-                "Thanks — we've already got your request and will follow up soon."
+                "Thanks — we've already got your request."
+                + (" We will follow up soon." if body.contact_requested else "")
             ),
         )
 
@@ -126,6 +127,11 @@ def create_marketing_lead(
         source=body.source,
         ip_hint=_client_ip(request),
         user_agent=user_agent,
+        industry=body.industry,
+        business_need=body.business_need,
+        product_interest=body.product_interest,
+        email_marketing_opt_in=body.email_marketing_opt_in,
+        contact_requested=body.contact_requested,
     )
     db.commit()
 
@@ -135,8 +141,8 @@ def create_marketing_lead(
         id=lead["id"],
         duplicate=False,
         message=(
-            "Thanks — we've got your request. Our team will follow up "
-            "within one business day."
+            "Thanks — we've got your request."
+            + (" Our team will follow up within one business day." if body.contact_requested else "")
         ),
     )
 
