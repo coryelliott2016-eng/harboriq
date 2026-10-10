@@ -188,6 +188,26 @@ class Settings(BaseSettings):
     marketing_lead_rate_limit_per_window: int = 5
     marketing_lead_rate_limit_window_seconds: int = 600
 
+    # --- Public AI demo (no engine configured; never uses tenant data) ---
+    # Separate from auth JWTs. Empty disables session minting/chat.
+    ai_demo_secret: str = ""
+    ai_demo_session_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+    ai_demo_message_limit: int = Field(default=5, ge=1, le=100)
+    ai_demo_max_message_chars: int = Field(default=2000, ge=1, le=10000)
+    ai_demo_max_history_messages: int = Field(default=10, ge=0, le=20)
+    ai_demo_max_history_chars: int = Field(default=10000, ge=1, le=40000)
+    ai_demo_session_mints_per_ip: int = Field(default=5, ge=1, le=100)
+    ai_demo_chat_requests_per_ip: int = Field(default=20, ge=1, le=1000)
+    ai_demo_chat_requests_global: int = Field(default=200, ge=1, le=10000)
+    ai_demo_rate_window_seconds: int = Field(default=600, ge=1, le=3600)
+
+    # Consent-gated, anonymous daily event counts; uses AI_DEMO_SECRET only
+    # for HMAC limiter keys. No individual event records or metadata.
+    marketing_events_requests_per_ip: int = Field(default=60, ge=1, le=1000)
+    marketing_events_requests_global: int = Field(default=5000, ge=1, le=100000)
+    marketing_events_window_seconds: int = Field(default=60, ge=1, le=3600)
+    marketing_events_retention_days: int = Field(default=30, ge=1, le=30)
+
     # --- SMS transport (Phase 11) ---
     # Empty twilio_account_sid (the dev default) means "console transport":
     # app/services/sms.py logs the message instead of calling out, mirroring
@@ -240,6 +260,14 @@ class Settings(BaseSettings):
                     origin.strip() for origin in raw.split(",") if origin.strip()
                 ]
         return data
+
+    @model_validator(mode="after")
+    def _validate_ai_demo_secret(self) -> "Settings":
+        if self.ai_demo_secret and (
+            len(self.ai_demo_secret.encode()) < 32 or self.ai_demo_secret == self.jwt_secret
+        ):
+            raise ValueError("AI_DEMO_SECRET must be a separate random secret of at least 32 bytes")
+        return self
 
     @model_validator(mode="after")
     def _require_strong_jwt_secret_outside_development(self) -> "Settings":

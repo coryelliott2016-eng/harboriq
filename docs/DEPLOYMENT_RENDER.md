@@ -57,3 +57,41 @@ About $24/month for the minimum setup: API $7, worker $7, Key Value $10, static 
 
 - Neon free-plan backups are limited to a 6-hour history window. Move to a paid plan before real customer data is stored.
 - No OpenTelemetry, Grafana, or Loki (L14). Render logs and Sentry (once `SENTRY_DSN` is set) are the only observability.
+
+## Public marketing preview (controlled release only)
+
+The default Render static site remains the authenticated application. A
+**separate** static-site preview can build this repository's marketing candidate
+with root directory `frontend`, build command `npm ci && npm run build:marketing`,
+and publish directory `dist`. Preserve the existing `/api/*` proxy to the
+authorized API origin and the SPA fallback. On hosts supporting clean directory
+URLs, serve the generated `/ai-demo/index.html`, `/contact/index.html`, and
+`/demo-disclosure/index.html` before the fallback.
+
+- Set `VITE_API_URL=/` for a same-origin API proxy, or an approved HTTPS API
+  origin with CORS configured for the preview. Never put provider keys in
+  `VITE_*` variables.
+- Leave `VITE_PUBLIC_SITE_URL` unset on previews: generated robots and metadata
+  disable indexing. Set it to an owner-verified HTTPS marketing origin only
+  after domain/deployment approval; that enables canonical URLs and the sitemap.
+- The existing Terms/Privacy links use `VITE_MARKETING_SITE_URL`; verify those
+  pages and obtain legal approval before collecting real leads. The technical
+  demo disclosure is not a substitute for reviewed legal policies.
+- Configure Redis and a dedicated demo signing secret on the API before testing
+  anonymous sessions. No inference credentials are accepted by this candidate,
+  because no verified engine exists in this checkout.
+- Apply existing migrations for `marketing_leads`. Configure and verify SMTP,
+  `MARKETING_LEAD_NOTIFY_TO`, and admin access separately. A database commit
+  does not certify email delivery.
+- Validate trusted proxy handling so request client addresses reflect the real
+  caller, and add managed edge bot/WAF protection before public rollout. Do not
+  trust arbitrary client-supplied forwarded headers.
+
+Neither `harboriq.com` nor the documented external Vercel hostname could be
+resolved from the implementation environment. No active deployment, preview URL,
+custom-domain binding, or live model/lead delivery was verified. No production
+deployment was performed. Obtain the existing marketing project source and host
+access before migration; retain manual release approval and the cloud preflight.
+Production remains blocked on verified AI integration, legal/privacy review,
+working domain/proxy configuration, configured lead storage/notifications, edge
+bot mitigation, and a successful preview acceptance run.

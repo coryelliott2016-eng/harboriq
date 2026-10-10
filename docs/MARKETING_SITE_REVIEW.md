@@ -6,6 +6,53 @@ Site: https://harboriq-gamma.vercel.app (Vercel team `harbor-iq`, project
 editable from the release session, so the fixes below are queued as exact
 copy changes for approval rather than applied.
 
+## In-repository implementation — 2026-10-10 (not deployed)
+
+This session could not resolve either documented marketing hostname. The
+external source and its assistant were not inspected or connected; the earlier
+observations below are historical, not a fresh production verification.
+
+The repository now has a separate marketing build with public homepage, AI Lab,
+contact/early-access form, and technical demo disclosure. The default authenticated
+app is preserved. Public route summaries are emitted as HTML, with titles/social
+metadata; canonical URLs and sitemap require an owner-verified HTTPS origin.
+Previews remain noindex. The existing brand favicon and purple identity are
+reused; no testimonials, partnerships, approved prices, or live predictions are
+invented.
+
+**AI integration remains blocked:** no verified conversational AI, provider
+integration, RAG knowledge store, or predictive model exists in this checkout.
+The anonymous API has an expiring, purpose-separated session contract and
+fail-closed Redis quotas, but reports unavailable and never fabricates an answer.
+Guided categories fill suggested questions; maintenance/service samples are
+synthetic, not functioning predictions or generated guidance.
+
+The form reuses the existing FastAPI lead workflow, with inquiry permission,
+validation, deduplication, and a bot trap. Storage acknowledgement is distinct
+from notification delivery or booking. Aggregate analytics are visit-only
+opt-in, accept allowlisted events, and exclude chat/contact payloads; no
+advertising integrations or personal attribution were added.
+
+Local verification: frontend lint and both build modes pass; the complete
+frontend suite and isolated backend boundary tests were executed. Browser
+checks covered public navigation, scenario selection/focus, and layouts at
+390, 768, and 1440 pixels, not a WCAG certification or a production E2E run.
+Backend tests cover token tamper/expiry, quotas, Redis outage behavior, and
+database/tool isolation. All eight existing lead tests ran against a local
+PostgreSQL instance and verified persistence/deduplication, not production
+storage or SMTP delivery.
+The existing `npm run audit:ci` gate fails with **2 critical and 3 high**
+dependency findings (Capacitor, brace-expansion, source-map-js, undici). Those
+pre-existing dependencies were not changed in this feature branch.
+
+Release prerequisites: obtain the external marketing and AI source plus host
+access; validate a real inference path and authorized marine resources; implement
+provider token/spend budgets and prompt-injection defenses before enabling live
+inference; configure and verify lead database/SMTP; restore domain and legal
+pages; approve privacy/retention and pricing; remediate the dependency gate; run
+the ten requested acceptance tests in a controlled preview. No production
+deployment or live inference/notification success is claimed.
+
 ## What passes
 
 - Every route renders real content: home, features, marinas, pricing,

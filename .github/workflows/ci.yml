@@ -130,6 +130,7 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npm run lint
       - run: npm run build
+      - run: npm run build:marketing
       - run: npm run test
       # Security Core Prompt v1.0, H-5 fix: blocking dependency-CVE gate.
       # Was previously `npm audit --audit-level=high || true`

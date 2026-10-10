@@ -1,18 +1,21 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { marketingBuild } from "./marketingBuild.ts";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
+    ...(mode === "marketing" ? [marketingBuild(loadEnv(mode, process.cwd(), "VITE_").VITE_PUBLIC_SITE_URL)] : []),
     // Phase 12: installable PWA for the technician field app. `autoUpdate`
     // means a new deploy's service worker takes over silently on next
     // navigation rather than requiring the user to dismiss a prompt --
     // appropriate here since the app shell has no offline "long session"
     // risk (see README's PWA section for the full write-up).
     VitePWA({
+      disable: mode === "marketing",
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icons.svg", "icons/apple-touch-icon.png"],
       manifest: {
@@ -61,4 +64,4 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
   },
-});
+}));

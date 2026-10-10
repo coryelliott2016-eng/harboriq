@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:marketing": "tsc -b && vite build --mode marketing",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

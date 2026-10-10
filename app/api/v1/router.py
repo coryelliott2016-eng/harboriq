@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes import (
+    ai_demo,
     asset_tokens,
     auth,
     billing,
@@ -15,6 +16,7 @@ from app.api.v1.routes import (
     inventory,
     invoices,
     jobs,
+    marketing_events,
     marketing_leads,
     messages,
     portal,
@@ -52,6 +54,8 @@ api_router.include_router(asset_tokens.router)
 api_router.include_router(billing.router)
 api_router.include_router(reports.router)
 api_router.include_router(public.router, tags=["public"])
+api_router.include_router(ai_demo.router, tags=["public", "ai-demo"])
+api_router.include_router(marketing_events.router, tags=["public", "marketing-events"])
 api_router.include_router(marketing_leads.router, tags=["public", "marketing-leads"])
 api_router.include_router(portal.router)
 api_router.include_router(messages.router)
