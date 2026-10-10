@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy import text
 
 
@@ -71,6 +72,28 @@ def test_marketing_email_opt_in_is_recorded_separately(client, service_db):
     assert row["marketing_email_consent_method"] == "public-lead-form"
 
 
+def test_duplicate_lead_can_grant_marketing_email_consent(client, service_db):
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=True) as send:
+        first = client.post("/api/v1/public/leads", json=_payload())
+        second = client.post(
+            "/api/v1/public/leads",
+            json=_payload(marketing_email_opt_in=True),
+        )
+
+    assert first.status_code == second.status_code == 201
+    assert second.json()["duplicate"] is True
+    assert second.json()["id"] == first.json()["id"]
+    send.assert_called_once()
+    row = service_db.execute(
+        text(
+            "SELECT marketing_email_opt_in, marketing_email_consent_at "
+            "FROM marketing_leads WHERE email = 'lead@example.com'"
+        )
+    ).mappings().one()
+    assert row["marketing_email_opt_in"] is True
+    assert row["marketing_email_consent_at"] is not None
+
+
 def test_honeypot_does_not_store(client, service_db):
     resp = client.post(
         "/api/v1/public/leads",
@@ -102,6 +125,15 @@ def test_invalid_email_rejected(client):
 
 def test_invalid_team_size_rejected(client):
     resp = client.post("/api/v1/public/leads", json=_payload(team_size="fleet"))
+    assert resp.status_code == 422
+
+
+@pytest.mark.no_db
+def test_marketing_email_opt_in_requires_boolean(client):
+    resp = client.post(
+        "/api/v1/public/leads",
+        json=_payload(marketing_email_opt_in="yes"),
+    )
     assert resp.status_code == 422
 
 

@@ -83,6 +83,8 @@ def create_marketing_lead(
 
     existing = leads_service.find_recent_duplicate(db, body.email)
     if existing:
+        if body.marketing_email_opt_in:
+            leads_service.record_marketing_email_consent(db, existing["id"])
         db.commit()  # no writes, but keep session lifecycle clean
         return MarketingLeadCreateResponse(
             id=existing["id"],

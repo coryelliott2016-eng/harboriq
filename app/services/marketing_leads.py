@@ -101,6 +101,28 @@ def create_lead(
     return dict(row)
 
 
+def record_marketing_email_consent(db: Session, lead_id: uuid.UUID) -> None:
+    """Record new affirmative permission without resetting existing evidence."""
+    db.execute(
+        text(
+            """
+            UPDATE marketing_leads
+            SET marketing_email_opt_in = true,
+                marketing_email_consent_at = now(),
+                marketing_email_consent_version = :consent_version,
+                marketing_email_consent_method = :consent_method
+            WHERE id = :id
+              AND NOT marketing_email_opt_in
+            """
+        ),
+        {
+            "id": lead_id,
+            "consent_version": MARKETING_EMAIL_CONSENT_VERSION,
+            "consent_method": MARKETING_EMAIL_CONSENT_METHOD,
+        },
+    )
+
+
 def mark_notified(db: Session, lead_id: uuid.UUID) -> None:
     db.execute(
         text(

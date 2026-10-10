@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 TeamSize = Literal["solo", "team", "business", "enterprise"]
 
@@ -27,7 +27,7 @@ class MarketingLeadCreate(BaseModel):
     team_size: TeamSize = "solo"
     source: str = Field(default="marketing-signup", max_length=64)
     website: str = Field(default="", max_length=200)
-    marketing_email_opt_in: bool = False
+    marketing_email_opt_in: StrictBool = False
 
     @field_validator("full_name", "business_name", "email", "source", mode="before")
     @classmethod

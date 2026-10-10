@@ -4506,6 +4506,11 @@
             "title": "Full Name",
             "type": "string"
           },
+          "marketing_email_opt_in": {
+            "default": false,
+            "title": "Marketing Email Opt In",
+            "type": "boolean"
+          },
           "source": {
             "default": "marketing-signup",
             "maxLength": 64,
@@ -4612,6 +4617,44 @@
             "title": "Id",
             "type": "string"
           },
+          "marketing_email_consent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketing Email Consent At"
+          },
+          "marketing_email_consent_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketing Email Consent Method"
+          },
+          "marketing_email_consent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketing Email Consent Version"
+          },
+          "marketing_email_opt_in": {
+            "title": "Marketing Email Opt In",
+            "type": "boolean"
+          },
           "notified_at": {
             "anyOf": [
               {
@@ -4640,6 +4683,7 @@
           "email",
           "team_size",
           "source",
+          "marketing_email_opt_in",
           "created_at"
         ],
         "title": "MarketingLeadOut",
