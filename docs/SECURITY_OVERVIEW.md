@@ -82,5 +82,6 @@ credentials, portal links, Stripe webhook integrity.
 
 See [`FEDRAMP_CLASS_A_GAP_ANALYSIS.md`](FEDRAMP_CLASS_A_GAP_ANALYSIS.md) for
 the preliminary FedRAMP 20x Class A readiness assessment and roadmap. The
-repository does not contain a SOC 2 Type II report; the roadmap explicitly
-does not claim one or assert federal compliance.
+repository does not contain a SOC 2 Type II report, and any separate report
+outside the repository has not been verified. The roadmap makes no federal
+compliance claim.

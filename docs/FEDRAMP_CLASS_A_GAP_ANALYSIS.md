@@ -11,9 +11,10 @@ to the specific agency use case and current FedRAMP rules
 HarborIQ is **not presently demonstrated ready for FedRAMP Class A**. The
 repository contains security engineering and policy artifacts, but describes
 the API/application host as not provisioned, records no independent
-penetration test, and explicitly says HarborIQ has no SOC 2 report or
-attestation. No SOC 2 Type II report was found in the repository. The requested
-SOC 2 baseline therefore could not be reviewed or cross-mapped. Obtain and
+penetration test, and explicitly says HarborIQ holds no SOC 2 attestation.
+No SOC 2 Type II report was found in the repository, so the existence of a
+separate report outside the repository is unverified. The requested SOC 2
+baseline therefore could not be reviewed or cross-mapped. Obtain and
 review the actual report (including scope, period, exceptions, subservice
 organizations, and complementary user-entity controls) before treating any
 SOC 2 control as an inherited or evidenced control.
@@ -75,11 +76,10 @@ this assessment date.
 
 ## Proposed prioritized work items (45)
 
-Priority: **P0** blocks a credible scoping/readiness decision; **P1** required
-for the Class A security outcomes or operational evidence; **P2** supporting
-assurance, documentation, and federal procurement readiness. “Gap” means no
-adequate evidence was established in this review, not a determination that no
-private evidence exists.
+Priority: **P0** blocks a credible scoping/readiness decision; **P1** is
+required for the Class A security outcomes or supporting operational evidence.
+“Gap” means no adequate evidence was established in this review, not a
+determination that no private evidence exists.
 
 | # | Priority | Readiness work item | FedRAMP 20x association | Initial repository assessment / exit evidence |
 |---:|:---:|---|---|---|
