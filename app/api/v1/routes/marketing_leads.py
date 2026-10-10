@@ -107,6 +107,7 @@ def create_marketing_lead(
             ),
         )
 
+    leads_service.lock_email_preference(db, body.email)
     existing = leads_service.find_recent_duplicate(db, body.email)
     if existing:
         leads_service.record_consent(

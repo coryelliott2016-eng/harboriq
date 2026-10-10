@@ -28,6 +28,20 @@ TEAM_SIZE_LABELS = {
 }
 
 
+def lock_email_preference(db: Session, email: str) -> None:
+    """Serialize submissions until commit; acquire before any lead-row write."""
+    db.execute(
+        text(
+            """
+            SELECT pg_advisory_xact_lock(
+                hashtextextended(lower(CAST(:email AS text)), CAST(0 AS bigint))
+            )
+            """
+        ),
+        {"email": email},
+    )
+
+
 def find_recent_duplicate(db: Session, email: str) -> dict | None:
     """Return the most recent lead for this email within 24h, if any."""
     cutoff = datetime.now(timezone.utc) - DUPLICATE_WINDOW
@@ -63,6 +77,7 @@ def create_lead(
     """Insert a marketing lead. Caller commits."""
     if contact_consent is not True:
         raise ValueError("explicit contact consent is required")
+    lock_email_preference(db, email)
     row = db.execute(
         text(
             """
@@ -96,7 +111,37 @@ def create_lead(
             "marketing_consent": marketing_consent,
         },
     ).mappings().one()
+    record_marketing_preference(
+        db,
+        email=email,
+        marketing_consent=marketing_consent,
+        consent_at=row["contact_consent_at"],
+    )
     return dict(row)
+
+
+def record_marketing_preference(
+    db: Session, *, email: str, marketing_consent: bool, consent_at: datetime
+) -> None:
+    """Apply the latest email-wide preference without changing contact evidence."""
+    lock_email_preference(db, email)
+    db.execute(
+        text(
+            """
+            UPDATE marketing_leads
+            SET marketing_consent = :marketing_consent,
+                marketing_consent_at =
+                    CASE WHEN CAST(:marketing_consent AS boolean)
+                         THEN CAST(:consent_at AS timestamptz) ELSE NULL END
+            WHERE lower(email::text) = lower(:email)
+            """
+        ),
+        {
+            "email": email,
+            "marketing_consent": marketing_consent,
+            "consent_at": consent_at,
+        },
+    )
 
 
 def record_consent(
@@ -105,23 +150,30 @@ def record_consent(
     """Record the latest explicit submission, including marketing opt-out."""
     if contact_consent is not True:
         raise ValueError("explicit contact consent is required")
-    db.execute(
+    email = db.execute(
+        text("SELECT email FROM marketing_leads WHERE id = :id"), {"id": lead_id}
+    ).scalar_one()
+    lock_email_preference(db, email)
+    row = db.execute(
         text(
             """
             UPDATE marketing_leads
             SET contact_consent_at = now(),
-                consent_version = :consent_version,
-                marketing_consent = :marketing_consent,
-                marketing_consent_at =
-                    CASE WHEN CAST(:marketing_consent AS boolean) THEN now() ELSE NULL END
+                consent_version = :consent_version
             WHERE id = :id
+            RETURNING email, contact_consent_at
             """
         ),
         {
             "id": lead_id,
             "consent_version": CONSENT_VERSION,
-            "marketing_consent": marketing_consent,
         },
+    ).mappings().one()
+    record_marketing_preference(
+        db,
+        email=row["email"],
+        marketing_consent=marketing_consent,
+        consent_at=row["contact_consent_at"],
     )
 
 

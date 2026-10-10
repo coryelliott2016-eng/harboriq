@@ -37,6 +37,8 @@ endorsement and no commercial partnership is represented.
    memory only; Redis stores a digest with remaining quota, not the raw token.
    No prompts, exact vessel positions, customer records or NOAA responses
    are stored by this demo.
+   The application's Sentry hooks exclude demo errors and transactions
+   entirely; aggregate Prometheus request metrics remain available.
 
 ### Demonstration and failure checks
 
@@ -54,7 +56,8 @@ endorsement and no commercial partnership is represented.
 - Contact submission is separate and optional. Check contact permission
   explicitly; leave marketing unchecked to verify no opt-in. Verify the
   resulting consent evidence using the protected platform lead list.
-  Unchecking marketing on a repeat submission updates that lead's preference.
+  Unchecking marketing on a repeat submission updates preferences across
+  that email's lead history, including records outside the duplicate window.
   No form authorizes referrals or analytics.
 - Record production verification and participant outcomes in protected
   operational records. Mocked tests do not substitute for live integration

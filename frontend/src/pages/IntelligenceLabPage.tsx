@@ -42,7 +42,10 @@ export function IntelligenceLabPage() {
   useEffect(() => {
     if (!session) return;
     const timer = window.setTimeout(
-      () => setExpired(true),
+      () => {
+        setExpired(true);
+        setResult(null);
+      },
       Math.max(0, Date.parse(session.expires_at) - Date.now()),
     );
     return () => window.clearTimeout(timer);
@@ -54,6 +57,7 @@ export function IntelligenceLabPage() {
     setBusy(true);
     setError("");
     setResult(null);
+    let assistStarted = false;
     try {
       const activeSession = session ?? await startDemoSession();
       setSession(activeSession);
@@ -62,6 +66,7 @@ export function IntelligenceLabPage() {
         return;
       }
       if (activeSession.requests_remaining <= 0) return;
+      assistStarted = true;
       const response = await requestIntelligence(activeSession.session_token, sector, station);
       setResult(response);
       setSession({ ...activeSession, requests_remaining: response.requests_remaining });
@@ -70,6 +75,12 @@ export function IntelligenceLabPage() {
       if (err instanceof PublicIntelligenceError && [401, 403, 410].includes(err.status)) {
         setSession(null);
         setExpired(true);
+      } else if (assistStarted && err instanceof PublicIntelligenceError) {
+        if (err.status === 429) {
+          setSession((current) => current ? { ...current, requests_remaining: 0 } : null);
+        } else if ([502, 504].includes(err.status)) {
+          setSession((current) => current ? { ...current, requests_remaining: Math.max(0, current.requests_remaining - 1) } : null);
+        }
       }
     } finally {
       setBusy(false);
@@ -158,7 +169,7 @@ export function IntelligenceLabPage() {
           {(session || expired) && <button type="button" disabled={busy} onClick={restart} className="rounded-md border border-slate-300 px-4 py-2">Restart demo session</button>}
         </section>
 
-        {result && (
+        {result && !expired && (
           <section aria-labelledby="result-heading" className="space-y-3 rounded-lg border border-slate-200 bg-white p-6">
             <h2 id="result-heading" className="text-xl font-semibold">Live public data · deterministic NOAA result</h2>
             <p>{result.summary}</p>

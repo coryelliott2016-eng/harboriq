@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import App from "../App";
@@ -46,6 +46,7 @@ describe("public Intelligence Lab", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -164,6 +165,44 @@ describe("public Intelligence Lab", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("decrements quota on failed upstream retrievals and disables further queries at zero", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(json({ ...session, requests_remaining: 1 }))
+      .mockResolvedValueOnce(json({}, 502));
+    render(<IntelligenceLabPage />);
+    await runDemo();
+    expect(await screen.findByRole("alert")).toHaveTextContent("NOAA data is unavailable");
+    expect(screen.getByRole("status")).toHaveTextContent("Requests remaining: 0");
+    expect(screen.getByRole("status")).toHaveTextContent("Failed retrievals may also consume quota");
+    expect(screen.getByRole("button", { name: "Retrieve NOAA water level" })).toBeDisabled();
+  });
+
+  it("marks an assist rate-limit rejection as an exhausted session", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(json(session)).mockResolvedValueOnce(json({}, 429));
+    render(<IntelligenceLabPage />);
+    await runDemo();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Request limit reached");
+    expect(screen.getByRole("status")).toHaveTextContent("Requests remaining: 0");
+    expect(screen.getByRole("button", { name: "Retrieve NOAA water level" })).toBeDisabled();
+  });
+
+  it("removes a successful result when its demo session expires", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(json({ ...session, expires_at: new Date(Date.now() + 1000).toISOString() }))
+      .mockResolvedValueOnce(json(result));
+    render(<IntelligenceLabPage />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /I accept the safety notice/ }));
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("button", { name: /Start demo and retrieve/ }).closest("form")!);
+    });
+    expect(screen.getByText(result.summary)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1001));
+    expect(screen.getByRole("status")).toHaveTextContent("Demo session expired");
+    expect(screen.queryByText(result.summary)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Live public data · deterministic NOAA result/ })).not.toBeInTheDocument();
+  });
+
   it("keeps optional contact and marketing permissions separate and sends marketing false by default", async () => {
     const storage = vi.spyOn(Storage.prototype, "setItem");
     vi.mocked(fetch).mockResolvedValueOnce(json({ id: "lead-1" }, 201));
@@ -171,6 +210,8 @@ describe("public Intelligence Lab", () => {
     const user = userEvent.setup();
     const button = screen.getByRole("button", { name: "Send contact request" });
     expect(button).toBeDisabled();
+    expect(screen.getByLabelText("Full name")).toHaveAttribute("maxlength", "120");
+    expect(screen.getByLabelText("Business name")).toHaveAttribute("maxlength", "160");
     const consent = screen.getByRole("checkbox", { name: /I consent to storing/ });
     const marketing = screen.getByRole("checkbox", { name: /Optional: I separately/ });
     expect(consent).toBeRequired();

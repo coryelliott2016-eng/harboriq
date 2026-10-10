@@ -14,8 +14,9 @@ email sent and no charge/refund attempted. Owner-side checks remain required.
   A real NOAA success/freshness check is still a release gate.
 - Marketing lead submission now requires `contact_consent: true`; the
   separate marketing-site client must be updated before switching it to
-  this application's API. Historical leads have unknown contact consent
-  and must not be treated as marketing opt-ins.
+  this application's API. Migration does not infer historical contact or
+  marketing permission. Later explicit marketing preferences apply across
+  the same email's lead history; they do not backfill contact permission.
 - The internal rights/suppression policy is not a production data warehouse
   or proof of anonymization. No commercial analytics or referral workflow
   is launched.

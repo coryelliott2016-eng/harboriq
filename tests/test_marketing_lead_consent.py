@@ -1,7 +1,9 @@
 """Contact permission is required; marketing permission is independent."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event, Lock
 from unittest.mock import patch
 
 import pytest
@@ -9,6 +11,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import text
 
 from app.services.marketing_leads import CONSENT_VERSION
+from app.services import marketing_leads as leads_service
 
 
 def _payload(**overrides):
@@ -121,6 +124,143 @@ def test_duplicate_latest_preference_including_opt_out(client, service_db):
     assert _row(service_db)["consent_version"] == CONSENT_VERSION
     assert service_db.execute(text("SELECT count(*) FROM marketing_leads")).scalar() == 1
     notify.assert_called_once()
+
+
+@pytest.mark.parametrize("recent_duplicate", [False, True])
+@pytest.mark.parametrize("marketing_consent", [False, True])
+def test_latest_marketing_preference_applies_to_all_email_history(
+    client, service_db, recent_duplicate, marketing_consent
+):
+    service_db.execute(
+        text(
+            """
+            INSERT INTO marketing_leads (
+                full_name, business_name, email, team_size, created_at,
+                contact_consent_at, consent_version, marketing_consent, marketing_consent_at
+            ) VALUES
+                ('Unknown contact', 'Marine', 'CONSENT@example.com', 'solo',
+                 now() - interval '4 days', NULL, NULL, true, now() - interval '4 days'),
+                ('Known contact', 'Marine', 'consent@example.com', 'solo',
+                 now() - interval '3 days', now() - interval '3 days', 'old-version',
+                 true, now() - interval '3 days'),
+                ('Other email', 'Marine', 'other@example.com', 'solo',
+                 now() - interval '3 days', NULL, NULL, true, now() - interval '3 days')
+            """
+        )
+    )
+    if recent_duplicate:
+        service_db.execute(
+            text(
+                """
+                INSERT INTO marketing_leads (
+                    full_name, business_name, email, team_size, created_at
+                ) VALUES ('Recent', 'Marine', 'consent@example.com', 'solo',
+                          now() - interval '1 hour')
+                """
+            )
+        )
+    original = {
+        row["id"]: dict(row)
+        for row in service_db.execute(text("SELECT * FROM marketing_leads")).mappings()
+    }
+    service_db.commit()
+    with patch("app.services.marketing_leads.notify_new_lead", return_value=False) as notify:
+        response = client.post(
+            "/api/v1/public/leads", json=_payload(marketing_consent=marketing_consent)
+        )
+    assert response.status_code == 201, response.text
+    assert response.json()["duplicate"] is recent_duplicate
+    assert notify.call_count == (0 if recent_duplicate else 1)
+    updated = service_db.execute(text("SELECT * FROM marketing_leads")).mappings().all()
+    selected = next(row for row in updated if str(row["id"]) == response.json()["id"])
+    assert selected["contact_consent_at"] is not None
+    assert selected["consent_version"] == CONSENT_VERSION
+    for row in updated:
+        previous = original.get(row["id"])
+        if str(row["email"]).lower() == "consent@example.com":
+            assert row["marketing_consent"] is marketing_consent
+            assert row["marketing_consent_at"] == (
+                selected["contact_consent_at"] if marketing_consent else None
+            )
+            if row["id"] != selected["id"]:
+                assert row["contact_consent_at"] == previous["contact_consent_at"]
+                assert row["consent_version"] == previous["consent_version"]
+        else:
+            assert dict(row) == previous
+    assert len(updated) == len(original) + (0 if recent_duplicate else 1)
+
+
+@pytest.mark.parametrize("first_preference", [False, True])
+def test_concurrent_opposing_submissions_are_serialized(
+    client, service_db, first_preference
+):
+    service_db.execute(
+        text(
+            """
+            INSERT INTO marketing_leads (
+                full_name, business_name, email, team_size, created_at, marketing_consent
+            ) VALUES
+                ('Legacy', 'Marine', 'consent@example.com', 'solo',
+                 now() - interval '3 days', true),
+                ('Other', 'Marine', 'other@example.com', 'solo',
+                 now() - interval '3 days', true)
+            """
+        )
+    )
+    unrelated = dict(service_db.execute(
+        text("SELECT * FROM marketing_leads WHERE email = 'other@example.com'")
+    ).mappings().one())
+    service_db.commit()
+    first_locked, second_attempted = Event(), Event()
+    counter_lock = Lock()
+    attempts = 0
+    real_lock = leads_service.lock_email_preference
+
+    def synchronized_lock(db, email):
+        nonlocal attempts
+        with counter_lock:
+            attempts += 1
+            attempt = attempts
+        if attempt == 2:
+            second_attempted.set()
+        real_lock(db, email)
+        if attempt == 1:
+            first_locked.set()
+            assert second_attempted.wait(timeout=10), "second request did not reach the lock"
+
+    with patch(
+        "app.services.marketing_leads.lock_email_preference",
+        side_effect=synchronized_lock,
+    ), patch(
+        "app.services.marketing_leads.notify_new_lead", return_value=False
+    ) as notify, ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(
+            client.post, "/api/v1/public/leads",
+            json=_payload(marketing_consent=first_preference),
+        )
+        assert first_locked.wait(timeout=10), "first request did not acquire the lock"
+        second = pool.submit(
+            client.post, "/api/v1/public/leads",
+            json=_payload(email="CONSENT@example.com", marketing_consent=not first_preference),
+        )
+        first_response, second_response = first.result(timeout=15), second.result(timeout=15)
+    assert first_response.status_code == second_response.status_code == 201
+    assert first_response.json()["duplicate"] is False
+    assert second_response.json()["duplicate"] is True
+    assert first_response.json()["id"] == second_response.json()["id"]
+    notify.assert_called_once()
+    matching = service_db.execute(
+        text("SELECT * FROM marketing_leads WHERE email = 'consent@example.com'")
+    ).mappings().all()
+    assert len(matching) == 2
+    assert all(row["marketing_consent"] is (not first_preference) for row in matching)
+    assert len({row["marketing_consent_at"] for row in matching}) == 1
+    legacy = next(row for row in matching if row["full_name"] == "Legacy")
+    assert legacy["contact_consent_at"] is None
+    assert legacy["consent_version"] is None
+    assert dict(service_db.execute(
+        text("SELECT * FROM marketing_leads WHERE email = 'other@example.com'")
+    ).mappings().one()) == unrelated
 
 
 def test_legacy_contact_unknown_preserved_until_explicit_submission(client, service_db, monkeypatch):

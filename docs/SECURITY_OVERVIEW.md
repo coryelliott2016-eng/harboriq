@@ -5,6 +5,34 @@ implements it. Anything not implemented is listed under "Gaps" — nothing here
 is aspirational. HarborIQ holds **no** SOC 2 / ISO 27001 / PCI DSS / HIPAA
 certification or attestation.
 
+## October public-information controls
+
+The September deployment/account statements below are historical; October
+external verification limits are recorded in `RELEASE_REGISTER.md`.
+
+| Boundary | Implemented control | Evidence |
+|---|---|---|
+| Anonymous demonstration | Disabled by default, explicit safety acceptance, separate opaque credential; no staff/portal credential or DB dependency | `app/api/v1/routes/intelligence.py`, `app/schemas/intelligence.py` |
+| Abuse/resource budget | Redis-only atomic issuance/call quotas; token/IP digests and TTLs; Redis errors fail closed | `app/core/demo_limits.py`, `tests/test_intelligence_demo.py` |
+| External data | Fixed NOAA HTTPS endpoint/stations/product, bounded streaming/timeouts, validated timestamps/station identity/quality; no redirects or synthetic fallback | `app/services/noaa.py`, `tests/test_noaa.py` |
+| Browser transport | Public lab skips staff hydration; credential-omitting, no-store public calls; demo tokens only in React memory | `frontend/src/components/ApplicationBoundary.tsx`, `frontend/src/lib/intelligence.ts`, frontend boundary/lab tests |
+| Demo error/performance telemetry | Sentry error and transaction hooks drop demo request events rather than forwarding credentials, bodies or frame locals | `app/core/observability.py`, `tests/test_demo_telemetry.py` |
+| Platform contact records | Explicit contact evidence, independent marketing preference, unknown historical contact rights preserved; no new stored IP/UA; fail-closed endpoint throttle | Migration `0026`, `tests/test_marketing_lead_consent.py` |
+| Internal analytics/referral policy | Affirmative purpose/consent/retention review, sensitive/feed exclusion, per-metric five-business/five-owner floor; recipient-specific referral authorization | `app/services/data_rights.py`, `tests/test_data_rights.py` |
+
+The rights gate is not connected to production tenant extraction and does
+not expose an analytics or referral API. Threshold suppression alone does
+not establish anonymity. No LLM, prompt ingestion, licensed partner feed,
+restricted AIS or autonomous operating decisions are introduced.
+
+Proxy/tracing operators must prevent raw demo credentials from entering
+logs and restrict forwarded-IP trust to known proxies. Global request-body
+limits/WAF controls remain deployment responsibilities; quotas bound valid
+demo sessions and upstream requests, not every malformed HTTP request.
+Public contact permission is a submitted preference, not verified email
+ownership: verify recipient identity and applicable lawful basis before
+starting a marketing campaign or granting any downstream rights.
+
 ## Security posture summary
 
 | Area | Control in code | Where | Verified by |
