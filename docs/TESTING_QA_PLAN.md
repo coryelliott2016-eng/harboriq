@@ -1,8 +1,10 @@
 # HarborIQ Testing & QA Plan
 
-Applies from v0.2.0. The gate for merging to `master` is enforced by the
-`protect-master` ruleset: all five CI checks must pass on an up-to-date
-branch.
+Applies from v0.2.0. The documented `protect-master` ruleset gates merging to
+`master` on required CI checks passing on an up-to-date branch. Its live
+configuration must be updated to include `repo-integrity` and enforced
+CODEOWNER review for acceptance tests (see
+[ADR 0006](adr/0006-protected-master-ruleset.md)).
 
 ## Automated test layers
 
@@ -15,7 +17,9 @@ branch.
 | Build | Vite production build; Docker images for app and frontend | `Dockerfile`, `frontend/Dockerfile` | `frontend`, `docker-build` |
 | Dependency security | `pip-audit`, `npm run audit:ci` (fail on known vulns unless a reviewed exception exists) | CI | `test`, `frontend` |
 | Secret scanning | gitleaks on every push/PR; GitHub secret scanning + push protection | `.gitleaks.toml` | `secret-scan` |
+| Repository integrity | Reject tracked bytecode and unexpected binaries; verify repository-local skill inventory hashes | `scripts/check_repo_integrity.py`, `.github/skills/manifest.json` | `repo-integrity` |
 | Tenant isolation contract | Every `company_id` table has FORCE RLS + policy; app role has no access to service-only tables | `tests/test_rls_coverage.py` | `test` |
+| Defect-oriented acceptance | Tenant isolation, payment overpayment, and server-owned estimate pricing | `tests/acceptance/` | `test` |
 | Backup/restore | Restore rehearsal into a scratch DB | `tests/test_backup_restore_rehearsal.py`, `scripts/rehearse_backup_restore.sh` | `test` |
 
 ## Not yet automated (tracked in KNOWN_LIMITATIONS)

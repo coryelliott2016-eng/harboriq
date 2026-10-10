@@ -39,6 +39,16 @@ jobs:
       # had zero lint or SAST coverage (found during launch-audit Phase 2).
       - run: ruff check app tests scripts
 
+  repo-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check bytecode, binaries, and skill integrity
+        run: python scripts/check_repo_integrity.py
+
   test:
     runs-on: ubuntu-latest
     services:
@@ -146,7 +156,7 @@ jobs:
     # (which does have Docker preinstalled) is the *first* place either
     # image actually gets built. Gated behind lint/test/frontend so a broken
     # Dockerfile never masks a simpler, faster-to-diagnose app-level failure.
-    needs: [secret-scan, lint, test, frontend]
+    needs: [secret-scan, lint, repo-integrity, test, frontend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

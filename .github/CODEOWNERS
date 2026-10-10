@@ -12,4 +12,8 @@
 # This file establishes ownership now so enabling that protection later
 # (after a plan upgrade) is a one-setting change with no further repo
 # changes needed.
+/tests/acceptance/ @coryelliott2016-eng
+/docs/BUSINESS_INVARIANTS.md @coryelliott2016-eng
+/docs/AGENT_GOVERNANCE.md @coryelliott2016-eng
+/.github/skills/ @coryelliott2016-eng
 * @coryelliott2016-eng
