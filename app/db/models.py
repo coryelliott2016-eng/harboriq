@@ -442,6 +442,7 @@ class MarketingLead(UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("idx_marketing_leads_created_at", "created_at"),
         Index("idx_marketing_leads_email_created", "email", "created_at"),
+        Index("idx_marketing_leads_industry", "industry"),
         CheckConstraint(
             "team_size IN ('solo', 'team', 'business', 'enterprise')",
             name="ck_marketing_leads_team_size",

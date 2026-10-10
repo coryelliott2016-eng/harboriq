@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+from pydantic import ValidationError
 from sqlalchemy import text
+
+from app.schemas.marketing_leads import MarketingLeadCreate
 
 
 def _payload(**overrides):
@@ -18,6 +22,20 @@ def _payload(**overrides):
     }
     base.update(overrides)
     return base
+
+
+@pytest.mark.no_db
+def test_industry_schema_accepts_categories_and_omitted_value():
+    assert MarketingLeadCreate.model_validate(_payload()).industry == "marine_repair"
+    unclassified = _payload()
+    unclassified.pop("industry")
+    assert MarketingLeadCreate.model_validate(unclassified).industry is None
+
+
+@pytest.mark.no_db
+def test_industry_schema_rejects_unknown_category():
+    with pytest.raises(ValidationError):
+        MarketingLeadCreate.model_validate(_payload(industry="unverified-sector"))
 
 
 def test_create_lead_stores_row_and_notifies(client, service_db):
