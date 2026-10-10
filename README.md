@@ -157,6 +157,9 @@ live model deployment.
   loading, every catalog prompt reaching the provider, prompt bounds, emergency
   handling, dispatch/affiliation output rejection, Redis outage and usage limits,
   provider failure, telemetry privacy, classified leads and consent defaults.
+  The complete backend `pytest -q` run passed **898 tests, with one skip and no
+  failures**; the backup restore rehearsal skip requires `REHEARSAL_ADMIN_URL`.
+  Full `ruff check app tests scripts` also passed.
   Migration `0026` was applied to local PostgreSQL; legacy-row upgrade/downgrade
   preservation was tested. API/database references were regenerated with the
   existing generator: **142 operations, 35 tables**, database revision `0026`.
@@ -167,6 +170,11 @@ live model deployment.
   not newly introduced dependencies or advisories silently allowlisted here.
 - Browser smoke tooling was unavailable in this session (Playwright transport
   closed); no browser/mobile or manual accessibility pass is claimed.
+- Changed-file secret scanning passed. CodeQL analysis of Python and JavaScript
+  found **zero alerts**. The bundled automated code reviewer could not run
+  because its configured model was unavailable; this is not a clean-review
+  assertion. A separate read-only review of the implementation commit completed
+  with **no significant findings**.
 - Live provider access, production deployment, real notification delivery,
   referral delivery and paid analytics have not been exercised or launched.
 
