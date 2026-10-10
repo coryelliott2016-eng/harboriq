@@ -11,6 +11,7 @@ def _payload(**overrides):
         "full_name": "Cory Elliott",
         "business_name": "Off the Hook Marine",
         "email": "lead@example.com",
+        "contact_consent": True,
         "team_size": "solo",
         "source": "marketing-signup",
         "website": "",
@@ -130,7 +131,7 @@ def test_rate_limit_returns_429(client, monkeypatch):
     # Rebuild limiter thresholds by hitting the module-level limiter directly
     from app.core import rate_limit as rl
 
-    rl._marketing_lead_limiter.limit = 2
+    monkeypatch.setattr(rl._marketing_lead_limiter, "limit", 2)
     _reset_all_for_tests()
 
     with patch("app.services.marketing_leads.email_service.send_email", return_value=True):
@@ -140,6 +141,4 @@ def test_rate_limit_returns_429(client, monkeypatch):
     assert third.status_code == 429
     assert "Retry-After" in third.headers
 
-    # restore default for other tests
-    rl._marketing_lead_limiter.limit = config.settings.marketing_lead_rate_limit_per_window
     _reset_all_for_tests()

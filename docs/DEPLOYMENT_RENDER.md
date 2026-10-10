@@ -39,6 +39,27 @@ Everything is declared in `render.yaml`. Secrets are `sync: false` or
 
 ## "Cloud base" scope
 
+### October Intelligence Lab and consent rollout
+
+- Apply migration `0026` before deploying consent-aware lead capture.
+  Existing leads retain unknown contact consent and no marketing opt-in.
+- Coordinate public clients: `/api/v1/public/leads` now requires
+  `contact_consent: true`; `marketing_consent` remains independently optional
+  and defaults false. The marketing site is a separate repository and is
+  not updated by changes here. Never silently supply consent in a client.
+- Leave `INTELLIGENCE_DEMO_ENABLED=false` until Redis, abuse controls,
+  current NOAA access/terms, and human source-verification checks pass.
+  Enable explicitly on the API host for a supervised demonstration; see
+  `DEMO_RUNBOOK.md`. No NOAA developer secret is required for this public
+  adapter and no licensed chart/OEM feed is activated.
+- Check domain TLS, marketing health, API `/api/v1/readyz`, actual email
+  delivery, and one authorized lead submission/admin retrieval. A DNS
+  failure in the task sandbox is not proof a host is down.
+- Live payments need an owner-authorized charge/refund and settlement check;
+  neither code tests nor a green preflight constitute live payment evidence.
+
+### Provider selection
+
 HarborIQ treats "cloud base" as the **edge/CDN/WAF provider in front of the
 Render origin**, not the app runtime itself. Runtime is locked to Render +
 Neon (`DEPLOY_TARGET_STACK=render-neon`).

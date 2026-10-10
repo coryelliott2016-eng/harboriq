@@ -3,6 +3,27 @@
 Last updated: 2026-09-22. Owner key: **Eng** = execution team (this repo),
 **Cory** = founder decision/account action required.
 
+## October 10 ecosystem readiness addendum
+
+The tables below preserve September evidence. They do not establish that
+those URLs or account states are unchanged today.
+
+| Gate | October check / evidence | Current conclusion |
+|---|---|---|
+| Domain and marketing health | Read-only HTTPS/DNS attempts for harboriq.com and marketing `/api/health` could not resolve in this sandbox | Unverified, not proven down |
+| Email | MX/TXT queries returned resolver errors; no message sent | Delivery unverified; owner must test receipt and SMTP |
+| Lead capture | September stored-lead success retained as historical evidence; no new live submission | Do not label it broken or newly verified; consent-aware API requires updated client |
+| Production application | No authenticated hosting/account inspection or confirmed deployed API URL available | Repository configuration is not deployment proof; run production readiness/smoke checks |
+| Payments | No live settlement/refund exercised by this task | Existing test-mode capability only until owner supplies live-cycle evidence |
+| Deployment configuration | Existing preflight against `.env.example` rejects development/incomplete credentials as expected | Example file is not deploy-ready; run preflight against actual protected production settings |
+| Public NOAA integration | Adapter and mocked automated tests are code evidence; NOAA DNS access unavailable here | Live observation/source verification still required |
+| Service/Marina pilot and partnerships | No participant recruitment, agreements, outreach or measured outcomes performed | Open business/release gates |
+
+Code added in this increment is an isolated public NOAA demonstration,
+contact/marketing consent evidence, and internal data-rights eligibility
+checks. None changes a deployment state to **Live**. Follow the updated
+`DEMO_RUNBOOK.md`, `DEPLOYMENT_RENDER.md` and `PRODUCT_OVERVIEW.md` gates.
+
 Status vocabulary (strict):
 
 - **Live** — deployed, reachable, verified against the production URL.

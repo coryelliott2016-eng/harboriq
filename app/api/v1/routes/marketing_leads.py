@@ -5,7 +5,6 @@ owner. Admin list is gated by MARKETING_LEADS_ADMIN_TOKEN, not a tenant JWT.
 """
 from __future__ import annotations
 
-import ipaddress
 import secrets
 import uuid
 from typing import Annotated
@@ -21,10 +20,12 @@ from fastapi import (
     status,
 )
 from sqlalchemy.orm import Session
+from redis.exceptions import RedisError
 
 from app.api.deps import get_service_db
 from app.core.config import settings
-from app.core.rate_limit import enforce_marketing_lead_rate_limit
+from app.core.rate_limit import _LUA_FIXED_WINDOW, _marketing_lead_limiter
+from app.core.redis_client import get_redis
 from app.db.session import ServiceSession
 from app.schemas.marketing_leads import (
     MarketingLeadCreate,
@@ -37,27 +38,28 @@ from app.services import marketing_leads as leads_service
 router = APIRouter()
 
 
-def _client_ip(request: Request) -> str | None:
-    """Return the caller's IP as a valid inet-parseable string, or None.
-
-    Postgres `inet` rejects non-IP tokens (e.g. Starlette TestClient's
-    literal `"testclient"` host), so we validate before returning. Any
-    unparseable value collapses to None.
-    """
-    candidate: str | None = None
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        candidate = forwarded.split(",")[0].strip()[:64] or None
-    elif request.client is not None:
-        candidate = request.client.host
-
-    if not candidate:
-        return None
+def _enforce_lead_rate_limit(request: Request) -> None:
+    """Fail closed for public capture without changing authentication limits."""
+    identity = request.client.host if request.client else "unknown"
     try:
-        ipaddress.ip_address(candidate)
-    except ValueError:
-        return None
-    return candidate
+        count, ttl = get_redis().eval(
+            _LUA_FIXED_WINDOW,
+            1,
+            _marketing_lead_limiter._key(identity),
+            _marketing_lead_limiter.window_seconds,
+        )
+    except RedisError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="lead capture temporarily unavailable",
+            headers={"Retry-After": "60"},
+        ) from exc
+    if int(count) > _marketing_lead_limiter.limit:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="too many requests, try again later",
+            headers={"Retry-After": str(max(1, int(ttl)))},
+        )
 
 
 def _notify_and_mark(lead_id: uuid.UUID, lead_snapshot: dict) -> None:
@@ -85,7 +87,6 @@ def create_marketing_lead(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_service_db),
-    user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
 ):
     """Public trial / demo signup from the marketing site.
 
@@ -93,7 +94,7 @@ def create_marketing_lead(
     Soft de-dupe: same email within 24h returns the existing lead without a
     second notification email.
     """
-    enforce_marketing_lead_rate_limit(request)
+    _enforce_lead_rate_limit(request)
 
     if body.website.strip():
         # Bot trap — do not reveal detection.
@@ -108,7 +109,13 @@ def create_marketing_lead(
 
     existing = leads_service.find_recent_duplicate(db, body.email)
     if existing:
-        db.commit()  # no writes, but keep session lifecycle clean
+        leads_service.record_consent(
+            db,
+            existing["id"],
+            contact_consent=body.contact_consent,
+            marketing_consent=body.marketing_consent,
+        )
+        db.commit()
         return MarketingLeadCreateResponse(
             id=existing["id"],
             duplicate=True,
@@ -124,8 +131,8 @@ def create_marketing_lead(
         email=body.email,
         team_size=body.team_size,
         source=body.source,
-        ip_hint=_client_ip(request),
-        user_agent=user_agent,
+        contact_consent=body.contact_consent,
+        marketing_consent=body.marketing_consent,
     )
     db.commit()
 

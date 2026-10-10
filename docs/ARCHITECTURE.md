@@ -3,6 +3,30 @@
 Status: v0.2.0 (2026-09-22). Describes what is in this repository and what is
 deployed today. Decisions are recorded in [`docs/adr/`](adr/).
 
+The deployment diagram below is the **September snapshot**, not an October
+production verification; see the October addendum in the release register.
+
+## October public-information boundary
+
+The public `/api/v1/public/intelligence/*` routes never obtain tenant or
+service database sessions. Opaque demonstration credentials are independent
+of staff JWTs and customer portal links. Redis holds only expiring session
+quota state and abuse/budget counters; raw demonstration tokens and NOAA
+responses are not persisted. The server makes bounded requests to a fixed
+NOAA HTTPS endpoint with validated station/product choices.
+
+Anonymous requests do not retrieve vessel, customer, invoice, licensed OEM,
+chart, or AIS data. Tenant APIs continue using the existing authenticated
+principal and transaction-scoped RLS. Any future tenant knowledge retrieval
+must inherit those permission checks; this demo is not a bypass route.
+
+Pilot leads use the existing platform-only marketing table and administrator
+authorization, never tenant browsing. Contact evidence and optional marketing
+preferences are independent of demo access and of referral/analytics rights.
+The internal-only `data_rights` policy has no HTTP export endpoint and is not
+connected to existing tenant records. Licensed ingestion and external
+analytics remain separate, unimplemented boundaries.
+
 ## System context
 
 ```mermaid

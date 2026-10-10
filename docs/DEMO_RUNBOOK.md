@@ -4,6 +4,62 @@ A 30-minute sales walkthrough against seeded staging data for **Gulf Coast
 Marine Service**, a fictional Bradenton/Sarasota, FL marine service shop.
 Target: complete the full path in ≤ 20 minutes, leaving buffer for questions.
 
+## Public Intelligence Lab: Service + Marina
+
+This independent `/intelligence-lab` route needs no tenant login or seeded
+customer data. It is a **deterministic public-data demonstration**, not
+generative AI, engine diagnostics, tide prediction, emergency response,
+navigation or a safe-clearance calculation. Source data access is not NOAA
+endorsement and no commercial partnership is represented.
+
+### Operator setup
+
+1. Start the application API and Redis using the existing deployment setup.
+   Enable `INTELLIGENCE_DEMO_ENABLED=true` explicitly; the default is false.
+   Keep the existing deployment readiness and consent migration gates.
+2. Review `INTELLIGENCE_DEMO_DAILY_SESSION_BUDGET` and
+   `INTELLIGENCE_DEMO_DAILY_NOAA_BUDGET` before exposure. Each session expires
+   after 15 minutes and allows five attempts; failed NOAA retrievals also
+   consume an attempt. Session issuance is limited to three per peer identity
+   per 15-minute window. Daily counters expire within 48 hours.
+3. Verify the actual NOAA API and current use/attribution terms:
+   <https://api.tidesandcurrents.noaa.gov/api/prod/>.
+   The adapter requests latest water level in feet relative to MLLW, UTC,
+   for St. Petersburg (`8726520`), The Battery (`8518750`) or San Francisco
+   (`9414290`). Currents require other station/product validation and are
+   deliberately rejected rather than fabricated.
+4. Review reverse-proxy identity handling. Application code does not parse
+   forwarded headers; only configure ASGI forwarded-IP trust for known
+   proxies, and prevent direct public access to the origin. Shared proxy
+   peer identities may share limits. Never trust arbitrary forwarded IPs.
+5. Do not enable request-body/header capture of `X-Demo-Session` in proxy,
+   tracing or error-reporting tools. The frontend holds the credential in
+   memory only; Redis stores a digest with remaining quota, not the raw token.
+   No prompts, exact vessel positions, customer records or NOAA responses
+   are stored by this demo.
+
+### Demonstration and failure checks
+
+- Accept the safety notice, select Service or Marina and a station, then
+  retrieve the observation. Verify the numeric measurement and observed
+  timestamp against the linked NOAA response; record the date of this check.
+- Confirm the source/retrieval times, human-verification warning and
+  preliminary-data limitation are visible. Service/Marina text is context,
+  not a work-order recommendation or a slip-clearance decision.
+- Confirm stale (over two hours), flagged, malformed, oversized and failed
+  upstream responses produce an unavailable state with **no sample fallback**.
+- Exhaust the five attempts; verify refusal. Restart only within issuance
+  limits; expired/invalid sessions must be refused and Redis failure must
+  stop issuance/retrieval, not bypass the controls.
+- Contact submission is separate and optional. Check contact permission
+  explicitly; leave marketing unchecked to verify no opt-in. Verify the
+  resulting consent evidence using the protected platform lead list.
+  Unchecking marketing on a repeat submission updates that lead's preference.
+  No form authorizes referrals or analytics.
+- Record production verification and participant outcomes in protected
+  operational records. Mocked tests do not substitute for live integration
+  or pilot evidence; no such evidence is claimed by this runbook.
+
 ---
 
 ## 1. Environments & logins

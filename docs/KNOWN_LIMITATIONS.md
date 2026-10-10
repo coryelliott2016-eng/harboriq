@@ -1,5 +1,29 @@
 # Known Limitations Register — v0.2.0
 
+## October 10 verification addendum
+
+The September table below is historical; its production/account states have
+not been independently reconfirmed. Read-only attempts to resolve
+`harboriq.com`, marketing `/api/health`, mail MX/TXT records and NOAA API
+documentation failed DNS resolution in this sandbox. These failures are
+**not evidence of a production outage**. No live lead was submitted, no
+email sent and no charge/refund attempted. Owner-side checks remain required.
+
+- Public Intelligence Lab code exists but is disabled by default and uses
+  deterministic NOAA summaries, not AI diagnostics or navigation guidance.
+  A real NOAA success/freshness check is still a release gate.
+- Marketing lead submission now requires `contact_consent: true`; the
+  separate marketing-site client must be updated before switching it to
+  this application's API. Historical leads have unknown contact consent
+  and must not be treated as marketing opt-ins.
+- The internal rights/suppression policy is not a production data warehouse
+  or proof of anonymization. No commercial analytics or referral workflow
+  is launched.
+- USCG/OEM/chart ingestion, generative AI, field pilots and partnership
+  negotiations remain outside completed implementation claims.
+
+## September release snapshot
+
 Every item here is real and current as of 2026-09-22. Severity uses the
 release-blocking scale: **Critical/High** would block a paid production
 launch; **Medium/Low** are accepted for a supervised pilot.

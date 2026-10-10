@@ -53,8 +53,11 @@ def write_api_docs() -> int:
         "",
         "Authentication: staff endpoints require a bearer access token (or the httpOnly "
         "cookie session plus CSRF header). Portal and public endpoints are authenticated "
-        "by scoped, hashed, expiring tokens in the path. Webhooks verify provider "
-        "signatures.",
+        "by scoped, hashed, expiring tokens in the path, except public lead capture "
+        "(explicit contact consent) and public intelligence session issuance "
+        "(explicit safety acceptance). Intelligence assistance uses a separate "
+        "`X-Demo-Session` credential with expiring quotas and no tenant access. "
+        "Webhooks verify provider signatures.",
         "",
     ]
     for tag in sorted(by_tag):
