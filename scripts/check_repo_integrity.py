@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,8 +25,11 @@ SKILLS_MANIFEST = Path(".github/skills/manifest.json")
 
 
 def _tracked_paths(root: Path) -> list[Path]:
-    result = subprocess.run(
-        ["git", "ls-files", "-z"],
+    git = shutil.which("git")
+    if git is None:
+        raise FileNotFoundError("git executable is not available")
+    result = subprocess.run(  # noqa: S603 -- fixed executable and arguments
+        [git, "ls-files", "-z"],
         cwd=root,
         check=True,
         capture_output=True,
@@ -40,7 +44,10 @@ def _is_binary(content: bytes) -> bool:
         content.decode("utf-8")
     except UnicodeDecodeError:
         return True
-    return False
+    controls = sum(
+        byte < 32 and byte not in {9, 10, 12, 13} or byte == 127 for byte in content
+    )
+    return bool(content) and controls / len(content) > 0.01
 
 
 def _file_integrity_errors(root: Path, paths: list[Path]) -> list[str]:

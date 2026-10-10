@@ -14,6 +14,16 @@ created. The manifest is intentionally empty. Runtime-provided skills and tools
 are environment-specific and are not installed or verified by this repository;
 application services and test helpers are not agent skills.
 
+### Runtime skills available in this agent environment
+
+| Skill | Scope |
+|---|---|
+| `customize-cloud-agent` | Configure the Copilot cloud-agent environment and setup steps. |
+| `merge-branch` | Fetch and merge/rebase another branch in a shallow agent checkout. |
+
+This is an environment snapshot, not a repository installation or a CI-verified
+inventory. Update it when the runtime's available skills change.
+
 ## Retry, scope, and escalation limits
 
 - **Retries:** one initial attempt plus no more than two retries, and only for
