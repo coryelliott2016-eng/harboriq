@@ -9,6 +9,20 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 TeamSize = Literal["solo", "team", "business", "enterprise"]
+Industry = Literal[
+    "marina_or_boatyard",
+    "marine_towing_or_assistance",
+    "commercial_fishing",
+    "recreational_fishing",
+    "marine_repair",
+    "yacht_or_charter_operations",
+    "boat_owner",
+    "dealer_or_broker",
+    "supplier_or_manufacturer",
+    "surveyor_or_insurance",
+    "commercial_fleet",
+    "other_marine_business",
+]
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -25,6 +39,7 @@ class MarketingLeadCreate(BaseModel):
     business_name: str = Field(min_length=1, max_length=160)
     email: str = Field(min_length=3, max_length=254)
     team_size: TeamSize = "solo"
+    industry: Industry | None = None
     source: str = Field(default="marketing-signup", max_length=64)
     website: str = Field(default="", max_length=200)
 
@@ -51,6 +66,7 @@ class MarketingLeadOut(BaseModel):
     business_name: str
     email: str
     team_size: str
+    industry: str | None = None
     source: str
     notified_at: datetime | None = None
     created_at: datetime

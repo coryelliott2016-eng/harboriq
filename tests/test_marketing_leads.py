@@ -12,6 +12,7 @@ def _payload(**overrides):
         "business_name": "Off the Hook Marine",
         "email": "lead@example.com",
         "team_size": "solo",
+        "industry": "marine_repair",
         "source": "marketing-signup",
         "website": "",
     }
@@ -31,12 +32,16 @@ def test_create_lead_stores_row_and_notifies(client, service_db):
     assert send.call_args.kwargs["to"]  # notify address configured
 
     row = service_db.execute(
-        text("SELECT full_name, business_name, email, team_size, notified_at FROM marketing_leads")
+        text(
+            "SELECT full_name, business_name, email, team_size, industry, notified_at "
+            "FROM marketing_leads"
+        )
     ).mappings().one()
     assert row["full_name"] == "Cory Elliott"
     assert row["business_name"] == "Off the Hook Marine"
     assert str(row["email"]).lower() == "lead@example.com"
     assert row["team_size"] == "solo"
+    assert row["industry"] == "marine_repair"
     # BackgroundTasks run before TestClient returns; notified_at should be set.
     assert row["notified_at"] is not None
 
@@ -73,6 +78,26 @@ def test_invalid_email_rejected(client):
 def test_invalid_team_size_rejected(client):
     resp = client.post("/api/v1/public/leads", json=_payload(team_size="fleet"))
     assert resp.status_code == 422
+
+
+def test_industry_is_optional_for_existing_callers(client, service_db):
+    payload = _payload(email="unclassified@example.com")
+    payload.pop("industry")
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=True):
+        response = client.post("/api/v1/public/leads", json=payload)
+    assert response.status_code == 201, response.text
+    industry = service_db.execute(
+        text("SELECT industry FROM marketing_leads WHERE email = 'unclassified@example.com'")
+    ).scalar_one()
+    assert industry is None
+
+
+def test_invalid_industry_rejected(client):
+    response = client.post(
+        "/api/v1/public/leads",
+        json=_payload(industry="unverified-sector"),
+    )
+    assert response.status_code == 422
 
 
 def test_list_requires_admin_token(client, monkeypatch):

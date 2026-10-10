@@ -123,6 +123,7 @@ def create_marketing_lead(
         business_name=body.business_name,
         email=body.email,
         team_size=body.team_size,
+        industry=body.industry,
         source=body.source,
         ip_hint=_client_ip(request),
         user_agent=user_agent,

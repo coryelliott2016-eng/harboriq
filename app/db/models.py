@@ -431,6 +431,7 @@ class MarketingLead(UUIDPKMixin, TimestampMixin, Base):
     business_name: Mapped[str] = mapped_column(Text, nullable=False)
     email: Mapped[str] = mapped_column(CITEXT, nullable=False)
     team_size: Mapped[str] = mapped_column(Text, nullable=False)
+    industry: Mapped[Optional[str]] = mapped_column(Text)
     source: Mapped[str] = mapped_column(
         Text, nullable=False, default="marketing-signup", server_default="marketing-signup"
     )
@@ -444,6 +445,15 @@ class MarketingLead(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint(
             "team_size IN ('solo', 'team', 'business', 'enterprise')",
             name="ck_marketing_leads_team_size",
+        ),
+        CheckConstraint(
+            "industry IS NULL OR industry IN ("
+            "'marina_or_boatyard', 'marine_towing_or_assistance', "
+            "'commercial_fishing', 'recreational_fishing', 'marine_repair', "
+            "'yacht_or_charter_operations', 'boat_owner', 'dealer_or_broker', "
+            "'supplier_or_manufacturer', 'surveyor_or_insurance', "
+            "'commercial_fleet', 'other_marine_business')",
+            name="ck_marketing_leads_industry",
         ),
     )
 

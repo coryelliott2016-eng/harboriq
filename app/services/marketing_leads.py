@@ -33,7 +33,7 @@ def find_recent_duplicate(db: Session, email: str) -> dict | None:
     row = db.execute(
         text(
             """
-            SELECT id, full_name, business_name, email, team_size, source,
+            SELECT id, full_name, business_name, email, team_size, industry, source,
                    notified_at, created_at
             FROM marketing_leads
             WHERE lower(email::text) = lower(:email)
@@ -54,20 +54,21 @@ def create_lead(
     business_name: str,
     email: str,
     team_size: str,
+    industry: str | None,
     source: str,
     ip_hint: str | None,
     user_agent: str | None,
 ) -> dict:
     """Insert a marketing lead. Caller commits."""
     # Explicit casts on every parameter so psycopg's server-side type
-    # inference doesn't blow up on NULL (AmbiguousParameter on $6/inet).
+    # inference doesn't blow up on NULL (AmbiguousParameter on $8/inet).
     # CAST(NULL AS inet) is well-defined; CAST('' AS inet) is not — the
     # caller normalises empty strings to None above.
     row = db.execute(
         text(
             """
             INSERT INTO marketing_leads (
-                full_name, business_name, email, team_size, source,
+                full_name, business_name, email, team_size, industry, source,
                 ip_hint, user_agent
             )
             VALUES (
@@ -75,11 +76,12 @@ def create_lead(
                 CAST(:business_name AS text),
                 CAST(:email AS citext),
                 CAST(:team_size AS text),
+                CAST(:industry AS text),
                 CAST(:source AS text),
                 CAST(:ip_hint AS inet),
                 CAST(:user_agent AS text)
             )
-            RETURNING id, full_name, business_name, email, team_size, source,
+            RETURNING id, full_name, business_name, email, team_size, industry, source,
                       notified_at, created_at
             """
         ),
@@ -88,6 +90,7 @@ def create_lead(
             "business_name": business_name,
             "email": email,
             "team_size": team_size,
+            "industry": industry,
             "source": source or "marketing-signup",
             "ip_hint": ip_hint or None,
             "user_agent": (user_agent or "")[:500] or None,
@@ -114,7 +117,7 @@ def list_leads(db: Session, *, limit: int = 100) -> list[dict]:
     rows = db.execute(
         text(
             """
-            SELECT id, full_name, business_name, email, team_size, source,
+            SELECT id, full_name, business_name, email, team_size, industry, source,
                    notified_at, created_at
             FROM marketing_leads
             ORDER BY created_at DESC
@@ -142,6 +145,7 @@ def notify_new_lead(lead: dict) -> bool:
         f"Business: {lead.get('business_name')}\n"
         f"Email:    {lead.get('email')}\n"
         f"Team:     {team_label}\n"
+        f"Industry: {lead.get('industry') or 'not specified'}\n"
         f"Source:   {lead.get('source')}\n"
         f"Lead ID:  {lead.get('id')}\n"
         f"Created:  {lead.get('created_at')}\n"
