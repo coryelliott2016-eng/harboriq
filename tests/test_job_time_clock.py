@@ -85,6 +85,36 @@ def test_time_entries_list_in_clock_in_order(client):
     assert entries[1]["clocked_out_at"] is None
 
 
+def test_assigned_technician_can_list_job_time_entries(client):
+    owner = signup(client)
+    tech = invite(client, owner, "technician")
+    job = _job(client, owner)
+    _clock_in(client, owner, job)
+    client.post(
+        f"/api/v1/jobs/{job}/assign",
+        json={"technician_id": tech["user"]["id"]},
+        headers=auth_headers(owner),
+    )
+
+    entries = client.get(
+        f"/api/v1/jobs/{job}/time-entries", headers=auth_headers(tech)
+    )
+    assert entries.status_code == 200, entries.text
+    assert len(entries.json()) == 1
+
+
+def test_unassigned_technician_cannot_list_job_time_entries(client):
+    owner = signup(client)
+    tech = invite(client, owner, "technician")
+    job = _job(client, owner)
+    _clock_in(client, owner, job)
+
+    entries = client.get(
+        f"/api/v1/jobs/{job}/time-entries", headers=auth_headers(tech)
+    )
+    assert entries.status_code == 403
+
+
 def test_idempotent_replay_of_clock_in_returns_the_same_entry(client):
     owner = signup(client)
     job = _job(client, owner)

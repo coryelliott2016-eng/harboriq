@@ -89,6 +89,36 @@ def test_attachments_list_in_upload_order(client):
     assert [a["kind"] for a in listed] == ["photo", "signature"]
 
 
+def test_assigned_technician_can_list_job_attachments(client):
+    owner = signup(client)
+    tech = invite(client, owner, "technician")
+    job = _job(client, owner)
+    _attach(client, owner, job)
+    client.post(
+        f"/api/v1/jobs/{job}/assign",
+        json={"technician_id": tech["user"]["id"]},
+        headers=auth_headers(owner),
+    )
+
+    listed = client.get(
+        f"/api/v1/jobs/{job}/attachments", headers=auth_headers(tech)
+    )
+    assert listed.status_code == 200, listed.text
+    assert len(listed.json()) == 1
+
+
+def test_unassigned_technician_cannot_list_job_attachments(client):
+    owner = signup(client)
+    tech = invite(client, owner, "technician")
+    job = _job(client, owner)
+    _attach(client, owner, job)
+
+    listed = client.get(
+        f"/api/v1/jobs/{job}/attachments", headers=auth_headers(tech)
+    )
+    assert listed.status_code == 403
+
+
 def test_idempotency_key_prevents_a_duplicate_on_replay(client):
     """The offline-sync queue may resend the same upload after a dropped
     response; a matching idempotency_key must return the original row."""
