@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   # Security Core Prompt v1.0, H-5 fix: static secret scanning across full
   # history diffs on every push/PR, gating the rest of the pipeline.
