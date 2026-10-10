@@ -434,8 +434,14 @@ class MarketingLead(UUIDPKMixin, TimestampMixin, Base):
     source: Mapped[str] = mapped_column(
         Text, nullable=False, default="marketing-signup", server_default="marketing-signup"
     )
-    ip_hint: Mapped[Optional[str]] = mapped_column(INET)
-    user_agent: Mapped[Optional[str]] = mapped_column(Text)
+    marketing_email_opt_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    marketing_email_consent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+    marketing_email_consent_version: Mapped[Optional[str]] = mapped_column(Text)
+    marketing_email_consent_method: Mapped[Optional[str]] = mapped_column(Text)
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
@@ -444,6 +450,15 @@ class MarketingLead(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint(
             "team_size IN ('solo', 'team', 'business', 'enterprise')",
             name="ck_marketing_leads_team_size",
+        ),
+        CheckConstraint(
+            "(marketing_email_opt_in AND marketing_email_consent_at IS NOT NULL "
+            "AND marketing_email_consent_version IS NOT NULL "
+            "AND marketing_email_consent_method IS NOT NULL) OR "
+            "(NOT marketing_email_opt_in AND marketing_email_consent_at IS NULL "
+            "AND marketing_email_consent_version IS NULL "
+            "AND marketing_email_consent_method IS NULL)",
+            name="ck_marketing_leads_email_consent_metadata",
         ),
     )
 

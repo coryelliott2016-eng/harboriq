@@ -25,6 +25,8 @@ TEAM_SIZE_LABELS = {
     "business": "6–15 people (Business)",
     "enterprise": "16+ people (Enterprise)",
 }
+MARKETING_EMAIL_CONSENT_VERSION = "marketing-email-v1"
+MARKETING_EMAIL_CONSENT_METHOD = "public-lead-form"
 
 
 def find_recent_duplicate(db: Session, email: str) -> dict | None:
@@ -34,6 +36,8 @@ def find_recent_duplicate(db: Session, email: str) -> dict | None:
         text(
             """
             SELECT id, full_name, business_name, email, team_size, source,
+                   marketing_email_opt_in, marketing_email_consent_at,
+                   marketing_email_consent_version, marketing_email_consent_method,
                    notified_at, created_at
             FROM marketing_leads
             WHERE lower(email::text) = lower(:email)
@@ -55,20 +59,16 @@ def create_lead(
     email: str,
     team_size: str,
     source: str,
-    ip_hint: str | None,
-    user_agent: str | None,
+    marketing_email_opt_in: bool,
 ) -> dict:
     """Insert a marketing lead. Caller commits."""
-    # Explicit casts on every parameter so psycopg's server-side type
-    # inference doesn't blow up on NULL (AmbiguousParameter on $6/inet).
-    # CAST(NULL AS inet) is well-defined; CAST('' AS inet) is not — the
-    # caller normalises empty strings to None above.
     row = db.execute(
         text(
             """
             INSERT INTO marketing_leads (
-                full_name, business_name, email, team_size, source,
-                ip_hint, user_agent
+                full_name, business_name, email, team_size, source, marketing_email_opt_in,
+                marketing_email_consent_at, marketing_email_consent_version,
+                marketing_email_consent_method
             )
             VALUES (
                 CAST(:full_name AS text),
@@ -76,10 +76,14 @@ def create_lead(
                 CAST(:email AS citext),
                 CAST(:team_size AS text),
                 CAST(:source AS text),
-                CAST(:ip_hint AS inet),
-                CAST(:user_agent AS text)
+                :marketing_email_opt_in,
+                CASE WHEN :marketing_email_opt_in THEN now() END,
+                CASE WHEN :marketing_email_opt_in THEN :consent_version END,
+                CASE WHEN :marketing_email_opt_in THEN :consent_method END
             )
             RETURNING id, full_name, business_name, email, team_size, source,
+                      marketing_email_opt_in, marketing_email_consent_at,
+                      marketing_email_consent_version, marketing_email_consent_method,
                       notified_at, created_at
             """
         ),
@@ -89,8 +93,9 @@ def create_lead(
             "email": email,
             "team_size": team_size,
             "source": source or "marketing-signup",
-            "ip_hint": ip_hint or None,
-            "user_agent": (user_agent or "")[:500] or None,
+            "marketing_email_opt_in": marketing_email_opt_in,
+            "consent_version": MARKETING_EMAIL_CONSENT_VERSION,
+            "consent_method": MARKETING_EMAIL_CONSENT_METHOD,
         },
     ).mappings().one()
     return dict(row)
@@ -115,6 +120,8 @@ def list_leads(db: Session, *, limit: int = 100) -> list[dict]:
         text(
             """
             SELECT id, full_name, business_name, email, team_size, source,
+                   marketing_email_opt_in, marketing_email_consent_at,
+                   marketing_email_consent_version, marketing_email_consent_method,
                    notified_at, created_at
             FROM marketing_leads
             ORDER BY created_at DESC
@@ -143,6 +150,8 @@ def notify_new_lead(lead: dict) -> bool:
         f"Email:    {lead.get('email')}\n"
         f"Team:     {team_label}\n"
         f"Source:   {lead.get('source')}\n"
+        f"Marketing email consent: "
+        f"{'Yes' if lead.get('marketing_email_opt_in') else 'No'}\n"
         f"Lead ID:  {lead.get('id')}\n"
         f"Created:  {lead.get('created_at')}\n"
     )

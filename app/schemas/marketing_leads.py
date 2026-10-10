@@ -27,6 +27,7 @@ class MarketingLeadCreate(BaseModel):
     team_size: TeamSize = "solo"
     source: str = Field(default="marketing-signup", max_length=64)
     website: str = Field(default="", max_length=200)
+    marketing_email_opt_in: bool = False
 
     @field_validator("full_name", "business_name", "email", "source", mode="before")
     @classmethod
@@ -52,6 +53,10 @@ class MarketingLeadOut(BaseModel):
     email: str
     team_size: str
     source: str
+    marketing_email_opt_in: bool
+    marketing_email_consent_at: datetime | None = None
+    marketing_email_consent_version: str | None = None
+    marketing_email_consent_method: str | None = None
     notified_at: datetime | None = None
     created_at: datetime
 

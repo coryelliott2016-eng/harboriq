@@ -5,7 +5,6 @@ owner. Admin list is gated by MARKETING_LEADS_ADMIN_TOKEN, not a tenant JWT.
 """
 from __future__ import annotations
 
-import ipaddress
 import secrets
 import uuid
 from typing import Annotated
@@ -37,29 +36,6 @@ from app.services import marketing_leads as leads_service
 router = APIRouter()
 
 
-def _client_ip(request: Request) -> str | None:
-    """Return the caller's IP as a valid inet-parseable string, or None.
-
-    Postgres `inet` rejects non-IP tokens (e.g. Starlette TestClient's
-    literal `"testclient"` host), so we validate before returning. Any
-    unparseable value collapses to None.
-    """
-    candidate: str | None = None
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        candidate = forwarded.split(",")[0].strip()[:64] or None
-    elif request.client is not None:
-        candidate = request.client.host
-
-    if not candidate:
-        return None
-    try:
-        ipaddress.ip_address(candidate)
-    except ValueError:
-        return None
-    return candidate
-
-
 def _notify_and_mark(lead_id: uuid.UUID, lead_snapshot: dict) -> None:
     """Background task: send email, then stamp notified_at on success."""
     ok = leads_service.notify_new_lead(lead_snapshot)
@@ -85,7 +61,6 @@ def create_marketing_lead(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_service_db),
-    user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
 ):
     """Public trial / demo signup from the marketing site.
 
@@ -124,8 +99,7 @@ def create_marketing_lead(
         email=body.email,
         team_size=body.team_size,
         source=body.source,
-        ip_hint=_client_ip(request),
-        user_agent=user_agent,
+        marketing_email_opt_in=body.marketing_email_opt_in,
     )
     db.commit()
 
