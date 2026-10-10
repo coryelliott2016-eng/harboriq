@@ -31,14 +31,44 @@ def test_create_lead_stores_row_and_notifies(client, service_db):
     assert send.call_args.kwargs["to"]  # notify address configured
 
     row = service_db.execute(
-        text("SELECT full_name, business_name, email, team_size, notified_at FROM marketing_leads")
+        text(
+            "SELECT full_name, business_name, email, team_size, "
+            "marketing_email_opt_in, marketing_email_consent_at, "
+            "marketing_email_consent_version, marketing_email_consent_method, notified_at "
+            "FROM marketing_leads"
+        )
     ).mappings().one()
     assert row["full_name"] == "Cory Elliott"
     assert row["business_name"] == "Off the Hook Marine"
     assert str(row["email"]).lower() == "lead@example.com"
     assert row["team_size"] == "solo"
+    assert row["marketing_email_opt_in"] is False
+    assert row["marketing_email_consent_at"] is None
+    assert row["marketing_email_consent_version"] is None
+    assert row["marketing_email_consent_method"] is None
     # BackgroundTasks run before TestClient returns; notified_at should be set.
     assert row["notified_at"] is not None
+
+
+def test_marketing_email_opt_in_is_recorded_separately(client, service_db):
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=True):
+        resp = client.post(
+            "/api/v1/public/leads",
+            json=_payload(email="consented@example.com", marketing_email_opt_in=True),
+        )
+
+    assert resp.status_code == 201, resp.text
+    row = service_db.execute(
+        text(
+            "SELECT marketing_email_opt_in, marketing_email_consent_at, "
+            "marketing_email_consent_version, marketing_email_consent_method "
+            "FROM marketing_leads WHERE email = 'consented@example.com'"
+        )
+    ).mappings().one()
+    assert row["marketing_email_opt_in"] is True
+    assert row["marketing_email_consent_at"] is not None
+    assert row["marketing_email_consent_version"] == "marketing-email-v1"
+    assert row["marketing_email_consent_method"] == "public-lead-form"
 
 
 def test_honeypot_does_not_store(client, service_db):
