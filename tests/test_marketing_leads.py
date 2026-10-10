@@ -130,6 +130,8 @@ def test_list_requires_admin_token(client, monkeypatch):
     data = ok.json()
     assert data["count"] >= 1
     assert any(lead["email"] == "listme@example.com" for lead in data["leads"])
+    listed = next(lead for lead in data["leads"] if lead["email"] == "listme@example.com")
+    assert listed["industry"] == "marine_repair"
 
 
 def test_list_disabled_when_token_empty(client, monkeypatch):

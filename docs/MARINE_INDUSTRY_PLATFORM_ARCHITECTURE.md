@@ -12,11 +12,11 @@ flowchart TB
     A["HarborIQ.com<br/>Industry-specific marketing + AI Lab"]
     B["Secure Public Demo Gateway<br/>Sessions / Rate Limits / Consent"]
     C["HarborIQ AI Intelligence Engine<br/>LLM / NLP / RAG / Predictive ML"]
-    D["Marine Knowledge &amp; Data Adapters<br/>Public and licensed sources"]
+    D["Marine Knowledge & Data Adapters<br/>Public and licensed sources"]
     E["HarborIQ OS<br/>Marina / Fishing / Service / Towing<br/>Charters / Fleet / Suppliers"]
     F["HarborIQ Connect<br/>Opt-in Referrals / Partner Marketplace"]
     G["HarborIQ Insights<br/>Aggregated Analytics / Data Products"]
-    H["Customer &amp; Business Database<br/>Tenant Isolation / Data Permissions"]
+    H["Customer & Business Database<br/>Tenant Isolation / Data Permissions"]
     I["Commercial Revenue<br/>SaaS / AI / Referrals / Reports"]
 
     A --> B
