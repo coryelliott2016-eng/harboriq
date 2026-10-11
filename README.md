@@ -49,7 +49,8 @@ build plan: every issue from the technical critique is fixed at the code level.
 > revenue on top of Stripe Connect, a full customer password/login system
 > (the portal uses durable magic links instead — see below), and a trained
 > ML dispatch model are intentionally out of scope — see
-> `../HarborIQ_v2_Corrected_Build_Spec.md` for the roadmap and "What's
+> [`docs/COMPETITIVE_PARITY_ROADMAP.md`](docs/COMPETITIVE_PARITY_ROADMAP.md)
+> for the roadmap and "What's
 > intentionally NOT here yet" below for the full deferred list.
 
 ## Stack
