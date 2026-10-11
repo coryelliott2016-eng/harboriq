@@ -32,6 +32,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
+from app.schemas.industry import Industry, ProductInterest
 
 # Re-export enum names matching the DB types.
 SubscriptionStatus = str  # values validated by the DB enum
@@ -435,6 +436,19 @@ class MarketingLead(UUIDPKMixin, TimestampMixin, Base):
         Text, nullable=False, default="marketing-signup", server_default="marketing-signup"
     )
     ip_hint: Mapped[Optional[str]] = mapped_column(INET)
+    industry: Mapped[str] = mapped_column(Text, nullable=False, default="other", server_default="other")
+    business_need: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    product_interest: Mapped[str] = mapped_column(
+        Text, nullable=False, default="operations", server_default="operations"
+    )
+    email_marketing_opt_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    contact_requested: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    email_marketing_consented_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    email_marketing_consent_version: Mapped[Optional[str]] = mapped_column(Text)
     user_agent: Mapped[Optional[str]] = mapped_column(Text)
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
@@ -444,6 +458,22 @@ class MarketingLead(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint(
             "team_size IN ('solo', 'team', 'business', 'enterprise')",
             name="ck_marketing_leads_team_size",
+        ),
+        CheckConstraint(
+            "industry IN (" + ", ".join(f"'{v.value}'" for v in Industry) + ")",
+            name="ck_marketing_leads_industry",
+        ),
+        CheckConstraint(
+            "product_interest IN (" + ", ".join(f"'{v.value}'" for v in ProductInterest) + ")",
+            name="ck_marketing_leads_product_interest",
+        ),
+        CheckConstraint("length(business_need) <= 2000", name="ck_marketing_leads_business_need"),
+        CheckConstraint(
+            "(email_marketing_opt_in AND email_marketing_consented_at IS NOT NULL "
+            "AND email_marketing_consent_version IS NOT NULL) OR "
+            "(NOT email_marketing_opt_in AND email_marketing_consented_at IS NULL "
+            "AND email_marketing_consent_version IS NULL)",
+            name="ck_marketing_leads_email_consent",
         ),
     )
 

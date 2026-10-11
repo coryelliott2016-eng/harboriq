@@ -93,6 +93,8 @@ export interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined | null>;
   /** Skip attaching the bearer token — used for public/unauthenticated routes. */
   anonymous?: boolean;
+  /** Session hydration must not redirect visitors away from public pages. */
+  redirectOnAuthFailure?: boolean;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -153,7 +155,8 @@ async function rawRequest<T>(path: string, options: RequestOptions): Promise<T> 
  * On a 401 from an authenticated (non-anonymous) request, attempts exactly
  * one `POST /auth/refresh` and retries the original request once. If the
  * refresh itself fails (expired/invalid refresh token), the session is
- * cleared and the browser is redirected to /login. This is the "401-refresh-
+ * cleared and the browser is redirected to /login unless session hydration
+ * explicitly opts out. This is the "401-refresh-
  * retry" logic covered by src/lib/api.test.ts.
  */
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -165,7 +168,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       if (refreshed) {
         return await rawRequest<T>(path, options);
       }
-      forceLogout();
+      if (options.redirectOnAuthFailure === false) clearSession();
+      else forceLogout();
     }
     throw err;
   }

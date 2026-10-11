@@ -1,0 +1,122 @@
+[
+  {
+    "id": "marinas",
+    "label": "Marina or Boatyard",
+    "title": "Intelligence for marinas, boatyards and dry storage",
+    "summary": "Explore slip occupancy, facility maintenance and customer coordination in one marine ecosystem.",
+    "capabilities": ["Slip and berth planning", "Storage and haul-out scheduling", "Facility maintenance checklists", "Customer and vessel coordination"],
+    "prompt": "How can I optimize slip occupancy and maintenance scheduling at a 150-slip marina?",
+    "question": "Which facility workflow needs attention: slips, storage, maintenance or customer coordination?",
+    "opportunity": "Discuss marina operations subscriptions and facility analytics requirements."
+  },
+  {
+    "id": "marine-towing",
+    "label": "Marine Towing or Assistance",
+    "title": "Operational intelligence for towing and assistance businesses",
+    "summary": "Explore nonemergency fleet readiness, maintenance and crew planning. This is not an assistance request service.",
+    "capabilities": ["Fleet readiness planning", "Crew availability checklists", "Maintenance coordination", "Incident documentation preparation"],
+    "prompt": "How could AI help my towing company coordinate vessels, crews, maintenance and nonemergency service requests?",
+    "question": "What nonemergency operational challenge does your assistance business face?",
+    "opportunity": "Discuss operator software requirements and potential authorized integrations."
+  },
+  {
+    "id": "commercial-fishing",
+    "label": "Commercial Fishing",
+    "title": "Readiness intelligence for commercial fishing businesses",
+    "summary": "Explore equipment readiness and operating costs without sharing proprietary fishing grounds or catch locations.",
+    "capabilities": ["Fleet maintenance planning", "Gear readiness checklists", "Fuel and operating cost questions", "Cold-chain equipment checks"],
+    "prompt": "What vessel, gear and refrigeration maintenance checks should my commercial fishing crew complete before a trip?",
+    "question": "Which fleet, gear or onboard equipment workflow would you like to improve?",
+    "opportunity": "Discuss commercial fleet software needs and authorized equipment partnerships."
+  },
+  {
+    "id": "recreational-fishing",
+    "label": "Recreational Fishing",
+    "title": "Marine intelligence for recreational anglers",
+    "summary": "Prepare your boat and equipment for the next trip with informational maintenance guidance.",
+    "capabilities": ["Boat and engine maintenance questions", "Electronics readiness checks", "Trip preparation", "Equipment compatibility questions"],
+    "prompt": "What maintenance and electronics checks should I perform before taking my offshore fishing boat out?",
+    "question": "What boat, engine or electronics question would you like help exploring?",
+    "opportunity": "Explore consumer functionality and express interest in future permission-based service introductions."
+  },
+  {
+    "id": "marine-service",
+    "label": "Marine Repair",
+    "title": "The marine-service operating foundation",
+    "summary": "HarborIQ's existing service workflows connect customers, vessels, repair orders, estimates and invoices.",
+    "capabilities": ["Repair orders and maintenance history", "Estimates and invoicing", "Technician and customer coordination", "Parts and labor workflows"],
+    "prompt": "How should a marine technician structure a diagnostic checklist for an outboard that will not start?",
+    "question": "Which repair, technician, parts or invoicing workflow needs improvement?",
+    "opportunity": "Explore the existing service application and discuss AI-assisted service workflows."
+  },
+  {
+    "id": "charters",
+    "label": "Yacht or Charter Operations",
+    "title": "Intelligence for yachts, charters and excursion operators",
+    "summary": "Explore vessel readiness, crew coordination and business operations, including fishing charter workflows.",
+    "capabilities": ["Vessel readiness checklists", "Maintenance and vendor planning", "Crew task preparation", "Booking and trip profitability questions"],
+    "prompt": "How can a fishing charter operator plan vessel maintenance and crew readiness around a busy booking schedule?",
+    "question": "Do you operate fishing charters, yachts or excursions, and which workflow needs support?",
+    "opportunity": "Discuss charter and yacht operations modules and enterprise requirements."
+  },
+  {
+    "id": "boat-owners",
+    "label": "Boat Owner",
+    "title": "Marine intelligence for boat owners",
+    "summary": "Ask technical questions and explore maintenance needs without an account or a commitment to share your information.",
+    "capabilities": ["Technical maintenance questions", "Service preparation checklists", "Equipment documentation questions", "Maintenance interest planning"],
+    "prompt": "What information should I prepare before asking a marine repair shop for a boat service estimate?",
+    "question": "What maintenance or service need would you like to discuss? No vessel identifiers are needed.",
+    "opportunity": "Explore owner functionality and register interest in future opt-in service introductions."
+  },
+  {
+    "id": "dealers",
+    "label": "Dealer or Broker",
+    "title": "Intelligence for marine dealers and brokers",
+    "summary": "Explore lead qualification, inspections and service coordination without unsupported valuations or warranty claims.",
+    "capabilities": ["Customer qualification questions", "Pre-delivery inspection preparation", "Trade-in documentation checklists", "Service and follow-up planning"],
+    "prompt": "What should a boat dealer include in a pre-delivery inspection and customer handover checklist?",
+    "question": "Which sales, inspection or service coordination workflow would you like to improve?",
+    "opportunity": "Discuss dealer workflow software and authorized inventory integrations."
+  },
+  {
+    "id": "suppliers",
+    "label": "Supplier or Manufacturer",
+    "title": "Intelligence for marine suppliers and manufacturers",
+    "summary": "Explore purchasing workflows and compatibility questions. Catalog integrations require authorization and licensing.",
+    "capabilities": ["Parts inquiry organization", "Compatibility verification checklists", "Purchasing workflow planning", "Demand analysis methodology"],
+    "prompt": "What information should a marine parts supplier request to verify an engine part's compatibility using authorized documentation?",
+    "question": "Which catalog, compatibility or purchasing workflow would you like to discuss?",
+    "opportunity": "Discuss licensed integrations and partnership interest; paid insights require validated rights, quality and demand."
+  },
+  {
+    "id": "surveyors",
+    "label": "Surveyor or Insurance",
+    "title": "Workflow intelligence for surveyors and insurance teams",
+    "summary": "Explore inspection documentation and deficiency tracking. Qualified professionals retain all survey and insurance judgments.",
+    "capabilities": ["Inspection report organization", "Deficiency documentation checklists", "Inspection scheduling preparation", "Maintenance condition records"],
+    "prompt": "How can a marine surveyor organize an inspection checklist and deficiency report for qualified human review?",
+    "question": "Which inspection documentation workflow needs support? Do not include confidential claims or underwriting records.",
+    "opportunity": "Discuss professional workflow tools and specifically authorized integrations."
+  },
+  {
+    "id": "commercial-fleets",
+    "label": "Commercial Fleet",
+    "title": "Intelligence for commercial vessels and workboat fleets",
+    "summary": "Explore maintenance planning, equipment reliability and downtime questions without unverified regulatory compliance claims.",
+    "capabilities": ["Planned maintenance preparation", "Downtime analysis questions", "Crew task and work-order planning", "Parts and operating cost questions"],
+    "prompt": "How should a harbor workboat fleet prioritize preventive maintenance to reduce avoidable downtime?",
+    "question": "Which fleet maintenance, reliability or work-order challenge would you like to discuss?",
+    "opportunity": "Discuss fleet maintenance subscriptions and contracted enterprise tooling."
+  },
+  {
+    "id": "other",
+    "label": "Other Marine Business",
+    "title": "A shared foundation for the wider marine economy",
+    "summary": "Tell us about your marine business. Shipbuilding, diving, aquaculture, ports and other specialist modules are future expansion opportunities.",
+    "capabilities": ["Marine operational questions", "Maintenance workflow exploration", "Business requirements discovery", "Authorized partnership discussions"],
+    "prompt": "How can a marine business identify maintenance and customer coordination workflows that could benefit from AI?",
+    "question": "What type of marine business do you operate, and what is your main operational need?",
+    "opportunity": "Discuss future modules and partnerships without assuming launch-day support."
+  }
+]
