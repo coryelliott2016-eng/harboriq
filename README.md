@@ -1,5 +1,14 @@
 # HarborIQ — Marine Service Operating System
 
+> **October 10 ecosystem increment:** the application includes a disabled-by-default,
+> public Service/Marina [Intelligence Lab](docs/DEMO_RUNBOOK.md#public-intelligence-lab-service--marina)
+> with a bounded NOAA adapter. It produces deterministic, source-attributed
+> information, **not generative AI, diagnostics, navigation, or emergency advice**.
+> The September release/deployment statements below are historical evidence,
+> not a fresh production verification. See the October addendum in the
+> [release register](docs/RELEASE_REGISTER.md) for current verification limits
+> and the [product overview](docs/PRODUCT_OVERVIEW.md) for pilot/partnership gates.
+
 > **Release v0.2.0 (2026-09-22).** Start here:
 > [Release register](docs/RELEASE_REGISTER.md) (what is done, with evidence) ·
 > [Known limitations](docs/KNOWN_LIMITATIONS.md) ·

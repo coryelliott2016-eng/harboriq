@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # status='draft' and the API exposes no issuance or transfer operation.
     asset_tokenization_enabled: bool = False
 
+    # Public NOAA proof-of-concept: Redis is mandatory; no tenant data or AI.
+    intelligence_demo_enabled: bool = False
+    intelligence_demo_daily_noaa_budget: int = Field(default=100, ge=1, le=10000)
+    intelligence_demo_daily_session_budget: int = Field(default=1000, ge=1, le=10000)
+
     # --- Auth ---
     # HS256 shared secret for signing access tokens. Refresh tokens are opaque
     # random strings stored hashed in user_sessions, so they do not use this.

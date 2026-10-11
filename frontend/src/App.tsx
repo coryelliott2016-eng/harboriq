@@ -64,6 +64,11 @@ const JobsPage = lazy(() =>
 const LoginPage = lazy(() =>
   import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })),
 );
+const IntelligenceLabPage = lazy(() =>
+  import("./pages/IntelligenceLabPage").then((m) => ({
+    default: m.IntelligenceLabPage,
+  })),
+);
 const MessagesPage = lazy(() =>
   import("./pages/MessagesPage").then((m) => ({ default: m.MessagesPage })),
 );
@@ -302,6 +307,7 @@ export default function App() {
         {/* Unauthenticated */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/intelligence-lab" element={<IntelligenceLabPage />} />
         <Route path="/pay/:token" element={<PublicInvoicePage />} />
         <Route path="/accept-invite/:token" element={<AcceptInvitePage />} />
 

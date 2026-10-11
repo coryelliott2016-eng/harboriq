@@ -30,6 +30,12 @@ export function AppShell() {
           >
             Field app
           </NavLink>
+          <NavLink
+            to="/intelligence-lab"
+            className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          >
+            Public Intelligence Lab
+          </NavLink>
           {navItems.map((item) => (
             <NavLink
               key={item.to}

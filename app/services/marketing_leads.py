@@ -18,6 +18,7 @@ from app.services import email as email_service
 logger = logging.getLogger("harboriq.marketing_leads")
 
 DUPLICATE_WINDOW = timedelta(hours=24)
+CONSENT_VERSION = "2026-10-10"
 
 TEAM_SIZE_LABELS = {
     "solo": "Just me (Solo)",
@@ -27,6 +28,20 @@ TEAM_SIZE_LABELS = {
 }
 
 
+def lock_email_preference(db: Session, email: str) -> None:
+    """Serialize submissions until commit; acquire before any lead-row write."""
+    db.execute(
+        text(
+            """
+            SELECT pg_advisory_xact_lock(
+                hashtextextended(lower(CAST(:email AS text)), CAST(0 AS bigint))
+            )
+            """
+        ),
+        {"email": email},
+    )
+
+
 def find_recent_duplicate(db: Session, email: str) -> dict | None:
     """Return the most recent lead for this email within 24h, if any."""
     cutoff = datetime.now(timezone.utc) - DUPLICATE_WINDOW
@@ -34,7 +49,8 @@ def find_recent_duplicate(db: Session, email: str) -> dict | None:
         text(
             """
             SELECT id, full_name, business_name, email, team_size, source,
-                   notified_at, created_at
+                   notified_at, created_at, contact_consent_at, consent_version,
+                   marketing_consent, marketing_consent_at
             FROM marketing_leads
             WHERE lower(email::text) = lower(:email)
               AND created_at >= :cutoff
@@ -55,20 +71,20 @@ def create_lead(
     email: str,
     team_size: str,
     source: str,
-    ip_hint: str | None,
-    user_agent: str | None,
+    contact_consent: bool,
+    marketing_consent: bool = False,
 ) -> dict:
     """Insert a marketing lead. Caller commits."""
-    # Explicit casts on every parameter so psycopg's server-side type
-    # inference doesn't blow up on NULL (AmbiguousParameter on $6/inet).
-    # CAST(NULL AS inet) is well-defined; CAST('' AS inet) is not — the
-    # caller normalises empty strings to None above.
+    if contact_consent is not True:
+        raise ValueError("explicit contact consent is required")
+    lock_email_preference(db, email)
     row = db.execute(
         text(
             """
             INSERT INTO marketing_leads (
                 full_name, business_name, email, team_size, source,
-                ip_hint, user_agent
+                ip_hint, user_agent, contact_consent_at, consent_version,
+                marketing_consent, marketing_consent_at
             )
             VALUES (
                 CAST(:full_name AS text),
@@ -76,11 +92,13 @@ def create_lead(
                 CAST(:email AS citext),
                 CAST(:team_size AS text),
                 CAST(:source AS text),
-                CAST(:ip_hint AS inet),
-                CAST(:user_agent AS text)
+                NULL, NULL, now(), CAST(:consent_version AS text),
+                CAST(:marketing_consent AS boolean),
+                CASE WHEN CAST(:marketing_consent AS boolean) THEN now() ELSE NULL END
             )
             RETURNING id, full_name, business_name, email, team_size, source,
-                      notified_at, created_at
+                      notified_at, created_at, contact_consent_at, consent_version,
+                      marketing_consent, marketing_consent_at
             """
         ),
         {
@@ -89,11 +107,74 @@ def create_lead(
             "email": email,
             "team_size": team_size,
             "source": source or "marketing-signup",
-            "ip_hint": ip_hint or None,
-            "user_agent": (user_agent or "")[:500] or None,
+            "consent_version": CONSENT_VERSION,
+            "marketing_consent": marketing_consent,
         },
     ).mappings().one()
+    record_marketing_preference(
+        db,
+        email=email,
+        marketing_consent=marketing_consent,
+        consent_at=row["contact_consent_at"],
+    )
     return dict(row)
+
+
+def record_marketing_preference(
+    db: Session, *, email: str, marketing_consent: bool, consent_at: datetime
+) -> None:
+    """Apply the latest email-wide preference without changing contact evidence."""
+    lock_email_preference(db, email)
+    db.execute(
+        text(
+            """
+            UPDATE marketing_leads
+            SET marketing_consent = :marketing_consent,
+                marketing_consent_at =
+                    CASE WHEN CAST(:marketing_consent AS boolean)
+                         THEN CAST(:consent_at AS timestamptz) ELSE NULL END
+            WHERE lower(email::text) = lower(:email)
+            """
+        ),
+        {
+            "email": email,
+            "marketing_consent": marketing_consent,
+            "consent_at": consent_at,
+        },
+    )
+
+
+def record_consent(
+    db: Session, lead_id: uuid.UUID, *, contact_consent: bool, marketing_consent: bool
+) -> None:
+    """Record the latest explicit submission, including marketing opt-out."""
+    if contact_consent is not True:
+        raise ValueError("explicit contact consent is required")
+    email = db.execute(
+        text("SELECT email FROM marketing_leads WHERE id = :id"), {"id": lead_id}
+    ).scalar_one()
+    lock_email_preference(db, email)
+    row = db.execute(
+        text(
+            """
+            UPDATE marketing_leads
+            SET contact_consent_at = now(),
+                consent_version = :consent_version
+            WHERE id = :id
+            RETURNING email, contact_consent_at
+            """
+        ),
+        {
+            "id": lead_id,
+            "consent_version": CONSENT_VERSION,
+        },
+    ).mappings().one()
+    record_marketing_preference(
+        db,
+        email=row["email"],
+        marketing_consent=marketing_consent,
+        consent_at=row["contact_consent_at"],
+    )
 
 
 def mark_notified(db: Session, lead_id: uuid.UUID) -> None:
@@ -115,7 +196,8 @@ def list_leads(db: Session, *, limit: int = 100) -> list[dict]:
         text(
             """
             SELECT id, full_name, business_name, email, team_size, source,
-                   notified_at, created_at
+                   notified_at, created_at, contact_consent_at, consent_version,
+                   marketing_consent, marketing_consent_at
             FROM marketing_leads
             ORDER BY created_at DESC
             LIMIT :limit

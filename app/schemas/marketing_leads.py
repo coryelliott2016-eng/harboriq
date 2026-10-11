@@ -24,9 +24,18 @@ class MarketingLeadCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=120)
     business_name: str = Field(min_length=1, max_length=160)
     email: str = Field(min_length=3, max_length=254)
+    contact_consent: Literal[True]
+    marketing_consent: bool = Field(default=False, strict=True)
     team_size: TeamSize = "solo"
     source: str = Field(default="marketing-signup", max_length=64)
     website: str = Field(default="", max_length=200)
+
+    @field_validator("contact_consent", mode="before")
+    @classmethod
+    def _explicit_contact_consent(cls, v: object) -> object:
+        if v is not True:
+            raise ValueError("explicit contact consent is required")
+        return v
 
     @field_validator("full_name", "business_name", "email", "source", mode="before")
     @classmethod
@@ -52,6 +61,10 @@ class MarketingLeadOut(BaseModel):
     email: str
     team_size: str
     source: str
+    contact_consent_at: datetime | None = None
+    consent_version: str | None = None
+    marketing_consent: bool = False
+    marketing_consent_at: datetime | None = None
     notified_at: datetime | None = None
     created_at: datetime
 
