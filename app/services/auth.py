@@ -1412,4 +1412,5 @@ def confirm_password_reset(
 
     # A password change must invalidate every existing session.
     _revoke_all_user_sessions(app_db, row.company_id, consumed.user_id, "password_reset")
+    bump_user_access_epoch(consumed.user_id)
     app_db.commit()

@@ -111,6 +111,7 @@ def test_confirm_revokes_every_existing_session(client, service_db):
     other_resp = client.post(
         "/api/v1/auth/login", json={"email": email, "password": DEFAULT_PASSWORD}
     )
+    other = other_resp.json()
     other_cookies = _session_cookies(other_resp)
 
     _request_reset(client, email)
@@ -119,6 +120,13 @@ def test_confirm_revokes_every_existing_session(client, service_db):
         "/api/v1/auth/password-reset/confirm",
         json={"token": token, "new_password": NEW_PASSWORD},
     )
+
+    assert client.get(
+        "/api/v1/auth/me", headers=auth_headers(created)
+    ).status_code == 401
+    assert client.get(
+        "/api/v1/auth/me", headers=auth_headers(other)
+    ).status_code == 401
 
     # Phase 16: refresh tokens are httpOnly cookies now, so each session's
     # pair is exercised explicitly (see tests/test_auth_refresh.py's
