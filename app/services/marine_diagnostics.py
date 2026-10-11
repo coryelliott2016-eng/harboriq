@@ -147,7 +147,16 @@ _HYPOTHESES: dict[str, _HypothesisTemplate] = {
 
 
 def _score_symptoms(symptoms: list[str]) -> tuple[dict[str, float], list[str]]:
-    normalized = [item.strip() for item in symptoms if item and item.strip()]
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in symptoms:
+        if not item:
+            continue
+        symptom = item.strip()
+        normalized_key = symptom.casefold()
+        if symptom and normalized_key not in seen:
+            normalized.append(symptom)
+            seen.add(normalized_key)
     lowered = [item.lower() for item in normalized]
     scores = {code: 0.0 for code in _HYPOTHESES}
 
@@ -164,13 +173,15 @@ def _score_symptoms(symptoms: list[str]) -> tuple[dict[str, float], list[str]]:
         if "low voltage" in text or "battery light" in text or "battery drains" in text:
             scores["battery_connection_fault"] += 0.18
             scores["charging_system_fault"] += 0.32
+    scores = {code: min(score, 0.9) for code, score in scores.items()}
     return scores, normalized
 
 
 def _apply_measurement_rules(
     scores: dict[str, float], measurements: dict[str, float]
-) -> list[str]:
+) -> tuple[list[str], set[str]]:
     validations: list[str] = []
+    contradictory_measurements: set[str] = set()
 
     rest_v = measurements.get("battery_voltage_rest_v")
     if rest_v is not None:
@@ -203,6 +214,9 @@ def _apply_measurement_rules(
             scores["cooling_system_restriction"] += 0.35
             validations.append("coolant_temp_f elevated above normal operating range.")
         else:
+            if scores["cooling_system_restriction"] > 0:
+                scores["cooling_system_restriction"] *= 0.5
+                contradictory_measurements.add("coolant_temp_f")
             validations.append("coolant_temp_f not indicating an overheat event.")
 
     fuel_pressure = measurements.get("fuel_pressure_psi")
@@ -213,7 +227,7 @@ def _apply_measurement_rules(
         else:
             validations.append("fuel_pressure_psi not showing low-pressure restriction.")
 
-    return validations
+    return validations, contradictory_measurements
 
 
 def _top_hypotheses(scores: dict[str, float]) -> list[tuple[str, float]]:
@@ -225,11 +239,8 @@ def analyze_case(symptoms: list[str], measurements: dict[str, float] | None = No
     """Build evidence-grounded hypotheses from symptoms + measurements."""
     measurements = measurements or {}
     scores, normalized_symptoms = _score_symptoms(symptoms)
-    validations = _apply_measurement_rules(scores, measurements)
+    validations, contradictory_measurements = _apply_measurement_rules(scores, measurements)
     top = _top_hypotheses(scores)
-
-    if not top:
-        top = [("ignition_control_fault", 0.2)]
 
     ranked: list[RankedHypothesis] = []
     required_measurements: set[str] = set()
@@ -266,10 +277,18 @@ def analyze_case(symptoms: list[str], measurements: dict[str, float] | None = No
         uncertainty_notes.append("No symptom narrative provided; classification confidence is limited.")
     if not validations:
         uncertainty_notes.append("No deterministic measurement checks were available.")
+    if not ranked:
+        uncertainty_notes.append(
+            "Insufficient evidence to rank a specific fault hypothesis; collect diagnostic data."
+        )
 
-    top_score = ranked[0].score
-    coverage = len(provided.intersection(required_measurements)) / max(len(required_measurements), 1)
+    top_score = ranked[0].score if ranked else 0
+    coverage = len(
+        (provided - contradictory_measurements).intersection(required_measurements)
+    ) / max(len(required_measurements), 1)
     confidence = round(min(0.95, top_score * 0.7 + coverage * 0.3), 2)
+    if not validations:
+        confidence = min(confidence, 0.5)
 
     return DiagnosticAssessment(
         reported_symptoms=normalized_symptoms,

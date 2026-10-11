@@ -31,8 +31,9 @@ def test_low_running_voltage_boosts_charging_fault_and_marks_missing_rest_voltag
 def test_no_signal_input_returns_low_confidence_with_uncertainty():
     result = analyze_case(symptoms=[], measurements={})
     assert result.confidence < 0.3
-    assert result.ranked_hypotheses
+    assert not result.ranked_hypotheses
     assert result.uncertainty_notes
+    assert any("insufficient evidence" in note.lower() for note in result.uncertainty_notes)
 
 
 def test_additional_measurements_increase_confidence_for_same_symptoms():
@@ -61,3 +62,37 @@ def test_mutating_hypothesis_lists_does_not_change_later_assessments():
 
     for field in list_fields:
         assert getattr(later_result.ranked_hypotheses[0], field)
+
+
+def test_normal_coolant_measurement_reduces_overheat_hypothesis_confidence():
+    sparse = analyze_case(symptoms=["Engine overheat alarm"])
+    measured = analyze_case(
+        symptoms=["Engine overheat alarm"],
+        measurements={"coolant_temp_f": 180.0},
+    )
+
+    assert measured.ranked_hypotheses[0].code == "cooling_system_restriction"
+    assert measured.confidence < sparse.confidence
+
+
+def test_duplicate_symptoms_do_not_inflate_score_or_confidence():
+    single = analyze_case(symptoms=["Engine overheat alarm"])
+    repeated = analyze_case(
+        symptoms=["Engine overheat alarm", "Engine overheat alarm", "engine OVERHEAT alarm"]
+    )
+
+    assert repeated.ranked_hypotheses[0].score == single.ranked_hypotheses[0].score
+    assert repeated.confidence == single.confidence
+
+
+def test_symptom_only_confidence_is_capped():
+    result = analyze_case(
+        symptoms=[
+            "Engine stalls under load",
+            "Engine stalls at idle",
+            "Engine stalls at cruise",
+            "Engine stalls after warmup",
+        ]
+    )
+
+    assert result.confidence <= 0.5
