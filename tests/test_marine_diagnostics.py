@@ -42,3 +42,22 @@ def test_additional_measurements_increase_confidence_for_same_symptoms():
         measurements={"fuel_pressure_psi": 30.0},
     )
     assert rich.confidence > sparse.confidence
+
+
+def test_mutating_hypothesis_lists_does_not_change_later_assessments():
+    result = analyze_case(symptoms=["Engine overheat alarm"])
+    later_result = analyze_case(symptoms=["Engine overheat alarm"])
+    list_fields = (
+        "recommended_tests",
+        "required_tools",
+        "safety_precautions",
+        "supporting_references",
+        "suggested_repair_paths",
+        "post_repair_verification",
+    )
+
+    for field in list_fields:
+        getattr(result.ranked_hypotheses[0], field).clear()
+
+    for field in list_fields:
+        assert getattr(later_result.ranked_hypotheses[0], field)

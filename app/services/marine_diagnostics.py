@@ -244,12 +244,12 @@ def analyze_case(symptoms: list[str], measurements: dict[str, float] | None = No
                     "Ranked from reported symptoms and deterministic threshold checks.",
                     "Requires technician confirmation before component replacement.",
                 ],
-                recommended_tests=template.recommended_tests,
-                required_tools=template.required_tools,
-                safety_precautions=template.safety_precautions,
-                supporting_references=template.supporting_references,
-                suggested_repair_paths=template.suggested_repair_paths,
-                post_repair_verification=template.post_repair_verification,
+                recommended_tests=list(template.recommended_tests),
+                required_tools=list(template.required_tools),
+                safety_precautions=list(template.safety_precautions),
+                supporting_references=list(template.supporting_references),
+                suggested_repair_paths=list(template.suggested_repair_paths),
+                post_repair_verification=list(template.post_repair_verification),
             )
         )
         required_measurements.update(template.required_measurements)
