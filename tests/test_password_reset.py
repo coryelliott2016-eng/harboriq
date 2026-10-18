@@ -1,6 +1,7 @@
 """Password reset: request, confirm, single-use and session revocation."""
 from __future__ import annotations
 
+from redis.exceptions import RedisError
 from sqlalchemy import text
 
 from app.core.config import settings
@@ -91,7 +92,7 @@ def test_confirm_sets_the_new_password_and_retires_the_old_one(client, service_d
     ).status_code == 200
 
 
-def test_confirm_revokes_every_existing_session(client, service_db):
+def test_confirm_revokes_every_existing_session(client, service_db, monkeypatch):
     email = unique_email()
     client.cookies.clear()
     created_resp = client.post(
@@ -116,11 +117,21 @@ def test_confirm_revokes_every_existing_session(client, service_db):
 
     _request_reset(client, email)
     token = _reset_token(service_db, created["user"]["company_id"])
-    client.post(
+
+    def redis_unavailable():
+        raise RedisError("Redis unavailable")
+
+    monkeypatch.setattr("app.core.token_denylist.get_redis", redis_unavailable)
+    reset_response = client.post(
         "/api/v1/auth/password-reset/confirm",
         json={"token": token, "new_password": NEW_PASSWORD},
     )
 
+    assert reset_response.status_code == 204
+    assert service_db.execute(
+        text("SELECT access_epoch FROM users WHERE id = :uid"),
+        {"uid": created["user"]["id"]},
+    ).scalar_one() == 1
     assert client.get(
         "/api/v1/auth/me", headers=auth_headers(created)
     ).status_code == 401

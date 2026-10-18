@@ -76,10 +76,15 @@ this assessment date.
 
 ## Proposed prioritized work items (45)
 
-Priority: **P0** blocks a credible scoping/readiness decision; **P1** is
-required for the Class A security outcomes or supporting operational evidence.
-“Gap” means no adequate evidence was established in this review, not a
-determination that no private evidence exists.
+Priority: **P0** blocks a credible scoping/readiness decision; **P1** identifies
+recommended readiness work and supporting operational evidence, not a blanket
+Class A requirement. The current Class A ruleset identifies seven KSIs:
+CED-RAT, CMT-LMC, CMT-RMV, CMT-RVP, CMT-VTD, CNA-RNT, and IAM-AAM. Items mapped
+only to other KSI families are broader readiness recommendations, potentially
+higher-class work, or agency/contract-specific needs; verify each against the
+current ruleset before treating it as mandatory. “Gap” means no adequate
+evidence was established in this review, not a determination that no private
+evidence exists.
 
 | # | Priority | Readiness work item | FedRAMP 20x association | Initial repository assessment / exit evidence |
 |---:|:---:|---|---|---|
