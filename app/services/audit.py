@@ -88,22 +88,22 @@ def list_entries(
     params: dict[str, Any] = {"limit": limit}
     if action:
         if action.endswith("."):
-            clauses.append("action LIKE :action_prefix")
+            clauses.append("a.action LIKE :action_prefix")
             params["action_prefix"] = f"{action}%"
         else:
-            clauses.append("action = :action")
+            clauses.append("a.action = :action")
             params["action"] = action
     if resource_type:
-        clauses.append("resource_type = :resource_type")
+        clauses.append("a.resource_type = :resource_type")
         params["resource_type"] = resource_type
     if resource_id is not None:
-        clauses.append("resource_id = :resource_id")
+        clauses.append("a.resource_id = :resource_id")
         params["resource_id"] = resource_id
     if actor_user_id is not None:
-        clauses.append("actor_user_id = :actor_user_id")
+        clauses.append("a.actor_user_id = :actor_user_id")
         params["actor_user_id"] = actor_user_id
     if before_id is not None:
-        clauses.append("id < :before_id")
+        clauses.append("a.id < :before_id")
         params["before_id"] = before_id
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return list(

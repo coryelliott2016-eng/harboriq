@@ -113,12 +113,20 @@ def test_role_change_and_deactivation_are_audited_but_noop_patch_is_not(client):
     tech = invite(client, owner, "technician")
     tech_id = tech["user"]["id"]
 
+    # The invite itself is audited by the auth service (user.invited, user.login).
+    # Those are not under test here; only the privilege-change actions are.
+    privilege_actions = {"user.role_changed", "user.deactivated", "user.reactivated"}
+
+    def privilege_rows():
+        page = _entries(client, owner, action="user.", resource_id=tech_id)
+        return [item for item in page["items"] if item["action"] in privilege_actions]
+
     # No-op: re-sending the current role must not create a row.
     resp = client.patch(
         f"/api/v1/users/{tech_id}", json={"role": "technician"}, headers=auth_headers(owner)
     )
     assert resp.status_code == 200, resp.text
-    assert _entries(client, owner, action="user.")["items"] == []
+    assert privilege_rows() == []
 
     resp = client.patch(
         f"/api/v1/users/{tech_id}", json={"role": "office"}, headers=auth_headers(owner)
@@ -129,9 +137,9 @@ def test_role_change_and_deactivation_are_audited_but_noop_patch_is_not(client):
     )
     assert resp.status_code == 200, resp.text
 
-    page = _entries(client, owner, action="user.")
-    assert _actions(page) == ["user.deactivated", "user.role_changed"]  # newest first
-    role_row = page["items"][1]
+    rows = privilege_rows()
+    assert [r["action"] for r in rows] == ["user.deactivated", "user.role_changed"]  # newest first
+    role_row = rows[1]
     assert role_row["metadata"] == {
         "from": "technician", "to": "office", "email": tech["user"]["email"],
     }
