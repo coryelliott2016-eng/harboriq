@@ -69,4 +69,13 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/healthz || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# The container is only reachable through the platform's reverse proxy
+# (Render, Cloudflare, nginx), so trust X-Forwarded-For/-Proto from any peer.
+# Without this uvicorn trusts only 127.0.0.1 and every request appears to come
+# from the proxy: the per-IP login/password-reset/marketing rate limiters would
+# share one bucket across all customers and audit rows would record the proxy
+# address. Override with a narrower CIDR list if the API is ever exposed
+# directly. https://www.uvicorn.org/settings/
+ENV FORWARDED_ALLOW_IPS="*"
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
