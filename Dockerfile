@@ -75,7 +75,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 # from the proxy: the per-IP login/password-reset/marketing rate limiters would
 # share one bucket across all customers and audit rows would record the proxy
 # address. Override with a narrower CIDR list if the API is ever exposed
-# directly. https://www.uvicorn.org/settings/
+# directly. https://uvicorn.dev/settings/
 ENV FORWARDED_ALLOW_IPS="*"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

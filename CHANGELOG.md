@@ -2,6 +2,48 @@
 
 All notable changes to HarborIQ. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] — 2026-10-18
+
+Release verdict: **Not ready for paid production** (no production API host; see
+`docs/RELEASE_REPORT_v0.2.1.md`). The code is verified; the hosting, domain and
+payment accounts are founder actions.
+
+### Added
+- Audit trail for money and privilege events: `invoice.sent`, `invoice.voided`,
+  `invoice.refunded`, `user.role_changed`, `user.deactivated`,
+  `user.reactivated`, written in the same transaction as the change
+  (`app/services/audit.py`).
+- `GET /api/v1/audit-log` (owner/admin): newest-first, keyset-paginated,
+  filterable by action prefix, resource and actor. OpenAPI regenerated
+  (142 operations).
+- `docs/BUILD_LOG.md` — the historical phase-by-phase notes moved verbatim out
+  of the README.
+- ADR 0007 — trust platform proxy headers.
+
+### Changed
+- Container trusts `X-Forwarded-For/-Proto` from the platform proxy
+  (`FORWARDED_ALLOW_IPS="*"`, `--proxy-headers`), so per-IP rate limits and
+  audit IPs are per client rather than per proxy.
+- README rewritten as a short, current entry point with an honest status table.
+- Release register, known-limitations register and release report refreshed
+  for 2026-10-18.
+
+### Fixed
+- `master` CI was red since 2026-10-05 (frontend `audit-ci` gate). Pinned
+  patched transitive dependencies (`source-map-js`, `undici`,
+  `brace-expansion`), bumped Capacitor to 8.5.3, added a regression test
+  (PR #134).
+
+### Marketing site (separate repo, pending deploy)
+- Dispatch is described as explainable, rule-based scoring everywhere; no "AI
+  dispatch" claims remain. Terms §6 corrected.
+- Real path routing with client-side rewrite of legacy `/#/` links; canonical,
+  Open Graph, sitemap and robots generated from `SITE_URL` per environment;
+  previews are `noindex`.
+- "Ask HarborIQ" widget renders only when `/api/health` reports a configured
+  assistant provider.
+- Investor command-palette keywords no longer reference round terms.
+
 ## [0.2.0] — 2026-09-22
 
 ### Added
