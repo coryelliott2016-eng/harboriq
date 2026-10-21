@@ -2,6 +2,18 @@
 
 All notable changes to HarborIQ. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `docs/ROADMAP_PHASES_19-36.md` — founder-approved forward roadmap (Phases 19–36)
+  with exit criteria, current status, dependencies and critical path.
+
+### Changed
+- Phase numbering de-conflicted: the draft-only asset-tokenization layer formerly
+  labeled "Phase 19" is now **Track X1** across docs, code comments and test
+  docstrings (no behavior change). Phase 18 (Crypto Payment Rail) is unchanged.
+- `frontend/src/App.tsx` comment no longer uses a stray "Phase 22" label.
+
 ## [0.2.1] — 2026-10-18
 
 Release verdict: **Not ready for paid production** (no production API host; see

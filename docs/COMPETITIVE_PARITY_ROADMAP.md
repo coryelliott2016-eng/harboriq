@@ -41,7 +41,12 @@ directly from the Stripe Dashboard, and vendor deactivate/archive. Phase 18
 adds an opt-in licensed-processor stablecoin/crypto invoice-payment rail:
 HMAC-verified provider webhooks, idempotent payment confirmation, and
 tenant-isolated payment records, with **no HarborIQ on-chain custody**.
-711 backend tests, 121 frontend tests, CI green.
+711 backend tests, 121 frontend tests, CI green (figures as recorded at Phase 18).
+
+**Phase numbering:** Phases 1–18 below are the completed original build
+program. The asset-tokenization work formerly labeled "Phase 19" is now
+**Track X1** (exploratory, draft-only). The approved forward roadmap,
+Phases 19–36, lives in [`docs/ROADMAP_PHASES_19-36.md`](ROADMAP_PHASES_19-36.md).
 
 This document sequences everything still missing for parity, in priority
 order for a mobile-marine-mechanic-first wedge strategy (see
@@ -527,7 +532,11 @@ this is organized from).
       confirmed partial payment and duplicate replay idempotency, failed
       outcome isolation from the invoice, and cross-tenant read isolation.
 
-## Phase 19 — Asset Tokenization Layer (Exploratory) — **COMPLETE (draft-only, pending legal review)**
+## Track X1 — Asset Tokenization Layer (Exploratory; formerly labeled "Phase 19") — **COMPLETE (draft-only, pending legal review)**
+
+> Renumbered 2026-10-21: this exploratory track is not part of the numbered
+> build program. Phase numbers 19–36 now belong to the approved roadmap in
+> [`docs/ROADMAP_PHASES_19-36.md`](ROADMAP_PHASES_19-36.md).
 - [x] **Draft-registration only; no financialized token behavior.** `POST
       /asset-tokens` lets an owner/admin record intent to possibly tokenize a
       vessel, slip, equipment, or receivable and creates exactly one
