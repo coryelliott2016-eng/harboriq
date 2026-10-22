@@ -8,6 +8,10 @@ All notable changes to HarborIQ. Versions follow [Semantic Versioning](https://s
 - `docs/ROADMAP_PHASES_19-36.md` — founder-approved forward roadmap (Phases 19–36)
   with exit criteria, current status, dependencies and critical path.
 
+### Security
+- Frontend dev dependency `vitest` 4.1.11 → 4.1.12 (fixes moderate advisories
+  GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp in `@vitest/mocker`; test-only).
+
 ### Changed
 - Phase numbering de-conflicted: the draft-only asset-tokenization layer formerly
   labeled "Phase 19" is now **Track X1** across docs, code comments and test
