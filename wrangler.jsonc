@@ -1,0 +1,30 @@
+// Cloudflare Workers Builds configuration for the "harboriq" Worker.
+//
+// Why this file exists: Cloudflare's Git integration builds every push to
+// this repository. Without a Wrangler config, `wrangler deploy` (master)
+// fell back to auto-setup and uploaded the raw, unbuilt `frontend/` source
+// folder as static assets, while `wrangler versions upload` (pull-request
+// branches) has no auto-setup and failed with "Missing entry-point".
+//
+// This config makes both commands build the real production SPA and serve
+// only `frontend/dist`. Render (render.yaml) remains the chosen host for the
+// API, workers and the customer-facing app, so the Worker's public
+// workers.dev URL and preview URLs are disabled by default. Enabling public
+// Cloudflare hosting is a hosting decision that needs founder approval.
+{
+  "$schema": "./frontend/node_modules/wrangler/config-schema.json",
+  "name": "harboriq",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "build": {
+    "command": "cd frontend && npm ci --legacy-peer-deps && npm run build"
+  },
+  "assets": {
+    "directory": "./frontend/dist",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

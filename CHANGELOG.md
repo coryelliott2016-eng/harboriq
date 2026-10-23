@@ -8,6 +8,13 @@ All notable changes to HarborIQ. Versions follow [Semantic Versioning](https://s
 - `docs/ROADMAP_PHASES_19-36.md` — founder-approved forward roadmap (Phases 19–36)
   with exit criteria, current status, dependencies and critical path.
 
+### Fixed
+- Cloudflare Workers Builds: added `wrangler.jsonc` so pull-request builds
+  (`wrangler versions upload`) stop failing with "Missing entry-point" and
+  master builds publish the built SPA (`frontend/dist`) instead of the raw
+  `frontend/` source folder. The Worker's workers.dev and preview URLs are
+  disabled; Render remains the chosen app host.
+
 ### Security
 - Frontend dev dependency `vitest` 4.1.11 → 4.1.12 (fixes moderate advisories
   GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp in `@vitest/mocker`; test-only).
