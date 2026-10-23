@@ -13,6 +13,7 @@ code.
 > **Release v0.2.1 (2026-10-18).** Start here:
 > [Release register](docs/RELEASE_REGISTER.md) (what is done, with evidence) ·
 > [Known limitations](docs/KNOWN_LIMITATIONS.md) ·
+> [Roadmap, Phases 19–36](docs/ROADMAP_PHASES_19-36.md) ·
 > [Changelog](CHANGELOG.md) · [v0.2.1 release report](docs/RELEASE_REPORT_v0.2.1.md) ·
 > [Product overview](docs/PRODUCT_OVERVIEW.md) ·
 > [Architecture](docs/ARCHITECTURE.md) and [ADRs](docs/adr/) ·

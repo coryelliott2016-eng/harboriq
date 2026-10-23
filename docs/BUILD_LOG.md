@@ -232,7 +232,7 @@ its server-side logs (see `app/api/middleware.py`, and
 | POST | `/api/v1/invoices/{id}/refund` | bearer, owner/admin/office | full/partial refund against `amount_paid`; lands on `refunded`/`partially_refunded` via `InvoiceSM` |
 | POST | `/api/v1/invoices/{id}/crypto-payment-intent` | bearer, owner/admin/office | create a licensed-processor stablecoin checkout for a sent/partial invoice (Phase 18 feature flag) |
 | GET | `/api/v1/crypto-payments/{id}` | bearer, owner/admin/office | one tenant-scoped stablecoin payment request/outcome |
-| POST | `/api/v1/asset-tokens` | bearer, owner/admin | register a draft-only asset-tokenization intent plus immutable `registered` ledger entry (Phase 19 feature flag; no issuance/transfer) |
+| POST | `/api/v1/asset-tokens` | bearer, owner/admin | register a draft-only asset-tokenization intent plus immutable `registered` ledger entry (Track X1 feature flag, formerly "Phase 19"; no issuance/transfer) |
 | GET | `/api/v1/asset-tokens` | bearer, owner/admin | list draft-only asset-tokenization registrations |
 | GET | `/api/v1/asset-tokens/{id}` | bearer, owner/admin | one tenant-scoped draft-only asset-tokenization registration |
 | POST | `/api/v1/billing/connect/onboarding-link` | bearer, owner/admin | create (or resume) this company's Stripe Connect account + a fresh onboarding link |
@@ -810,9 +810,9 @@ requires Stripe to enable crypto/stablecoin Checkout on the account,
 Migration `0020` adds `crypto_payments` (tenant RLS + composite invoice FK)
 and service-role `crypto_processed_events`.
 
-## Asset tokenization layer (Phase 19, exploratory)
+## Asset tokenization layer (Track X1, exploratory; formerly "Phase 19")
 
-Phase 19 adds an exploratory **draft-registration record only** for possible
+Track X1 adds an exploratory **draft-registration record only** for possible
 future tokenization of vessels, slips, equipment, or receivables. It creates no
 units, issuance, ownership, transfer, trading, or valuation-based allocation,
 and none is planned until HarborIQ has obtained outside securities-counsel
