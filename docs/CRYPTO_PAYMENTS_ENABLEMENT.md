@@ -14,7 +14,7 @@ and the code shipped in migrations `0020` / Phase 18.
 | Extending the existing `InvoiceSM` + webhook/idempotency path | A separate billing system or new invoice state machine |
 | Feature-flagged off by default | Automatically live just because the code is on `master` |
 
-Phase 19 (asset tokenization of vessels/slips/equipment/receivables) is a
+Track X1 (asset tokenization of vessels/slips/equipment/receivables) is a
 **separate** track. It stays disabled (`ASSET_TOKENIZATION_ENABLED=false`)
 as a placeholder pending securities counsel — see README "Asset tokenization
 layer". Do not enable it as part of this runbook.
@@ -59,7 +59,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...     # from Stripe Dashboard → Webhooks
 #   openssl rand -hex 32
 CRYPTO_WEBHOOK_SECRET=<64-hex-chars>
 
-# Leave OFF — Phase 19 placeholder, securities-law gated
+# Leave OFF — Track X1 placeholder, securities-law gated
 ASSET_TOKENIZATION_ENABLED=false
 ```
 
@@ -134,7 +134,9 @@ and will still be applied if `STRIPE_WEBHOOK_SECRET` verification remains on
 - [ ] Ops runbook known: how to read `crypto_payments` + Stripe Dashboard
       for a disputed stablecoin payment
 
-## Phase 19 placeholder (do not enable here)
+## Track X1 placeholder (do not enable here)
+
+(Formerly labeled "Phase 19"; see `docs/ROADMAP_PHASES_19-36.md` for the current Phase 19.)
 
 `ASSET_TOKENIZATION_ENABLED` remains `false`. Enabling it only exposes
 admin draft-registration of intent-to-tokenize records; it still cannot
