@@ -532,6 +532,12 @@ this is organized from).
       confirmed partial payment and duplicate replay idempotency, failed
       outcome isolation from the invoice, and cross-tenant read isolation.
 
+**Business-segment coverage limitation:** Phase 18's completion above applies
+to the crypto-payment rail only; it did not audit whether HarborIQ supports
+distinct business segments. The proposed segment matrix and a segment-by-segment
+release-state audit are now required in the Phase 19 baseline. This scope
+addition is not evidence that any of those segment workflows are implemented.
+
 ## Track X1 — Asset Tokenization Layer (Exploratory; formerly labeled "Phase 19") — **COMPLETE (draft-only, pending legal review)**
 
 > Renumbered 2026-10-21: this exploratory track is not part of the numbered
