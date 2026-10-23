@@ -33,3 +33,10 @@ def test_frontend_overrides_pin_patched_transitive_security_versions() -> None:
     assert _parse_version(overrides["brace-expansion@^1.1.7"]) >= (1, 1, 21)
     assert _parse_version(overrides["brace-expansion@^2.0.1"]) >= (2, 1, 7)
     assert _parse_version(overrides["brace-expansion@^5.0.1"]) >= (5, 0, 12)
+
+
+@pytest.mark.no_db
+def test_vitest_is_not_in_vulnerable_mocker_range() -> None:
+    package_json = json.loads(Path("frontend/package.json").read_text())
+
+    assert _parse_version(package_json["devDependencies"]["vitest"]) >= (4, 1, 12)
