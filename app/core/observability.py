@@ -9,11 +9,21 @@ what every dev machine and the CI test suite run with.
 """
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 import structlog
 
 from app.core.config import settings
 
 log = structlog.get_logger()
+
+
+def _exclude_public_demo(event: dict, hint: dict) -> dict | None:
+    """Public prompts must not enter error or transaction telemetry."""
+    request = event.get("request") or {}
+    if urlsplit(request.get("url") or "").path.rstrip("/") == "/api/v1/public/demo":
+        return None
+    return event
 
 
 def init_sentry() -> None:
@@ -39,6 +49,8 @@ def init_sentry() -> None:
             # deployment via Sentry project settings / a future env var if
             # this ever needs to be adjustable without a code change.
             traces_sample_rate=0.1,
+            before_send=_exclude_public_demo,
+            before_send_transaction=_exclude_public_demo,
         )
     except Exception:  # noqa: BLE001 — Sentry must never take the app down
         log.warning("sentry_init_failed", exc_info=True)

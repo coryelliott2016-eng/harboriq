@@ -1,9 +1,12 @@
 """Public marketing lead capture (GTM / trial signup)."""
 from __future__ import annotations
 
+import runpy
+from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy import text
+import pytest
 
 
 def _payload(**overrides):
@@ -63,6 +66,110 @@ def test_duplicate_email_within_24h_no_second_notify(client, service_db):
     assert send.call_count == 1
     count = service_db.execute(text("SELECT count(*) FROM marketing_leads")).scalar()
     assert count == 1
+
+
+@pytest.mark.parametrize("changed", [
+    {"industry": "surveyors"}, {"product_interest": "partnership"},
+    {"business_need": "Human-reviewed survey workflows"},
+    {"email_marketing_opt_in": True}, {"contact_requested": False},
+])
+def test_changed_classification_or_permission_is_not_dropped(client, service_db, changed):
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=True):
+        first = client.post("/api/v1/public/leads", json=_payload())
+        second = client.post("/api/v1/public/leads", json=_payload(**changed))
+    assert first.status_code == second.status_code == 201
+    assert second.json()["duplicate"] is False
+    assert second.json()["id"] != first.json()["id"]
+    assert service_db.execute(text("SELECT count(*) FROM marketing_leads")).scalar() == 2
+
+
+def test_consent_and_classification_in_admin_list(client, service_db, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "marketing_leads_admin_token", "test-admin-token")
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=True) as send:
+        response = client.post("/api/v1/public/leads", json=_payload(
+            industry="commercial-fishing", product_interest="ai", business_need="Office planning",
+            email_marketing_opt_in=True, contact_requested=False,
+        ))
+    assert response.status_code == 201
+    assert "follow up" not in response.json()["message"]
+    send.assert_called_once()
+    assert "Internal routing only" in send.call_args.kwargs["text_body"]
+    assert "No permission to contact" in send.call_args.kwargs["text_body"]
+    assert send.call_args.kwargs["to"] == settings.marketing_lead_notify_to
+    listing = client.get(
+        "/api/v1/public/leads", headers={"Authorization": "Bearer " + "test-admin-token"},
+    )
+    assert listing.status_code == 200
+    lead = listing.json()["leads"][0]
+    assert lead["classification"] == "commercial-fishing:ai"
+    assert lead["business_need"] == "Office planning"
+    assert lead["email_marketing_opt_in"] is True
+    assert lead["contact_requested"] is False
+    assert lead["email_marketing_consented_at"]
+    assert lead["email_marketing_consent_version"]
+
+
+def test_default_consent_remains_null(client, service_db):
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=False):
+        assert client.post("/api/v1/public/leads", json=_payload()).status_code == 201
+    row = service_db.execute(text("SELECT * FROM marketing_leads")).mappings().one()
+    assert row["industry"] == "other"
+    assert row["contact_requested"] is True
+    assert row["email_marketing_opt_in"] is False
+    assert row["email_marketing_consented_at"] is None
+    assert row["email_marketing_consent_version"] is None
+
+
+def test_changing_permission_back_is_not_deduplicated_to_older_row(client, service_db):
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=False):
+        first = client.post("/api/v1/public/leads", json=_payload())
+        second = client.post("/api/v1/public/leads", json=_payload(email_marketing_opt_in=True))
+        third = client.post("/api/v1/public/leads", json=_payload())
+    assert first.status_code == second.status_code == third.status_code == 201
+    assert third.json()["duplicate"] is False
+    assert len({first.json()["id"], second.json()["id"], third.json()["id"]}) == 3
+    assert service_db.execute(text("SELECT count(*) FROM marketing_leads")).scalar() == 3
+
+
+def test_contact_false_never_promises_followup_even_for_duplicate_or_honeypot(client):
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=False):
+        responses = [
+            client.post("/api/v1/public/leads", json=_payload(contact_requested=False)),
+            client.post("/api/v1/public/leads", json=_payload(contact_requested=False)),
+            client.post("/api/v1/public/leads", json=_payload(
+                contact_requested=False, website="bot.example",
+            )),
+        ]
+    for response in responses:
+        assert response.status_code == 201
+        assert "follow up" not in response.json()["message"].lower()
+        assert "contact" not in response.json()["message"].lower()
+    assert responses[1].json()["duplicate"] is True
+
+
+def test_migration_existing_lead_defaults_do_not_infer_marketing(service_db, monkeypatch):
+    # A transaction-local shadow table exercises the real migration without altering
+    # the shared schema or requiring a destructive downgrade of the test database.
+    service_db.execute(text("""
+        CREATE TEMPORARY TABLE marketing_leads (email TEXT NOT NULL) ON COMMIT DROP
+    """))
+    service_db.execute(text("INSERT INTO marketing_leads (email) VALUES ('legacy@example.com')"))
+    path = Path(__file__).resolve().parents[1] / "alembic/versions/0026_marketing_lead_industry_consent.py"
+    migration = runpy.run_path(str(path))
+    monkeypatch.setattr(migration["op"], "execute", lambda sql: service_db.execute(text(sql)))
+    migration["upgrade"]()
+    row = service_db.execute(text("SELECT * FROM marketing_leads")).mappings().one()
+    assert row["email"] == "legacy@example.com"
+    assert row["industry"] == "other"
+    assert row["product_interest"] == "operations"
+    assert row["business_need"] == ""
+    assert row["contact_requested"] is True
+    assert row["email_marketing_opt_in"] is False
+    assert row["email_marketing_consented_at"] is None
+    assert row["email_marketing_consent_version"] is None
+    migration["downgrade"]()
+    assert service_db.execute(text("SELECT email FROM marketing_leads")).scalar_one() == "legacy@example.com"
 
 
 def test_invalid_email_rejected(client):
