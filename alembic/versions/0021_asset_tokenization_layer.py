@@ -1,4 +1,4 @@
-"""Asset tokenization layer (Phase 19): draft registration only.
+"""Asset tokenization layer (Track X1, formerly Phase 19): draft registration only.
 
 Revision ID: 0021
 Revises: 0020

@@ -1,4 +1,4 @@
-"""Admin-only, draft-only asset-token registration endpoints (Phase 19).
+"""Admin-only, draft-only asset-token registration endpoints (Track X1).
 
 Pending outside securities-counsel review, this router has no mutation,
 issuance, ownership, transfer, or trading endpoint. Migration 0021 enforces

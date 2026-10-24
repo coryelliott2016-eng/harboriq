@@ -1,4 +1,4 @@
-"""Schemas for Phase 19's draft-only asset-token registration layer."""
+"""Schemas for Track X1's draft-only asset-token registration layer."""
 from __future__ import annotations
 
 import uuid
