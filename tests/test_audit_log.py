@@ -126,7 +126,7 @@ def test_role_change_and_deactivation_are_audited_but_noop_patch_is_not(client):
         f"/api/v1/users/{tech_id}", json={"role": "technician"}, headers=auth_headers(owner)
     )
     assert resp.status_code == 200, resp.text
-    assert privilege_rows() == []
+    assert _entries(client, owner, action="user.role_changed", resource_id=tech_id)["items"] == []
 
     resp = client.patch(
         f"/api/v1/users/{tech_id}", json={"role": "office"}, headers=auth_headers(owner)
