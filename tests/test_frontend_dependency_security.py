@@ -31,10 +31,7 @@ def test_frontend_overrides_pin_patched_transitive_security_versions() -> None:
     assert _parse_version(overrides["source-map-js"]) >= (1, 2, 2)
     assert _parse_version(overrides["fast-uri"]) >= (3, 1, 9)
     assert _parse_version(overrides["undici"]) >= (7, 30, 1)
-<<<<<<< HEAD
-=======
-    assert _parse_version(overrides["zod"]) >= (4, 6, 6)
->>>>>>> origin/master
+    assert _parse_version(overrides["zod"]) >= (4, 6, 7)
     assert _parse_version(overrides["brace-expansion@^1.1.7"]) >= (1, 1, 21)
     assert _parse_version(overrides["brace-expansion@^2.0.1"]) >= (2, 1, 7)
     assert _parse_version(overrides["brace-expansion@^5.0.1"]) >= (5, 0, 12)
@@ -46,7 +43,7 @@ def test_frontend_overrides_pin_patched_transitive_security_versions() -> None:
     [
         ("fast-uri", (3, 1, 9)),
         ("undici", (7, 30, 1)),
-        ("zod", (4, 6, 6)),
+        ("zod", (4, 6, 7)),
     ],
 )
 def test_frontend_lockfile_resolves_patched_security_versions(
