@@ -45,7 +45,7 @@ from app.core.security import (
     password_needs_rehash,
     verify_password,
 )
-from app.core.token_denylist import bump_user_access_epoch, denylist_token
+from app.core.token_denylist import denylist_token
 from app.db.models import UserRole
 from app.db.tenant import tenant_context
 from app.services import outbox, public_tokens
@@ -143,6 +143,7 @@ class AuthenticatedUser:
     full_name: str | None
     role: str
     is_active: bool
+    access_epoch: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +233,10 @@ def _issue_session(
     )
 
     with tenant_context(app_db, company_id):
+        access_epoch = app_db.execute(
+            text("SELECT access_epoch FROM users WHERE id = :uid"),
+            {"uid": user_id},
+        ).scalar_one()
         app_db.execute(
             text(
                 """
@@ -255,7 +260,9 @@ def _issue_session(
         )
 
     return IssuedTokens(
-        access_token=create_access_token(user_id, company_id, role, session_id),
+        access_token=create_access_token(
+            user_id, company_id, role, session_id, access_epoch
+        ),
         refresh_token=raw_refresh,
         expires_in=settings.access_token_ttl_minutes * 60,
         session_id=session_id,
@@ -303,6 +310,23 @@ def _revoke_all_user_sessions(
     return len(rows)
 
 
+def _bump_user_access_epoch(
+    app_db: Session, company_id: uuid.UUID, user_id: uuid.UUID
+) -> int:
+    with tenant_context(app_db, company_id):
+        return app_db.execute(
+            text(
+                """
+                UPDATE users
+                   SET access_epoch = access_epoch + 1
+                 WHERE company_id = :cid AND id = :uid
+                RETURNING access_epoch
+                """
+            ),
+            {"cid": company_id, "uid": user_id},
+        ).scalar_one()
+
+
 def _to_authenticated_user(row) -> AuthenticatedUser:
     return AuthenticatedUser(
         id=row.id,
@@ -311,6 +335,7 @@ def _to_authenticated_user(row) -> AuthenticatedUser:
         full_name=row.full_name,
         role=row.role,
         is_active=row.is_active,
+        access_epoch=row.access_epoch,
     )
 
 
@@ -828,7 +853,7 @@ def logout(
         # Bump the per-user access epoch so EVERY outstanding access token
         # (not just the caller's jti) fails the next deps check. New logins
         # stamp the new epoch and work immediately.
-        bump_user_access_epoch(user_id)
+        _bump_user_access_epoch(app_db, company_id, user_id)
     else:
         with tenant_context(app_db, company_id):
             family_id = app_db.execute(
@@ -863,7 +888,7 @@ def _load_user_row(app_db: Session, user_id: uuid.UUID):
     return app_db.execute(
         text(
             """
-            SELECT id, company_id, email, full_name, role, is_active
+            SELECT id, company_id, email, full_name, role, is_active, access_epoch
               FROM users
              WHERE id = :uid
             """
@@ -1412,4 +1437,5 @@ def confirm_password_reset(
 
     # A password change must invalidate every existing session.
     _revoke_all_user_sessions(app_db, row.company_id, consumed.user_id, "password_reset")
+    _bump_user_access_epoch(app_db, row.company_id, consumed.user_id)
     app_db.commit()

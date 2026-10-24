@@ -77,3 +77,11 @@ credentials, portal links, Stripe webhook integrity.
 7. The security contact mailbox on the public site (`Cory@HarborIQ.com`)
    does not currently receive mail (no MX record). Use GitHub private
    vulnerability reporting until email is restored.
+
+## Federal-market readiness
+
+See [`FEDRAMP_CLASS_A_GAP_ANALYSIS.md`](FEDRAMP_CLASS_A_GAP_ANALYSIS.md) for
+the preliminary FedRAMP 20x Class A readiness assessment and roadmap. The
+repository does not contain a SOC 2 Type II report, and any separate report
+outside the repository has not been verified. The roadmap makes no federal
+compliance claim.
