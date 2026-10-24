@@ -4,7 +4,7 @@ import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { canManageOperations, canManageUsers, useAuth } from "./context/auth";
 
-// Phase 22 (bundle-size P2): every route-level page is code-split via
+// Launch audit, bundle-size P2 finding: every route-level page is code-split via
 // React.lazy so the initial bundle only ships the app shell + router, not
 // every page in the product. Each page module still uses a NAMED export
 // (unchanged, so nothing else importing these pages has to change) --
