@@ -68,6 +68,10 @@
     "fast-uri": "3.1.9",
     "source-map-js": "1.2.2",
     "undici": "7.30.1",
+<<<<<<< HEAD
+=======
+    "zod": "4.6.6",
+>>>>>>> origin/master
     "brace-expansion@^1.1.7": "1.1.21",
     "brace-expansion@^2.0.1": "2.1.7",
     "brace-expansion@^5.0.1": "5.0.12"
