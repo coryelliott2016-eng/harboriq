@@ -210,7 +210,12 @@ def test_emergency_guidance_never_calls_provider(demo, provider, prompt):
     "I will arrange a tow.",
     "Your request was sent to TowBoatUS.",
     "Dispatch confirmed.",
+    "Your tow is confirmed and will arrive in 20 minutes.",
+    "A towboat will arrive shortly.",
+    "Our tow arrived at the marina.",
     "We are affiliated with Sea Tow.",
+    "HarborIQ works with Sea Tow.",
+    "Sea Tow works with HarborIQ.",
     "HarborIQ is an authorized TowBoatUS partner.",
 ])
 def test_provider_dispatch_or_affiliation_claims_rejected(demo, provider, answer, caplog):

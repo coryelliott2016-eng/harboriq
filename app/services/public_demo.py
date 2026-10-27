@@ -72,13 +72,15 @@ _UNSUPPORTED_ACTION = re.compile(
     r"\b(?:i|we|harboriq)\s+(?:(?:have|has|already|just|successfully|will|can)\s+){0,3}"
     r"(?:dispatch(?:ed|ing)?|send(?:ing)?|sent|arrang(?:e|ed|ing)|"
     r"book(?:ed|ing)?|contact(?:ed|ing)?|notif(?:y|ied|ying))\b|"
-    r"\b(?:help|rescue|responders?|towboat|assistance)\b.{0,80}"
-    r"\b(?:on (?:the|its|their) way|en route|arranged|booked|sent|mobilized)\b|"
+    r"\b(?:help|rescue|responders?|tow(?:boat|ing)?|assistance)\b.{0,80}"
+    r"\b(?:on (?:the|its|their) way|en route|arriv(?:e|ed|es|ing)|will arrive|"
+    r"confirmed|arranged|booked|sent|mobilized)\b|"
     r"\b(?:sent|arranged|booked|contacted|notified|mobilized)\b.{0,80}"
     r"\b(?:rescue|responders?|towboat|towing|assistance|coast guard|emergency services|sea tow|towboatus)\b|"
-    r"\b(?:affiliated|partner(?:ed)?|associated)\s+with\s+(?:sea tow|towboatus)\b|"
+    r"\b(?:affiliated|partner(?:ed)?|associated|work(?:s|ing)?)\s+with\s+(?:sea tow|towboatus)\b|"
     r"\b(?:official|authorized)\s+(?:sea tow|towboatus)\s+(?:partner|provider|affiliate)\b|"
-    r"\b(?:sea tow|towboatus)\b.{0,60}\b(?:partner|affiliate|affiliated|associated)\b",
+    r"\b(?:sea tow|towboatus)\b.{0,60}\b(?:partner|affiliate|affiliated|associated|"
+    r"work(?:s|ing)?)\b",
     re.IGNORECASE | re.DOTALL,
 )
 
