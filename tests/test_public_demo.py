@@ -186,6 +186,15 @@ def test_non_json_provider_body_rejected(demo, provider):
     "Mayday! We are sinking", "Need emergency towing now", "My boat is taking on water",
     "We are stranded and need a tow", "Man overboard", "Capsized vessel, help",
     "We are stranded; please tow us now.", "I need towing now.",
+    "Our boat is flooding after a collision.",
+    "There is a fire aboard.",
+    "We have a fire on board.",
+    "We ran aground and are in danger.",
+    "Someone is injured on the boat.",
+    "A person is in the water.",
+    "Person in water.",
+    "Someone is in the water.",
+    "Someone fell overboard.",
 ])
 def test_emergency_guidance_never_calls_provider(demo, provider, prompt):
     calls = provider()

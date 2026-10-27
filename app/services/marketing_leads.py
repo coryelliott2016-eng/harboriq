@@ -63,6 +63,8 @@ def find_recent_duplicate(
         "product_interest": product_interest, "email_marketing_opt_in": email_marketing_opt_in,
         "contact_requested": contact_requested,
     }
+    if email_marketing_opt_in:
+        expected["email_marketing_consent_version"] = EMAIL_MARKETING_CONSENT_VERSION
     if row and all(row[key] == value for key, value in expected.items()):
         return _classified(row)
     return None
@@ -178,6 +180,7 @@ def notify_new_lead(lead: dict) -> bool:
         else "No permission to contact for sales/demo follow-up; do not send unsolicited follow-up."
     )
     subject = f"[HarborIQ] New trial signup — {lead.get('business_name', 'unknown')}"
+    business_need = " ".join(str(lead.get("business_need", "")).split())
     body = (
         "New HarborIQ marketing signup\n"
         "================================\n"
@@ -189,7 +192,7 @@ def notify_new_lead(lead: dict) -> bool:
         f"Industry: {lead.get('industry')}\n"
         f"Interest: {lead.get('product_interest')}\n"
         f"Routing:  {lead.get('classification')}\n"
-        f"Need (untrusted user text): {lead.get('business_need')}\n"
+        f"Need (untrusted user text): {business_need}\n"
         f"Contact requested: {lead.get('contact_requested')}\n"
         f"Contact permission: {contact_permission}\n"
         f"Email marketing opt-in: {lead.get('email_marketing_opt_in')}\n"

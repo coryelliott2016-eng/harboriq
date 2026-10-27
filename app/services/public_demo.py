@@ -61,8 +61,12 @@ SECTOR_POLICIES: dict[Industry, str] = {
     Industry.OTHER: "General marine-business organization only; do not invent specialized operational capabilities.",
 }
 _DISTRESS = re.compile(
-    r"\b(?:mayday|sos|emergency|distress|sinking|capsiz\w*|"
-    r"man overboard|person overboard|taking on water|boat on fire|"
+    r"\b(?:mayday|sos|emergency|distress|sinking|flood\w*|capsiz\w*|"
+    r"collision|collid\w*|ground(?:ed|ing)|aground|injur\w*|"
+    r"fire (?:on board|aboard|onboard)|"
+    r"man overboard|person (?:is )?(?:overboard|in (?:the )?water)|"
+    r"someone (?:is )?(?:in (?:the )?water|(?:\w+ ){0,2}overboard)|"
+    r"taking on water|boat on fire|"
     r"stranded|adrift|dead in (?:the )?water|urgent tow\w*|tow\w* now|"
     r"need (?:a )?tow|need towing)\b",
     re.IGNORECASE,

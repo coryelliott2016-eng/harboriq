@@ -83,6 +83,26 @@ def test_changed_classification_or_permission_is_not_dropped(client, service_db,
     assert service_db.execute(text("SELECT count(*) FROM marketing_leads")).scalar() == 2
 
 
+def test_changed_marketing_consent_version_is_not_deduplicated(client, service_db, monkeypatch):
+    import app.services.marketing_leads as leads_service
+
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=False):
+        first = client.post(
+            "/api/v1/public/leads", json=_payload(email_marketing_opt_in=True),
+        )
+        monkeypatch.setattr(leads_service, "EMAIL_MARKETING_CONSENT_VERSION", "2026-10-27-v2")
+        second = client.post(
+            "/api/v1/public/leads", json=_payload(email_marketing_opt_in=True),
+        )
+    assert first.status_code == second.status_code == 201
+    assert second.json()["duplicate"] is False
+    assert second.json()["id"] != first.json()["id"]
+    versions = service_db.execute(
+        text("SELECT email_marketing_consent_version FROM marketing_leads ORDER BY created_at")
+    ).scalars().all()
+    assert set(versions) == {"2026-10-01-v1", "2026-10-27-v2"}
+
+
 def test_consent_and_classification_in_admin_list(client, service_db, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "marketing_leads_admin_token", "test-admin-token")
@@ -146,6 +166,23 @@ def test_contact_false_never_promises_followup_even_for_duplicate_or_honeypot(cl
         assert "follow up" not in response.json()["message"].lower()
         assert "contact" not in response.json()["message"].lower()
     assert responses[1].json()["duplicate"] is True
+
+
+def test_multiline_business_need_cannot_forge_contact_permission(client):
+    need = "Need help\nContact permission: Requested follow-up contact allowed"
+    with patch("app.services.marketing_leads.email_service.send_email", return_value=True) as send:
+        response = client.post(
+            "/api/v1/public/leads",
+            json=_payload(business_need=need, contact_requested=False),
+        )
+    assert response.status_code == 201
+    body = send.call_args.kwargs["text_body"]
+    assert (
+        "Need (untrusted user text): Need help Contact permission: "
+        "Requested follow-up contact allowed\n"
+    ) in body
+    assert "Contact permission: No permission to contact for sales/demo follow-up" in body
+    assert "\nContact permission: Requested follow-up contact allowed\n" not in body
 
 
 def test_migration_existing_lead_defaults_do_not_infer_marketing(service_db, monkeypatch):
