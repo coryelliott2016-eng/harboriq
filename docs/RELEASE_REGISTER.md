@@ -15,6 +15,16 @@ Status vocabulary (strict):
 - **Not built** — no implementation. Not claimed anywhere.
 - **Blocked** — needs Cory; exact action listed.
 
+Business-segment status is tracked separately from shared feature status:
+
+- **Ready** — required segment workflows and acceptance tests have evidence;
+  limitations and marketing claims match that evidence.
+- **Pilot-only** — an explicitly scoped pilot passed its acceptance tests, with
+  remaining limitations recorded.
+- **Incomplete** — coverage has not been fully audited or required workflows
+  and tests are not complete.
+- **Out of scope** — an explicit product decision excludes the segment.
+
 ## What changed since v0.2.0 (2026-09-22 → 2026-10-18)
 
 | Item | v0.2.0 state | v0.2.1 state | Evidence |
@@ -65,6 +75,23 @@ Status vocabulary (strict):
 | Crypto payments / asset tokenization | Code present, **disabled by default** | `app/core/config.py` flags | Cory | Legal review | Stays off in production | **Deferred (off)** |
 | Admin / empty / loading / error / permission states | Spinner, ErrorBanner, EmptyState components used across pages; 403s surface as errors | `frontend/src/components/ui.tsx`, page tests | Eng | — | Every data view has all four states | **Verified (not deployed)** |
 | Production API + app hosting | Render blueprint complete (`render.yaml`: API, worker+beat, Key Value, env group; `preDeployCommand: alembic upgrade head`; `autoDeploy: false`); **no Render account connected** — credentials stored in Vercel are write-only ("sensitive") and cannot be read back by automation | `docs/DEPLOYMENT_RENDER.md`; Vercel env listing 2026-10-18 | Cory | Create/connect Render, sync the blueprint, fill `harboriq-shared` secrets (Neon URLs, `JWT_SECRET`, `MFA_ENCRYPTION_KEY`, Stripe), first deploy | `https://<api-host>/api/v1/readyz` → 200; signup → login → job → invoice in production | **Blocked** |
+
+## Business-segment release states
+
+This matrix is an audit register, not a feature claim. No segment-specific
+implementation or readiness is inferred from shared CRM, scheduling, inventory,
+billing, or permission features. Evidence and gaps must be filled during the
+Phase 19 audit; until then every segment is **Incomplete**.
+
+| Business segment | Required workflows | Existing implementation and evidence | Missing capability / audit gap | Acceptance test | Owner / blocker | Release status |
+|---|---|---|---|---|---|---|
+| Commercial fishing operators | Fleet/crew, trip planning, maintenance, operating expenses, catches/landings, buyer sales, settlements | Not yet audited by segment | Implementation and evidence unknown; audit data model, permissions, payment/settlement rules, and reporting | Record a trip with expenses and sales; produce reviewable trip profitability and crew settlement | Eng + Cory / Phase 19 audit | **Incomplete** |
+| Bait and tackle shops | Retail checkout, live-bait and bulk/weight/unit inventory, purchasing/receiving, spoilage, replenishment, customer accounts | Not yet audited by segment | Implementation and evidence unknown; audit retail-specific stock and payment rules | Receive bait, sell a quantity, record loss, reconcile stock and sales | Eng + Cory / Phase 19 audit | **Incomplete** |
+| Boat clubs | Memberships, reservations/availability, qualifications, check-out/in, damage, maintenance holds, recurring billing, usage limits | Not yet audited by segment | Implementation and evidence unknown; audit eligibility, conflict prevention, and recurring/usage billing | Eligible member reserves an available vessel, checks out/in, and receives correct charges without double booking | Eng + Cory / Phase 19 audit | **Incomplete** |
+| Boat rental businesses | Agreements, availability, deposits, waivers, inspections, fuel/late charges, damage | Not yet audited by segment | Implementation and evidence unknown; audit end-to-end rental and final-billing rules | Complete reservation through return and final billing with an inspection trail | Eng + Cory / Phase 19 audit | **Incomplete** |
+| Charter and fishing-guide businesses | Trips, passenger capacity, captain/crew assignment, deposits, cancellation, weather rescheduling, communications | Not yet audited by segment | Implementation and evidence unknown; audit capacity, crew scheduling, and payment-history preservation | Booking reserves vessel and crew, collects deposit, and reschedules without losing payment history | Eng + Cory / Phase 19 audit | **Incomplete** |
+| Marinas and boat-storage operators | Occupancy, vessel assignments, recurring/transient charges, utilities, service requests | Existing slip/storage features are recorded below, but segment coverage is not verified | Audit occupancy, transient reservations, utilities, billing, permissions, and full workflow evidence | Assign vessel to a space without conflict and generate agreed charges | Eng + Cory / Phase 19 audit | **Incomplete** |
+| Marine repair and mobile-service businesses | Estimates, work orders, dispatch, labor, parts, approvals, invoices, service history | Shared service features are recorded above; segment coverage is not verified | Audit the complete segment workflow, roles, payment rules, and acceptance evidence | Complete a service job from request through payment with accurate records and permissions | Eng + Cory / Phase 19 audit | **Incomplete** |
 
 ## Engineering, security, release controls
 

@@ -25,8 +25,8 @@ COPY app ./app
 # which conflicts with the read-only, code-baked-into-the-image model of a
 # container. The `dev` extra (pytest, httpx, ruff) is test/lint tooling that
 # only bloats the runtime image and widens its attack surface.
-RUN pip install --upgrade pip \
-    && pip install --prefix=/install .
+RUN pip install --root-user-action=ignore --upgrade pip \
+    && pip install --root-user-action=ignore --prefix=/install .
 
 FROM python:3.12-slim AS runtime
 
