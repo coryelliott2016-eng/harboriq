@@ -1,7 +1,7 @@
 """Reorder suggestions: the read-only low-stock signal and one-click draft-PO
 generation from it.
 
-Deliberate scope boundary (see README "Inventory, parts & vendors"): this
+Deliberate scope boundary (see docs/BUILD_LOG.md "Inventory, parts & vendors"): this
 module never sends anything to a vendor by itself. `generate-po` always
 produces a `draft` -- a human must still call `POST /purchase-orders/{id}/submit`.
 These tests focus on the vendor-grouping and multi-item behavior; the basic

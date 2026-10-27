@@ -25,6 +25,7 @@ from sqlalchemy import Row, text
 from sqlalchemy.orm import Session
 
 from app.db.tenant import tenant_context
+from app.services import audit
 from app.services import outbox, public_tokens, stripe_billing
 from app.services.crud import Conflict, NotFound
 from app.services.state_machines import InvoiceSM
@@ -369,7 +370,14 @@ def list_invoices(
 # ---------------------------------------------------------------------------
 # lifecycle
 # ---------------------------------------------------------------------------
-def send_invoice(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> dict[str, Any]:
+def send_invoice(
+    db: Session,
+    company_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+    actor_ip: str | None = None,
+) -> dict[str, Any]:
     """Move `draft -> sent`, issue a public pay link, best-effort Stripe.
 
     A Stripe outage or unset API key must not block sending the invoice — the
@@ -444,12 +452,28 @@ def send_invoice(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> d
                 "customer_email": customer_email,
             },
         )
+        audit.record(
+            db, company_id, "invoice.sent",
+            actor_user_id=actor_user_id, actor_ip=actor_ip,
+            resource_type="invoice", resource_id=invoice_id,
+            metadata={
+                "total": str(invoice.total),
+                "stripe_checkout": checkout_session_id is not None,
+            },
+        )
         db.commit()
 
     return {"invoice": invoice, "pay_token": raw_token, "pay_url": pay_url}
 
 
-def void_invoice(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> Row:
+def void_invoice(
+    db: Session,
+    company_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+    actor_ip: str | None = None,
+) -> Row:
     """Move to `void`, refusing if anything has ever been collected.
 
     On success the invoice's line items are freed back to uninvoiced
@@ -501,6 +525,15 @@ def void_invoice(db: Session, company_id: uuid.UUID, invoice_id: uuid.UUID) -> R
                 """
             ),
             {"id": invoice_id},
+        )
+        audit.record(
+            db, company_id, "invoice.voided",
+            actor_user_id=actor_user_id, actor_ip=actor_ip,
+            resource_type="invoice", resource_id=invoice_id,
+            metadata={
+                "previous_status": current.status,
+                "total": str(invoice.total),
+            },
         )
         db.commit()
 
@@ -610,6 +643,7 @@ def refund_invoice(
     amount: Decimal | None = None,
     reason: str | None = None,
     created_by: uuid.UUID | None = None,
+    actor_ip: str | None = None,
 ) -> dict[str, Any]:
     """Refund all or part of a paid/partially-paid invoice via Stripe.
 
@@ -725,6 +759,18 @@ def refund_invoice(
             },
         ).first()
 
+        audit.record(
+            db, company_id, "invoice.refunded",
+            actor_user_id=created_by, actor_ip=actor_ip,
+            resource_type="invoice", resource_id=invoice_id,
+            metadata={
+                "amount": str(refund_amount),
+                "reason": reason,
+                "refund_id": str(refund.id),
+                "stripe_refund_id": result["id"],
+                "new_status": invoice.status,
+            },
+        )
         db.commit()
 
     return {"invoice": invoice, "refund": refund}
