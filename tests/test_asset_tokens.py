@@ -1,4 +1,4 @@
-"""Phase 19 — draft-only asset-tokenization registration coverage."""
+"""Track X1 — draft-only asset-tokenization registration coverage."""
 from __future__ import annotations
 
 import uuid

@@ -15,10 +15,11 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
+    client_ip,
     get_current_company_id,
     get_current_user,
     get_db,
@@ -62,6 +63,7 @@ def list_team(
 def update_user(
     user_id: uuid.UUID,
     body: UserUpdate,
+    request: Request,
     actor: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -92,6 +94,7 @@ def update_user(
                 actor_user_id=actor.id,
                 actor_role=actor.role,
                 changes=changes,
+                actor_ip=client_ip(request),
             )
     except FieldNotPermitted as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc

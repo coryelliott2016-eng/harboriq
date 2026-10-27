@@ -11,3 +11,4 @@ consequences. Status is one of Accepted, Superseded, Proposed.
 | [0004](0004-estimate-to-invoice-conversion.md) | Estimates convert to invoices by copying and freezing approved lines | Accepted |
 | [0005](0005-marketing-site-separate-deployment.md) | Marketing site deployed separately on Vercel; lead capture fails closed | Accepted |
 | [0006](0006-protected-master-ruleset.md) | Protected `master` via repository ruleset and required CI checks | Accepted |
+| [0007](0007-trust-platform-proxy-headers.md) | Trust `X-Forwarded-*` from the platform proxy so rate limits and audit IPs are per client | Accepted |

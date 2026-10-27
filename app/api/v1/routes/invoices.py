@@ -13,10 +13,16 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_company_id, get_current_user, get_db, require_operations
+from app.api.deps import (
+    client_ip,
+    get_current_company_id,
+    get_current_user,
+    get_db,
+    require_operations,
+)
 from app.api.errors import http_errors
 from app.schemas.invoices import (
     InvoiceCreate,
@@ -96,14 +102,19 @@ def get_invoice(
 def send_invoice(
     invoice_id: uuid.UUID,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     company_id: uuid.UUID = Depends(get_current_company_id),
+    user: AuthenticatedUser = Depends(get_current_user),
 ):
     """`draft -> sent`: stamp `sent_at`, best-effort create a Stripe Checkout
     Session, and issue a public pay link. A Stripe outage does not block
     this — the shop can still hand the customer the pay link."""
     with http_errors():
-        result = service.send_invoice(db, company_id, invoice_id)
+        result = service.send_invoice(
+            db, company_id, invoice_id,
+            actor_user_id=user.id, actor_ip=client_ip(request),
+        )
     dispatch_outbox_soon(background_tasks)
     return InvoiceSendResponse(
         invoice=result["invoice"], pay_token=result["pay_token"], pay_url=result["pay_url"]
@@ -113,20 +124,26 @@ def send_invoice(
 @router.post("/{invoice_id}/void", response_model=VoidInvoiceResponse)
 def void_invoice(
     invoice_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     company_id: uuid.UUID = Depends(get_current_company_id),
+    user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Cancel a `draft`, `sent` or `partial` invoice with nothing collected
     yet. 409 if any payment has landed — use `POST /{invoice_id}/refund`
     instead."""
     with http_errors():
-        invoice = service.void_invoice(db, company_id, invoice_id)
+        invoice = service.void_invoice(
+            db, company_id, invoice_id,
+            actor_user_id=user.id, actor_ip=client_ip(request),
+        )
     return VoidInvoiceResponse(invoice=invoice)
 
 
 @router.post("/{invoice_id}/refund", response_model=RefundResponse)
 def refund_invoice(
     invoice_id: uuid.UUID,
+    request: Request,
     body: RefundRequest = RefundRequest(),
     db: Session = Depends(get_db),
     company_id: uuid.UUID = Depends(get_current_company_id),
@@ -148,5 +165,6 @@ def refund_invoice(
             amount=body.amount,
             reason=body.reason,
             created_by=user.id,
+            actor_ip=client_ip(request),
         )
     return RefundResponse(invoice=result["invoice"], refund=result["refund"])
