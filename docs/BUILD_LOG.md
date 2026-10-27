@@ -1387,7 +1387,7 @@ the manual steps — see "Installing on an iPhone" below.
    toolbar.
 3. Scroll down and tap **"Add to Home Screen."**
 4. Confirm the name ("HarborIQ") and tap **"Add."**
-5. The HarborIQ icon now appears on the home screen like any other app; 
+5. The HarborIQ icon now appears on the home screen like any other app;
    opening it launches in a standalone window (no Safari address bar/tabs),
    starting on the technician's `/field` job list.
 

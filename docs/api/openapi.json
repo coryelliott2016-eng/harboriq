@@ -31,27 +31,22 @@
       "AgingBuckets": {
         "properties": {
           "current": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Current",
             "type": "string"
           },
           "days_1_30": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Days 1 30",
             "type": "string"
           },
           "days_31_60": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Days 31 60",
             "type": "string"
           },
           "days_61_90": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Days 61 90",
             "type": "string"
           },
           "days_90_plus": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Days 90 Plus",
             "type": "string"
           }
@@ -118,7 +113,6 @@
             "type": "array"
           },
           "grand_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Grand Total",
             "type": "string"
           }
@@ -162,7 +156,6 @@
           "estimated_value": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -244,7 +237,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,13}0*$)\\d{0,10}\\.\\d{0,2}0*$)",
                 "type": "string"
               },
               {
@@ -447,12 +439,10 @@
       "CashFlowMonth": {
         "properties": {
           "cash_in": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Cash In",
             "type": "string"
           },
           "cost_incurred": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Cost Incurred",
             "type": "string"
           },
@@ -461,12 +451,10 @@
             "type": "string"
           },
           "net_cash": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Net Cash",
             "type": "string"
           },
           "refunds_out": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Refunds Out",
             "type": "string"
           }
@@ -521,22 +509,18 @@
       "CashFlowTotals": {
         "properties": {
           "cash_in": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Cash In",
             "type": "string"
           },
           "cost_incurred": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Cost Incurred",
             "type": "string"
           },
           "net_cash": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Net Cash",
             "type": "string"
           },
           "refunds_out": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Refunds Out",
             "type": "string"
           }
@@ -737,7 +721,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
                 "type": "string"
               }
             ],
@@ -777,7 +760,6 @@
       "CryptoPaymentOut": {
         "properties": {
           "amount_requested": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount Requested",
             "type": "string"
           },
@@ -890,7 +872,6 @@
             "type": "integer"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           }
@@ -1162,7 +1143,6 @@
           "latitude": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1174,7 +1154,6 @@
           "longitude": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1433,14 +1412,12 @@
         "properties": {
           "breakdown": {
             "additionalProperties": {
-              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
               "type": "string"
             },
             "title": "Breakdown",
             "type": "object"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           }
@@ -1527,7 +1504,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,4}0*$",
                 "type": "string"
               }
             ],
@@ -1647,22 +1623,18 @@
             "type": "string"
           },
           "subtotal": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Subtotal",
             "type": "string"
           },
           "tax_rate": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Rate",
             "type": "string"
           },
           "tax_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Total",
             "type": "string"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           },
@@ -1729,7 +1701,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
                 "type": "string"
               }
             ],
@@ -1748,7 +1719,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
                 "type": "string"
               }
             ],
@@ -1804,7 +1774,6 @@
             "type": "string"
           },
           "line_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Line Total",
             "type": "string"
           },
@@ -1813,7 +1782,6 @@
             "type": "integer"
           },
           "quantity": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Quantity",
             "type": "string"
           },
@@ -1822,7 +1790,6 @@
             "type": "boolean"
           },
           "unit_price": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Unit Price",
             "type": "string"
           }
@@ -1927,22 +1894,18 @@
             "type": "string"
           },
           "subtotal": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Subtotal",
             "type": "string"
           },
           "tax_rate": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Rate",
             "type": "string"
           },
           "tax_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Total",
             "type": "string"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           },
@@ -1999,7 +1962,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               }
             ],
@@ -2054,7 +2016,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -2070,7 +2031,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -2212,6 +2172,24 @@
         "title": "InboxMessageOut",
         "type": "object"
       },
+      "Industry": {
+        "enum": [
+          "marinas",
+          "marine-towing",
+          "commercial-fishing",
+          "recreational-fishing",
+          "marine-service",
+          "charters",
+          "boat-owners",
+          "dealers",
+          "suppliers",
+          "surveyors",
+          "commercial-fleets",
+          "other"
+        ],
+        "title": "Industry",
+        "type": "string"
+      },
       "InventoryItemCreate": {
         "description": "`quantity_on_hand` is intentionally not settable here \u2014 see\n`app.services.inventory.create`'s docstring: stock only ever arrives\nthrough a received purchase order.",
         "properties": {
@@ -2245,7 +2223,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               }
             ],
@@ -2271,7 +2248,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               }
             ],
@@ -2335,7 +2311,6 @@
             "type": "integer"
           },
           "retail_price": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Retail Price",
             "type": "string"
           },
@@ -2351,7 +2326,6 @@
             "title": "Sku"
           },
           "unit_cost": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Unit Cost",
             "type": "string"
           }
@@ -2418,7 +2392,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -2446,7 +2419,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -2556,7 +2528,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,4}0*$",
                 "type": "string"
               }
             ],
@@ -2574,12 +2545,10 @@
         "description": "A single invoice with the lines it froze.",
         "properties": {
           "amount_paid": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount Paid",
             "type": "string"
           },
           "balance_due": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Balance Due",
             "type": "string"
           },
@@ -2697,22 +2666,18 @@
             "title": "Stripe Payment Intent Id"
           },
           "subtotal": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Subtotal",
             "type": "string"
           },
           "tax_rate": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Rate",
             "type": "string"
           },
           "tax_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Total",
             "type": "string"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           },
@@ -2799,12 +2764,10 @@
             "$ref": "#/components/schemas/JobLineItemKind"
           },
           "line_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Line Total",
             "type": "string"
           },
           "quantity": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Quantity",
             "type": "string"
           },
@@ -2825,7 +2788,6 @@
             "type": "boolean"
           },
           "unit_price": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Unit Price",
             "type": "string"
           }
@@ -2847,12 +2809,10 @@
         "description": "Same shape as `InvoiceOut` today; kept distinct so the list endpoint\ncan grow summary-only fields later without changing the detail shape.",
         "properties": {
           "amount_paid": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount Paid",
             "type": "string"
           },
           "balance_due": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Balance Due",
             "type": "string"
           },
@@ -2962,22 +2922,18 @@
             "title": "Stripe Payment Intent Id"
           },
           "subtotal": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Subtotal",
             "type": "string"
           },
           "tax_rate": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Rate",
             "type": "string"
           },
           "tax_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Total",
             "type": "string"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           },
@@ -3027,12 +2983,10 @@
       "InvoiceOut": {
         "properties": {
           "amount_paid": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount Paid",
             "type": "string"
           },
           "balance_due": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Balance Due",
             "type": "string"
           },
@@ -3142,22 +3096,18 @@
             "title": "Stripe Payment Intent Id"
           },
           "subtotal": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Subtotal",
             "type": "string"
           },
           "tax_rate": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Rate",
             "type": "string"
           },
           "tax_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Total",
             "type": "string"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           },
@@ -3514,7 +3464,6 @@
           "dispatch_score": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -3527,7 +3476,6 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                   "type": "string"
                 },
                 "type": "object"
@@ -3698,7 +3646,6 @@
           "dispatch_score": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -3711,7 +3658,6 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                   "type": "string"
                 },
                 "type": "object"
@@ -3780,7 +3726,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
                 "type": "string"
               }
             ],
@@ -3799,7 +3744,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
                 "type": "string"
               }
             ],
@@ -3891,12 +3835,10 @@
             "$ref": "#/components/schemas/JobLineItemKind"
           },
           "line_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Line Total",
             "type": "string"
           },
           "quantity": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Quantity",
             "type": "string"
           },
@@ -3905,7 +3847,6 @@
             "type": "boolean"
           },
           "unit_price": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Unit Price",
             "type": "string"
           },
@@ -3957,7 +3898,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
                 "type": "string"
               },
               {
@@ -3985,7 +3925,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
                 "type": "string"
               },
               {
@@ -4053,7 +3992,6 @@
           "dispatch_score": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -4066,7 +4004,6 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                   "type": "string"
                 },
                 "type": "object"
@@ -4463,7 +4400,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               }
             ],
@@ -4477,7 +4413,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               }
             ],
@@ -4499,12 +4434,10 @@
             "type": "boolean"
           },
           "current_latitude": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Current Latitude",
             "type": "string"
           },
           "current_longitude": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Current Longitude",
             "type": "string"
           },
@@ -4614,17 +4547,41 @@
             "title": "Business Name",
             "type": "string"
           },
+          "business_need": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Business Need",
+            "type": "string"
+          },
+          "contact_requested": {
+            "default": true,
+            "title": "Contact Requested",
+            "type": "boolean"
+          },
           "email": {
             "maxLength": 254,
             "minLength": 3,
             "title": "Email",
             "type": "string"
           },
+          "email_marketing_opt_in": {
+            "default": false,
+            "title": "Email Marketing Opt In",
+            "type": "boolean"
+          },
           "full_name": {
             "maxLength": 120,
             "minLength": 1,
             "title": "Full Name",
             "type": "string"
+          },
+          "industry": {
+            "$ref": "#/components/schemas/Industry",
+            "default": "other"
+          },
+          "product_interest": {
+            "$ref": "#/components/schemas/ProductInterest",
+            "default": "operations"
           },
           "source": {
             "default": "marketing-signup",
@@ -4714,6 +4671,20 @@
             "title": "Business Name",
             "type": "string"
           },
+          "business_need": {
+            "default": "",
+            "title": "Business Need",
+            "type": "string"
+          },
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "contact_requested": {
+            "default": true,
+            "title": "Contact Requested",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -4723,6 +4694,34 @@
             "title": "Email",
             "type": "string"
           },
+          "email_marketing_consent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Marketing Consent Version"
+          },
+          "email_marketing_consented_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Marketing Consented At"
+          },
+          "email_marketing_opt_in": {
+            "default": false,
+            "title": "Email Marketing Opt In",
+            "type": "boolean"
+          },
           "full_name": {
             "title": "Full Name",
             "type": "string"
@@ -4731,6 +4730,10 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "industry": {
+            "$ref": "#/components/schemas/Industry",
+            "default": "other"
           },
           "notified_at": {
             "anyOf": [
@@ -4743,6 +4746,10 @@
               }
             ],
             "title": "Notified At"
+          },
+          "product_interest": {
+            "$ref": "#/components/schemas/ProductInterest",
+            "default": "operations"
           },
           "source": {
             "title": "Source",
@@ -4760,6 +4767,7 @@
           "email",
           "team_size",
           "source",
+          "classification",
           "created_at"
         ],
         "title": "MarketingLeadOut",
@@ -5034,7 +5042,6 @@
       "PnlMonth": {
         "properties": {
           "labor_cost": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Labor Cost",
             "type": "string"
           },
@@ -5047,27 +5054,22 @@
             "type": "string"
           },
           "net": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Net",
             "type": "string"
           },
           "net_revenue": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Net Revenue",
             "type": "string"
           },
           "parts_cost": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Parts Cost",
             "type": "string"
           },
           "refunds": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Refunds",
             "type": "string"
           },
           "revenue": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Revenue",
             "type": "string"
           },
@@ -5128,7 +5130,6 @@
       "PnlTotals": {
         "properties": {
           "labor_cost": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Labor Cost",
             "type": "string"
           },
@@ -5137,27 +5138,22 @@
             "type": "boolean"
           },
           "net": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Net",
             "type": "string"
           },
           "net_revenue": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Net Revenue",
             "type": "string"
           },
           "parts_cost": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Parts Cost",
             "type": "string"
           },
           "refunds": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Refunds",
             "type": "string"
           },
           "revenue": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Revenue",
             "type": "string"
           },
@@ -5205,12 +5201,10 @@
             "type": "string"
           },
           "latitude": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Latitude",
             "type": "string"
           },
           "longitude": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Longitude",
             "type": "string"
           },
@@ -5296,17 +5290,14 @@
             "type": "string"
           },
           "subtotal": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Subtotal",
             "type": "string"
           },
           "tax_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Total",
             "type": "string"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           }
@@ -5348,12 +5339,10 @@
       "PortalInvoiceOut": {
         "properties": {
           "amount_paid": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount Paid",
             "type": "string"
           },
           "balance_due": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Balance Due",
             "type": "string"
           },
@@ -5400,17 +5389,14 @@
             "type": "string"
           },
           "subtotal": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Subtotal",
             "type": "string"
           },
           "tax_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Total",
             "type": "string"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           }
@@ -5695,16 +5681,67 @@
         "title": "PortalVesselOut",
         "type": "object"
       },
+      "ProductInterest": {
+        "enum": [
+          "operations",
+          "ai",
+          "partnership"
+        ],
+        "title": "ProductInterest",
+        "type": "string"
+      },
+      "PublicDemoRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "industry": {
+            "$ref": "#/components/schemas/Industry"
+          },
+          "prompt": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "industry",
+          "prompt"
+        ],
+        "title": "PublicDemoRequest",
+        "type": "object"
+      },
+      "PublicDemoResponse": {
+        "properties": {
+          "answer": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Answer",
+            "type": "string"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "industry": {
+            "$ref": "#/components/schemas/Industry"
+          }
+        },
+        "required": [
+          "answer",
+          "industry",
+          "disclaimer"
+        ],
+        "title": "PublicDemoResponse",
+        "type": "object"
+      },
       "PublicInvoiceOut": {
         "description": "What an unauthenticated customer sees on the pay page.\n\nDeliberately narrower than `InvoiceOut` \u2014 no `company_id`, no internal\nStripe checkout-session id beyond the redirect URL a fresh session needs.",
         "properties": {
           "amount_paid": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount Paid",
             "type": "string"
           },
           "balance_due": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Balance Due",
             "type": "string"
           },
@@ -5753,17 +5790,14 @@
             "type": "string"
           },
           "subtotal": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Subtotal",
             "type": "string"
           },
           "tax_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Total",
             "type": "string"
           },
           "total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Total",
             "type": "string"
           }
@@ -5834,7 +5868,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               }
             ],
@@ -5870,7 +5903,6 @@
             "type": "integer"
           },
           "unit_cost": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Unit Cost",
             "type": "string"
           }
@@ -6019,7 +6051,6 @@
       "RefundOut": {
         "properties": {
           "amount": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount",
             "type": "string"
           },
@@ -6081,7 +6112,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
                 "type": "string"
               },
               {
@@ -6165,7 +6195,6 @@
             "title": "Sku"
           },
           "unit_cost": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Unit Cost",
             "type": "string"
           }
@@ -6281,7 +6310,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               }
             ],
@@ -6295,7 +6323,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6314,7 +6341,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6330,7 +6356,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6345,7 +6370,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6361,7 +6385,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               }
             ],
@@ -6419,7 +6442,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6448,14 +6470,12 @@
             "type": "string"
           },
           "daily_rate": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Daily Rate",
             "type": "string"
           },
           "depth_ft": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6476,7 +6496,6 @@
           "latitude": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6488,7 +6507,6 @@
           "length_ft": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6500,7 +6518,6 @@
           "longitude": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6510,7 +6527,6 @@
             "title": "Longitude"
           },
           "monthly_rate": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Monthly Rate",
             "type": "string"
           },
@@ -6563,7 +6579,6 @@
           "width_ft": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6784,7 +6799,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6800,7 +6814,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6826,7 +6839,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6842,7 +6854,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6857,7 +6868,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6873,7 +6883,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -6945,7 +6954,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7050,12 +7058,10 @@
             "type": "string"
           },
           "line_total": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Line Total",
             "type": "string"
           },
           "quantity": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Quantity",
             "type": "string"
           },
@@ -7076,7 +7082,6 @@
             "type": "boolean"
           },
           "unit_price": {
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Unit Price",
             "type": "string"
           },
@@ -7140,7 +7145,6 @@
           "home_latitude": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7152,7 +7156,6 @@
           "home_longitude": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7164,7 +7167,6 @@
           "hourly_rate": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7231,7 +7233,6 @@
           "latitude": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7255,7 +7256,6 @@
           "longitude": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7489,7 +7489,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7781,7 +7780,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7803,7 +7801,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7881,7 +7878,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -7998,7 +7994,6 @@
           "beam_ft": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -8025,7 +8020,6 @@
           "draft_ft": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -8090,7 +8084,6 @@
           "length_ft": {
             "anyOf": [
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -8230,7 +8223,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -8259,7 +8251,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -8337,7 +8328,6 @@
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -13090,6 +13080,47 @@
         "summary": "Post Message",
         "tags": [
           "portal"
+        ]
+      }
+    },
+    "/api/v1/public/demo": {
+      "post": {
+        "operationId": "public_demo_api_v1_public_demo_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicDemoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDemoResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Public Demo",
+        "tags": [
+          "public"
         ]
       }
     },

@@ -188,6 +188,16 @@ class Settings(BaseSettings):
     marketing_lead_rate_limit_per_window: int = 5
     marketing_lead_rate_limit_window_seconds: int = 600
 
+    # Public informational AI demo: fixed provider endpoint, no tools or tenant data.
+    public_ai_enabled: bool = False
+    public_ai_api_key: str = Field(default="", repr=False)
+    public_ai_model: str = Field(default="gpt-4o-mini", min_length=1, max_length=100)
+    public_ai_timeout_seconds: float = Field(default=15, ge=1, le=60)
+    public_ai_max_tokens: int = Field(default=500, ge=1, le=1000)
+    public_ai_rate_limit_per_window: int = Field(default=5, ge=1, le=100)
+    public_ai_global_rate_limit_per_window: int = Field(default=100, ge=1, le=10000)
+    public_ai_rate_limit_window_seconds: int = Field(default=600, ge=1, le=3600)
+
     # --- SMS transport (Phase 11) ---
     # Empty twilio_account_sid (the dev default) means "console transport":
     # app/services/sms.py logs the message instead of calling out, mirroring
