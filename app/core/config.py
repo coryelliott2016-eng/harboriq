@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     crypto_payments_enabled: bool = False
     crypto_webhook_secret: str = ""
 
-    # --- Asset tokenization (Phase 19) ---
+    # --- Asset tokenization (Track X1; formerly "Phase 19") ---
     # Disabled by default: this compliance-sensitive feature records only a
     # draft intent to tokenize a marine asset, pending outside securities
     # counsel review. It MUST NOT be enabled in a real deployment without

@@ -1,4 +1,4 @@
-"""Draft-only asset-token registration (Phase 19).
+"""Draft-only asset-token registration (Track X1).
 
 This service intentionally contains creation and tenant-scoped read paths
 only. Migration 0021's `CHECK (status = 'draft')` prevents any future caller

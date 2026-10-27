@@ -1,6 +1,7 @@
-# Known Limitations Register — v0.2.0
+# Known Limitations Register — v0.2.1
 
-Every item here is real and current as of 2026-09-22. Severity uses the
+Every item here is real and current as of 2026-10-18 (supersedes the v0.2.0 list; items
+resolved since then are struck through and kept for one release). Severity uses the
 release-blocking scale: **Critical/High** would block a paid production
 launch; **Medium/Low** are accepted for a supervised pilot.
 
@@ -15,8 +16,8 @@ launch; **Medium/Low** are accepted for a supervised pilot.
 | L7 | Labor tiers / rate cards not built | Medium | Rates typed per labor line | Design tier model (ADR needed) | Eng |
 | L8 | AI-assisted diagnostics not built | Medium | Must not be marketed | Product + safety design | Cory/Eng |
 | L9 | Recall / service-bulletin intelligence not built | Medium | Must not be marketed | Data-source decision | Cory |
-| L10 | Dispatch is rule-based, not AI | Medium (copy accuracy) | Site says "AI-assisted dispatch" | Change copy to "smart, rule-based dispatch suggestions" | Cory |
-| L11 | Audit log misses invoice send/void/refund and role changes; no viewer | Medium | Weaker forensic trail for money events | Add audit rows + read endpoint | Eng |
+| L10 | ~~Site says "AI-assisted dispatch"~~ **Resolved in the site repo 2026-10-18**: every surface now says explainable, rule-based scoring (Terms §6 included) | Medium → closed on deploy | None once the fixed build is live | Deploy `release/site-accuracy-and-routing` | Eng |
+| L11 | ~~Audit log misses invoice send/void/refund and role changes~~ **Resolved in v0.2.1** (PR #136): events recorded atomically; `GET /api/v1/audit-log` for owner/admin. Remaining: no frontend viewer; `auth.py`/`estimates.py` keep private `_audit` helpers | Low | Owners read the trail via API/`/docs` only | Add Settings → Audit log page; migrate legacy helpers to `app/services/audit.py` | Eng |
 | L12 | MFA optional for owner/admin | Medium | Account-takeover risk | Company MFA policy exists; consider default-on for owners | Eng |
 | L13 | Rate limiter fails open if Redis is down | Medium | Brute-force window during Redis outage (lockout still applies) | Alert on the log event; consider fail-closed for login | Eng |
 | L14 | No OpenTelemetry, Grafana, or Loki | Medium | Metrics/logs exist but no dashboards/tracing | Add once a host exists | Eng |
@@ -24,10 +25,16 @@ launch; **Medium/Low** are accepted for a supervised pilot.
 | L16 | Manual accessibility audit not done (jsx-a11y lint only) | Medium | WCAG conformance not claimed | Keyboard/screen-reader/contrast pass | Eng |
 | L17 | Mobile store builds unsigned | Medium (mobile channel) | No App Store/Play release | Developer accounts + signing | Cory |
 | L18 | Marketing site repo has CI but no enforced branch protection | Low | Site source now lives in private repo `coryelliott2016-eng/harboriq-marketing-site` with CI (type-check, API tests, build, claim guard, gitleaks); GitHub rulesets on private repos need GitHub Pro; Vercel is not yet Git-connected | Upgrade to GitHub Pro (or make the repo public), add ruleset `protect-main`; connect the repo in Vercel project settings | Cory |
-| L19 | Marketing site uses hash routing (`/#/pricing`) | Low | Weaker SEO for deep pages | Switch to path routing with rewrites | Eng |
-| L20 | Public investor page showed SAFE round terms | Needs counsel | Possible general-solicitation issue under Reg D 506(b) | Terms, EIN, allocations and use of funds removed from the page, meta, and site assistant in the site repo (CI blocks re-adding them). **Not yet live**: Vercel deploy from this environment fails TLS verification; deploy from the repo. Counsel review still required before any public promotion | Cory |
+| L19 | ~~Marketing site uses hash routing~~ **Resolved in the site repo 2026-10-18**: real paths, `/#/x` links rewritten on load, sitemap/robots generated per environment, previews `noindex` | Low → closed on deploy | None once deployed | Deploy; submit sitemap in Search Console | Eng |
+| L20 | Public investor page showed SAFE round terms | Needs counsel | Possible general-solicitation issue under Reg D 506(b). **Still on the live build as of 2026-10-18** (cap and size language confirmed in the served bundle) although removed in the repo and guarded by CI | Redeploy the site repo with a fresh Vercel session (`vercel --prod`) and confirm `/investors` carries no terms; counsel review still required before any investor outreach | Cory + Eng |
 | L21 | Estimate send commits status before issuing the portal token/email | Low | Rare failure leaves estimate "sent" without an email; staff can re-send portal invite | Accepted; documented in ADR 0004 | Eng |
 | L22 | Migration 0024 downgrade is lossy (fractional quantities rounded) | Low | Only on rollback | Take a backup before upgrading production | Eng |
 | L23 | Crypto payments and asset tokenization code exists but is disabled | Info | None while flags are off | Keep off pending legal review | Cory |
 | L24 | No third-party penetration test; no certifications | Info | Must not claim SOC 2/ISO/PCI | Commission a pen test before scaling | Cory |
-| L25 | Terms/Privacy acceptance is enforced only in the signup UI; the API does not require or record it | Medium (legal evidence) | No server-side record of consent timestamp/version | Review draft PR #54 (adds the API contract) and add a stored `terms_accepted_at` + version | Eng |
+| L25 | Terms/Privacy acceptance: the API now requires `agreed_to_terms: true` at signup (PR #54) but does **not** persist a consent timestamp/version | Medium (legal evidence) | No server-side record of when/which terms were accepted | Add `terms_accepted_at` + `terms_version` columns and write them at signup | Eng |
+| L26 | Production API/app host not provisioned. `render.yaml` is complete; the Render/Cloudflare/Stripe credentials stored in the Vercel project are write-only ("sensitive") so automation cannot use them | **High (release-blocking)** | Product is not reachable by any customer | Create/connect the Render account → New → Blueprint on this repo → fill the `harboriq-shared` env group → deploy; or hand the execution team a scoped Render API key through the secure credential form | Cory |
+| L27 | Cloudflare connector rejects its credential (`6103 Invalid format for X-Auth-Key header`), so DNS/TLS/Access automation for `harboriq.com` is impossible even once the zone is located | High (domain) | No canonical domain, no company email, no Cloudflare Access in front of admin/API | Reconnect the connector with the account email + Global API Key for the account that holds the zone (Workers Builds for this repo run in account `0ef84bbe…`) | Cory |
+| L28 | "Workers Builds: harboriq" check (Cloudflare account `0ef84bbe…`) fails on every PR | Low (noise) | Misleading red check; not required by the ruleset | Disconnect the Workers Builds Git integration for this repo, or add a `wrangler` config if a Worker is intended | Cory |
+| L29 | Neon automatic snapshot schedules are not enabled on the current plan (API: "backup schedule creation is not enabled for this project") | Medium | Until a host runs `scripts/backup_db_s3.sh` nightly, recovery relies on Neon's plan-level restore window | Upgrade the Neon plan, or provision the host + S3 bucket and schedule the dump | Cory |
+| L30 | New demo requests are stored but nobody is notified; they sit in the token-gated `/team` dashboard | Medium (revenue) | Slow lead response | Add a transactional-mail key to the site project and a fail-safe notify step in `api/leads`; until then check `/team` daily | Cory + Eng |
+| L31 | Neon branch `verify-v0.2.1-2026-10-18` (`br-shy-tooth-augde6g0`) exists on the production project (empty, created for verification) | Info | Minor clutter/cost | Delete it in the Neon console; automation does not delete branches unprompted | Cory |
