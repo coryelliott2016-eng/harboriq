@@ -222,6 +222,9 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     #: abandoned enrollment can never lock a user out.
     mfa_enabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    access_epoch: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     # Account lockout (migration 0005). Mutated only inside `auth_service.login`

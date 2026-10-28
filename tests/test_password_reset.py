@@ -1,10 +1,11 @@
 """Password reset: request, confirm, single-use and session revocation."""
 from __future__ import annotations
 
+from redis.exceptions import RedisError
 from sqlalchemy import text
 
 from app.core.config import settings
-from tests.conftest import DEFAULT_PASSWORD, signup, unique_email
+from tests.conftest import DEFAULT_PASSWORD, auth_headers, signup, unique_email
 from tests.test_auth_refresh import _refresh, _session_cookies
 
 NEW_PASSWORD = "a-brand-new-passphrase"
@@ -91,7 +92,7 @@ def test_confirm_sets_the_new_password_and_retires_the_old_one(client, service_d
     ).status_code == 200
 
 
-def test_confirm_revokes_every_existing_session(client, service_db):
+def test_confirm_revokes_every_existing_session(client, service_db, monkeypatch):
     email = unique_email()
     client.cookies.clear()
     created_resp = client.post(
@@ -111,14 +112,32 @@ def test_confirm_revokes_every_existing_session(client, service_db):
     other_resp = client.post(
         "/api/v1/auth/login", json={"email": email, "password": DEFAULT_PASSWORD}
     )
+    other = other_resp.json()
     other_cookies = _session_cookies(other_resp)
 
     _request_reset(client, email)
     token = _reset_token(service_db, created["user"]["company_id"])
-    client.post(
+
+    def redis_unavailable():
+        raise RedisError("Redis unavailable")
+
+    monkeypatch.setattr("app.core.token_denylist.get_redis", redis_unavailable)
+    reset_response = client.post(
         "/api/v1/auth/password-reset/confirm",
         json={"token": token, "new_password": NEW_PASSWORD},
     )
+
+    assert reset_response.status_code == 204
+    assert service_db.execute(
+        text("SELECT access_epoch FROM users WHERE id = :uid"),
+        {"uid": created["user"]["id"]},
+    ).scalar_one() == 1
+    assert client.get(
+        "/api/v1/auth/me", headers=auth_headers(created)
+    ).status_code == 401
+    assert client.get(
+        "/api/v1/auth/me", headers=auth_headers(other)
+    ).status_code == 401
 
     # Phase 16: refresh tokens are httpOnly cookies now, so each session's
     # pair is exercised explicitly (see tests/test_auth_refresh.py's

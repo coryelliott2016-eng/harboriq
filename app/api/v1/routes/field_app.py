@@ -14,7 +14,7 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import authorize_job_action, get_current_company_id, get_current_user, get_db
+from app.api.deps import authorize_job_action, get_current_user, get_db
 from app.api.errors import http_errors
 from app.schemas.field_app import (
     ClockActionRequest,
@@ -60,10 +60,11 @@ def add_attachment(
 def list_attachments(
     job_id: uuid.UUID,
     db: Session = Depends(get_db),
-    company_id: uuid.UUID = Depends(get_current_company_id),
+    user: AuthenticatedUser = Depends(get_current_user),
 ):
+    authorize_job_action(db, user, job_id)
     with http_errors():
-        return service.list_attachments(db, company_id, job_id)
+        return service.list_attachments(db, user.company_id, job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +119,8 @@ def clock_out(
 def list_time_entries(
     job_id: uuid.UUID,
     db: Session = Depends(get_db),
-    company_id: uuid.UUID = Depends(get_current_company_id),
+    user: AuthenticatedUser = Depends(get_current_user),
 ):
+    authorize_job_action(db, user, job_id)
     with http_errors():
-        return service.list_time_entries(db, company_id, job_id)
+        return service.list_time_entries(db, user.company_id, job_id)
