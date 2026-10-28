@@ -4,11 +4,15 @@ import importlib
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 cloud_deploy_preflight = importlib.import_module("cloud_deploy_preflight")
+
+pytestmark = pytest.mark.no_db
 
 
 def _write_env(tmp_path: Path, lines: list[str]) -> Path:
