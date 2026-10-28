@@ -5,3 +5,6 @@ __pycache__/
 pgdata/
 *.log
 .env
+
+# Cloudflare Wrangler local state
+.wrangler/

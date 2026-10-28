@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import USER_MANAGEMENT_ROLES
 from app.db.tenant import tenant_context
+from app.services import audit
 from app.services import geocoding
 from app.services.crud import Conflict, NotFound, ValidationFailed, assignments
 
@@ -102,6 +103,7 @@ def update_profile(
     actor_user_id: uuid.UUID,
     actor_role: str,
     changes: dict[str, Any],
+    actor_ip: str | None = None,
 ) -> Row:
     """Apply a profile PATCH, enforcing self-vs-admin field permissions.
 
@@ -158,7 +160,21 @@ def update_profile(
     )
     try:
         with tenant_context(db, company_id):
+            # Snapshot the privileged fields first so the audit row can record
+            # the transition, not just the new value. Same transaction as the
+            # UPDATE: the row and its audit entry commit or roll back together.
+            before = None
+            if "role" in changes or "is_active" in changes:
+                before = db.execute(
+                    text("SELECT role, is_active FROM users WHERE id = :id"),
+                    {"id": target_user_id},
+                ).first()
             row = db.execute(statement, changes | {"id": target_user_id}).first()
+            if row is not None and before is not None:
+                _audit_privilege_changes(
+                    db, company_id, before, row,
+                    actor_user_id=actor_user_id, actor_ip=actor_ip,
+                )
             db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -170,6 +186,40 @@ def update_profile(
     if row is None:
         raise NotFound(f"user {target_user_id} not found")
     return row
+
+
+def _audit_privilege_changes(
+    db: Session,
+    company_id: uuid.UUID,
+    before: Row,
+    after: Row,
+    *,
+    actor_user_id: uuid.UUID,
+    actor_ip: str | None,
+) -> None:
+    """Record role and activation transitions (v0.2.1 audit coverage).
+
+    Only genuine transitions are logged: a PATCH that re-sends the current
+    role is a no-op for the trail, which keeps `user.role_changed` meaningful
+    as a security signal.
+    """
+    before_role = getattr(before.role, "value", before.role)
+    after_role = getattr(after.role, "value", after.role)
+    if before_role != after_role:
+        audit.record(
+            db, company_id, "user.role_changed",
+            actor_user_id=actor_user_id, actor_ip=actor_ip,
+            resource_type="user", resource_id=after.id,
+            metadata={"from": before_role, "to": after_role, "email": after.email},
+        )
+    if bool(before.is_active) != bool(after.is_active):
+        audit.record(
+            db, company_id,
+            "user.reactivated" if after.is_active else "user.deactivated",
+            actor_user_id=actor_user_id, actor_ip=actor_ip,
+            resource_type="user", resource_id=after.id,
+            metadata={"email": after.email},
+        )
 
 
 @dataclass(frozen=True)

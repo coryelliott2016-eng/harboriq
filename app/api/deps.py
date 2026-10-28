@@ -16,8 +16,9 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from ipaddress import ip_address
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -176,3 +177,20 @@ __all__ = [
     "require_roles",
     "require_user_manager",
 ]
+
+
+def client_ip(request: Request) -> str | None:
+    """Peer address for audit rows, or None when it is not a real IP.
+
+    `request.client.host` is whatever the transport reports — behind the
+    platform proxy uvicorn's `--proxy-headers` rewrites it from
+    `X-Forwarded-For`; for a unix socket or the in-process test client it is
+    not an address at all. Audit columns are `inet`, so anything unparseable
+    is dropped rather than allowed to fail the request it only annotates.
+    """
+    if request.client is None:
+        return None
+    try:
+        return str(ip_address(request.client.host))
+    except ValueError:
+        return None
