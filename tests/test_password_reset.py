@@ -5,7 +5,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 
 from app.core.config import settings
-from tests.conftest import DEFAULT_PASSWORD, signup, unique_email
+from tests.conftest import DEFAULT_PASSWORD, auth_headers, signup, unique_email
 from tests.test_auth_refresh import _refresh, _session_cookies
 
 NEW_PASSWORD = "a-brand-new-passphrase"
