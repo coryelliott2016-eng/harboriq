@@ -62,3 +62,19 @@ ruff check app tests scripts
 # frontend
 cd frontend && npm ci && npm run lint && npm run build && npm test && npm run audit:ci
 ```
+
+## Performance & Calculation Verification Policy (September 30, 2026 Brief)
+
+### 1. Requirements for Performance Optimization PRs
+* **Standardized Micro-benchmarking:** Establish standard micro-benchmarking using the `scripts/benchmark_harness.py` script to measure latency, throughput, and CPU/memory footprints of critical backend components.
+* **Before/After Execution Metrics:** Require every PR claiming performance fixes (e.g., lower latency, cost, or memory usage) to execute the benchmarking harness on both the base branch and the PR branch. The before-and-after results must be compiled and pasted directly into the PR description.
+* **Functional Integrity and Regression Testing:** Mandate that any such PR must include comprehensive behavioral integration tests under `tests/` verifying functional correctness across extreme bounds and edge cases (e.g., massive batches, missing/null parameters) to ensure no behavioral regression is introduced.
+
+### 2. Independent Verification of Critical Calculations
+* **Decoupled Calculations and Verification:** For high-stakes application logic (such as tax calculations, subscription billing, dunning rules, and storage rates), we prohibit the practice of using mock formulas or secondary code-based recalculations to verify the primary implementation inside tests.
+* **Independent Ground Truth Comparison:** Require the test suite to compare calculation outputs against independent ground truths, such as raw static source records, hardcoded contractual rules, or externally generated, expert-verified golden JSON/CSV fixtures (as demonstrated in `tests/test_independent_calculations.py`).
+
+### 3. Verification of Vulnerability Detections
+* **Segmented Detection Evaluation:** When evaluating vulnerability detection systems, measure retrieval quality, downstream reasoning, and final vulnerability classification as separate, isolated stages.
+* **Executable Security Validation:** Prohibit treating AI-reported security findings as confirmed defects without reproduction. Require all valid findings to be verified either by introducing an executable security integration test in pytest (e.g., attempting an RLS/auth bypass) or by defining a custom static-analysis rule before scheduling remediation.
+

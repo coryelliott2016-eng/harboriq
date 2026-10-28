@@ -77,3 +77,14 @@ credentials, portal links, Stripe webhook integrity.
 7. The security contact mailbox on the public site (`Cory@HarborIQ.com`)
    does not currently receive mail (no MX record). Use GitHub private
    vulnerability reporting until email is restored.
+
+## AI Review & Vulnerability Verification Policy (September 30, 2026 Brief)
+
+### 1. AI Code Review Quality Standards
+* **Review Comment Classification:** All AI-generated PR review comments must be explicitly classified as either "Blocking Defects" or "Suggestions".
+* **Enforced Citation & Replication:** AI review comments are strictly barred from acting as merge blockers unless they explicitly cite the relevant code path, reproduce the failure with a clear scenario, or identify a violated executable static rule. All ungrounded or unsupported comments are treated as non-blocking suggestions.
+
+### 2. Vulnerability Detection Verification Process
+* **Segmented Evaluation:** Vulnerability detection must be evaluated in isolated stages: measure retrieval quality, downstream reasoning, and final classification independently to ensure correct application of security knowledge.
+* **Executable Security Validation:** Never treat AI-reported findings as confirmed defects without reproduction. All findings must be verified either by writing an executable security integration test in pytest (e.g., trying to bypass RLS/auth) or defining a custom static-analysis rule before scheduling remediation.
+
